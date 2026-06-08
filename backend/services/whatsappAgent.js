@@ -85,6 +85,7 @@ async function inicializarWhatsApp(io) {
   if (client) {
     console.log('[WA Agent] Cerrando instancia previa de WhatsApp...');
     try {
+      client.ev.removeAllListeners('connection.update');
       client.end(undefined);
     } catch (e) {}
     client = null;
