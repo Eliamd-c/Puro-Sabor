@@ -50,11 +50,16 @@ router.get('/', verificarJWT, (req, res) => {
 
     // Para cada mesa, obtener la sesión activa y sus pedidos
     const promises = mesas.map(mesa => new Promise((resolve) => {
+      // Contar clientes conectados por socket a esta mesa
+      const io = req.app.get('io');
+      const sala = `mesa_${mesa.numero}`;
+      const viendo = io ? (io.sockets.adapter.rooms.get(sala)?.size || 0) : 0;
+
       db.get(
         `SELECT * FROM sesiones_mesa WHERE mesa_numero = ? AND estado = 'activa' ORDER BY creada_en DESC LIMIT 1`,
         [mesa.numero],
         (err, sesion) => {
-          if (!sesion) return resolve({ ...mesa, estado: 'libre', sesion: null, pedidos: [], total: 0, rondas: 0 });
+          if (!sesion) return resolve({ ...mesa, estado: 'libre', sesion: null, pedidos: [], total: 0, rondas: 0, viendo });
 
           db.all(
             `SELECT * FROM pedidos WHERE sesion_id = ? ORDER BY numero_ronda ASC`,
@@ -67,7 +72,8 @@ router.get('/', verificarJWT, (req, res) => {
                 sesion,
                 pedidos: pedidos.map(p => ({ ...p, items: JSON.parse(p.items_json) })),
                 total,
-                rondas: pedidos.length
+                rondas: pedidos.length,
+                viendo
               });
             }
           );

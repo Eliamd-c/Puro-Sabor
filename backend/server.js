@@ -24,6 +24,7 @@ io.on('connection', (socket) => {
 
   // ── Cliente se une a una sala de mesa ──
   socket.on('unirse_mesa', (mesaNumero) => {
+    socket.mesaNumero = mesaNumero;
     const sala = mesaNumero === 'general' ? 'mesa_general' : `mesa_${mesaNumero}`;
     socket.join(sala);
 
@@ -31,6 +32,9 @@ io.on('connection', (socket) => {
     const carritoActual = carritosMesa[sala] || { items: [] };
     socket.emit('carrito_actualizado', carritoActual.items);
     console.log(`[Socket] ${socket.id} se unió a ${sala}`);
+    
+    // Notificar al admin que la mesa tiene actividad (clientes viendo menú)
+    io.to('admin').emit('mesa_actualizada', { mesa: mesaNumero });
   });
 
   // ── Admin se une al panel de administración ──
@@ -64,6 +68,9 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     console.log(`[Socket] Cliente desconectado: ${socket.id}`);
+    if (socket.mesaNumero) {
+      io.to('admin').emit('mesa_actualizada', { mesa: socket.mesaNumero });
+    }
   });
 });
 

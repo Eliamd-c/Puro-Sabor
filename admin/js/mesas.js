@@ -128,7 +128,11 @@ document.addEventListener('DOMContentLoaded', () => {
           Total: <strong>$${mesa.total.toLocaleString('es-CO', { minimumFractionDigits: 0 })} COP</strong>
         `;
       } else {
-        infoHtml = 'Esperando clientes...';
+        if (mesa.viendo > 0) {
+          infoHtml = `<span style="color:#2196F3; font-weight: 600;">👀 ${mesa.viendo} persona(s) mirando el menú</span>`;
+        } else {
+          infoHtml = 'Esperando clientes...';
+        }
       }
 
       let accionesHtml = '';
