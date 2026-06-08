@@ -164,12 +164,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderQRs() {
     let html = '';
+    const t = new Date().getTime(); // Cache buster
 
     // QR General
     html += `
       <div class="qr-card general animate-fade-in-up">
         <div class="qr-card-title">🌐 QR General</div>
-        <img src="/api/mesas/general/qr" alt="QR General" onerror="this.style.display='none'">
+        <img src="/api/mesas/general/qr?t=${t}" alt="QR General" onerror="this.style.display='none'">
         <br>
         <button class="btn-download-qr" onclick="descargarQR('general')">⬇️ Descargar</button>
       </div>
@@ -180,7 +181,7 @@ document.addEventListener('DOMContentLoaded', () => {
       html += `
         <div class="qr-card animate-fade-in-up">
           <div class="qr-card-title">🪑 Mesa ${mesa.numero}</div>
-          <img src="/api/mesas/${mesa.numero}/qr" alt="QR Mesa ${mesa.numero}" onerror="this.style.display='none'">
+          <img src="/api/mesas/${mesa.numero}/qr?t=${t}" alt="QR Mesa ${mesa.numero}" onerror="this.style.display='none'">
           <br>
           <button class="btn-download-qr" onclick="descargarQR(${mesa.numero})">⬇️ Descargar</button>
         </div>
