@@ -1,4 +1,4 @@
-const { makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const { makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const qrcode = require('qrcode');
 const { GoogleGenerativeAI, Type } = require('@google/generative-ai');
@@ -10,6 +10,9 @@ let client = null;
 let botStatus = 'disconnected'; // disabled, disconnected, loading, qr, ready
 let latestQrDataUrl = null;
 const authFolder = path.join(__dirname, '../../baileys_auth_info');
+
+// Evitar múltiples intentos de reconexión paralelos
+let isReconnecting = false;
 
 // Helpers para base de datos
 function getConfig(key) {
@@ -76,6 +79,9 @@ function adjustStockDb(id, delta) {
 
 // Inicialización de WhatsApp usando Baileys
 async function inicializarWhatsApp(io) {
+  if (isReconnecting) return;
+  isReconnecting = true;
+
   if (client) {
     console.log('[WA Agent] Cerrando instancia previa de WhatsApp...');
     try {
@@ -90,6 +96,7 @@ async function inicializarWhatsApp(io) {
     botStatus = 'disabled';
     latestQrDataUrl = null;
     io.to('admin').emit('whatsapp_status', { status: botStatus });
+    isReconnecting = false;
     return;
   }
 
@@ -105,8 +112,11 @@ async function inicializarWhatsApp(io) {
       auth: state,
       printQRInTerminal: false,
       logger: pino({ level: 'silent' }), // Ocultar los logs ruidosos de baileys
-      browser: ['PuroSabor AI', 'Chrome', '1.0.0']
+      browser: Browsers.macOS('Desktop'), // Usar una firma de navegador estándar para evitar bloqueos
+      syncFullHistory: false // Prevenir que colapse la memoria al conectarse
     });
+
+    isReconnecting = false;
 
     client.ev.on('creds.update', saveCreds);
 
@@ -131,7 +141,9 @@ async function inicializarWhatsApp(io) {
         
         if (statusCode === DisconnectReason.loggedOut) {
           // El usuario cerró sesión en su celular
-          fs.rmSync(authFolder, { recursive: true, force: true });
+          try {
+            fs.rmSync(authFolder, { recursive: true, force: true });
+          } catch(e) {}
         }
 
         botStatus = 'disconnected';
