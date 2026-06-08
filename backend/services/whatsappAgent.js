@@ -168,6 +168,15 @@ async function inicializarWhatsApp(io) {
       // Ignorar mensajes enviados por el propio bot
       if (message.key.fromMe) return;
 
+      // --- DEBUG PARA EL FRONTEND ---
+      const sender = message.key.remoteJid;
+      io.to('admin').emit('whatsapp_message', { 
+        type: 'error', 
+        sender: 'DEBUG-SYSTEM', 
+        text: `Recibido paquete de WA de: ${sender}. Procesando...`,
+        time: new Date().toLocaleTimeString()
+      });
+
       try {
         await procesarMensajeEntrante(message, client, io);
       } catch (err) {
@@ -190,18 +199,25 @@ async function procesarMensajeEntrante(message, sock, io) {
 
   // Extraer el cuerpo de texto del mensaje
   const body = message.message?.conversation || message.message?.extendedTextMessage?.text;
-  if (!body) return;
+  if (!body) {
+    io.to('admin').emit('whatsapp_message', { type: 'error', sender: 'DEBUG', text: 'El mensaje no tiene cuerpo de texto (posible imagen o sistema).', time: new Date().toLocaleTimeString() });
+    return;
+  }
 
   const senderNumber = remoteJid.split('@')[0];
   const whitelistStr = await getConfig('whatsapp_whitelist');
   
-  if (!whitelistStr) return;
+  if (!whitelistStr) {
+    io.to('admin').emit('whatsapp_message', { type: 'error', sender: 'DEBUG', text: 'La lista blanca está vacía en BD.', time: new Date().toLocaleTimeString() });
+    return;
+  }
 
   const whitelist = whitelistStr.split(',').map(num => num.trim().replace('+', ''));
   const isAuthorized = whitelist.some(num => senderNumber.endsWith(num) || num.endsWith(senderNumber));
 
   if (!isAuthorized) {
     console.log(`[WA Agent] Mensaje ignorado de no autorizado: ${senderNumber}`);
+    io.to('admin').emit('whatsapp_message', { type: 'error', sender: 'DEBUG', text: `Mensaje rechazado. El número ${senderNumber} no está en la lista blanca: ${whitelist.join(', ')}`, time: new Date().toLocaleTimeString() });
     return;
   }
 
