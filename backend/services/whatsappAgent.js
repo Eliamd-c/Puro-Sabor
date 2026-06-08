@@ -2,6 +2,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode');
 const { GoogleGenerativeAI, Type } = require('@google/generative-ai');
 const db = require('../config/database');
+const { exec } = require('child_process');
 
 let client = null;
 let botStatus = 'disconnected'; // disabled, disconnected, loading, qr, authenticated, ready
@@ -70,6 +71,22 @@ function adjustStockDb(id, delta) {
   });
 }
 
+function downloadChromeIfMissing() {
+  return new Promise((resolve, reject) => {
+    console.log('[WA Agent] Verificando/Instalando navegador Chrome para Puppeteer...');
+    // Ejecutar la instalación del navegador compatible con Puppeteer
+    exec('npx puppeteer browsers install chrome', (error, stdout, stderr) => {
+      if (error) {
+        console.error('[WA Agent] Error al verificar/descargar Chrome:', error.message);
+        reject(error);
+      } else {
+        console.log('[WA Agent] Verificación de Chrome completada:', stdout.trim());
+        resolve(stdout);
+      }
+    });
+  });
+}
+
 // Inicialización de WhatsApp
 async function inicializarWhatsApp(io) {
   // Destruir cliente existente si hay uno
@@ -96,6 +113,13 @@ async function inicializarWhatsApp(io) {
   botStatus = 'loading';
   latestQrDataUrl = null;
   io.to('admin').emit('whatsapp_status', { status: botStatus });
+
+  // Asegurar que Chrome esté descargado (crítico para Hostinger)
+  try {
+    await downloadChromeIfMissing();
+  } catch (err) {
+    console.warn('[WA Agent] Advertencia al descargar Chrome, continuando por si ya existe:', err.message);
+  }
 
   client = new Client({
     authStrategy: new LocalAuth(),
