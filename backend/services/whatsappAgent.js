@@ -1,7 +1,7 @@
 const { makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const qrcode = require('qrcode');
-const { GoogleGenerativeAI, Type } = require('@google/generative-ai');
+const { GoogleGenerativeAI, SchemaType } = require('@google/generative-ai');
 const db = require('../config/database');
 const fs = require('fs');
 const path = require('path');
@@ -244,17 +244,17 @@ async function procesarMensajeEntrante(message, sock, io) {
     const obtenerInventarioDeclaration = {
       name: "obtenerInventario",
       description: "Obtiene todo el inventario de productos actual, incluyendo sus IDs, nombres, categoría, precio y stock disponible.",
-      parameters: { type: Type.OBJECT, properties: {}, required: [] }
+      parameters: { type: SchemaType.OBJECT, properties: {}, required: [] }
     };
 
     const actualizarStockDeclaration = {
       name: "actualizarStock",
       description: "Establece el stock físico de un producto mediante su ID a un nuevo valor exacto.",
       parameters: {
-        type: Type.OBJECT,
+        type: SchemaType.OBJECT,
         properties: {
-          id: { type: Type.INTEGER, description: "El ID único del producto." },
-          nuevoStock: { type: Type.INTEGER, description: "Nueva cantidad exacta de stock disponible." }
+          id: { type: SchemaType.INTEGER, description: "El ID único del producto." },
+          nuevoStock: { type: SchemaType.INTEGER, description: "Nueva cantidad exacta de stock disponible." }
         },
         required: ["id", "nuevoStock"]
       }
@@ -264,10 +264,10 @@ async function procesarMensajeEntrante(message, sock, io) {
       name: "ajustarStock",
       description: "Aumenta o disminuye el stock de un producto específico sumando o restando una cantidad. Úsalo para 'llegaron 10' o 'resta 5'.",
       parameters: {
-        type: Type.OBJECT,
+        type: SchemaType.OBJECT,
         properties: {
-          id: { type: Type.INTEGER, description: "El ID único del producto." },
-          cantidad: { type: Type.INTEGER, description: "Cantidad a sumar (positivo) o restar (negativo)." }
+          id: { type: SchemaType.INTEGER, description: "El ID único del producto." },
+          cantidad: { type: SchemaType.INTEGER, description: "Cantidad a sumar (positivo) o restar (negativo)." }
         },
         required: ["id", "cantidad"]
       }
