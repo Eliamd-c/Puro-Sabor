@@ -206,6 +206,14 @@ async function procesarMensajeEntrante(message, sock, io) {
   }
 
   console.log(`[WA Agent] Mensaje de admin (${senderNumber}): "${body}"`);
+  
+  // Enviar evento de mensaje entrante al monitor UI
+  io.to('admin').emit('whatsapp_message', { 
+    type: 'in', 
+    sender: senderNumber, 
+    text: body,
+    time: new Date().toLocaleTimeString()
+  });
 
   const apiKey = await getConfig('gemini_api_key') || process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -305,14 +313,41 @@ async function procesarMensajeEntrante(message, sock, io) {
       }
 
       const finalResult = await chat.sendMessage(toolResponses);
-      await sock.sendMessage(remoteJid, { text: finalResult.response.text() }, { quoted: message });
+      const finalText = finalResult.response.text();
+      
+      await sock.sendMessage(remoteJid, { text: finalText }, { quoted: message });
+      
+      // Enviar evento de mensaje saliente al monitor UI
+      io.to('admin').emit('whatsapp_message', { 
+        type: 'out', 
+        sender: 'Bot IA', 
+        text: finalText,
+        time: new Date().toLocaleTimeString()
+      });
     } else {
-      await sock.sendMessage(remoteJid, { text: response.text() }, { quoted: message });
+      const responseText = response.text();
+      await sock.sendMessage(remoteJid, { text: responseText }, { quoted: message });
+      
+      // Enviar evento de mensaje saliente al monitor UI
+      io.to('admin').emit('whatsapp_message', { 
+        type: 'out', 
+        sender: 'Bot IA', 
+        text: responseText,
+        time: new Date().toLocaleTimeString()
+      });
     }
 
   } catch (geminiErr) {
     console.error('[WA Agent] Error con Google Gemini:', geminiErr.message);
-    await sock.sendMessage(remoteJid, { text: `⚠️ Ocurrió un error con el motor de IA: ${geminiErr.message}` }, { quoted: message });
+    const errorText = `⚠️ Ocurrió un error con el motor de IA: ${geminiErr.message}`;
+    await sock.sendMessage(remoteJid, { text: errorText }, { quoted: message });
+    
+    io.to('admin').emit('whatsapp_message', { 
+      type: 'error', 
+      sender: 'Sistema', 
+      text: errorText,
+      time: new Date().toLocaleTimeString()
+    });
   }
 }
 

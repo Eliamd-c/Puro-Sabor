@@ -300,9 +300,68 @@ document.addEventListener('DOMContentLoaded', () => {
         actualizarEstadoWhatsApp(data.status, data.qr, data.error);
       });
 
+      // Escuchar mensajes en tiempo real para el Monitor de Chat
+      socket.on('whatsapp_message', (data) => {
+        console.log('[Socket] Mensaje WhatsApp:', data);
+        agregarMensajeAlMonitor(data);
+      });
+
     } catch (err) {
       console.error('[Socket] Error de conexión Socket.io:', err);
     }
+  }
+
+  // --- AGREGAR MENSAJE AL MONITOR DE ACTIVIDAD IA ---
+  function agregarMensajeAlMonitor(data) {
+    const monitor = document.getElementById('ai-chat-monitor');
+    const emptyMsg = document.getElementById('ai-chat-empty-msg');
+    if (!monitor) return;
+
+    if (emptyMsg) {
+      emptyMsg.style.display = 'none';
+    }
+
+    const msgDiv = document.createElement('div');
+    msgDiv.style.padding = '10px 14px';
+    msgDiv.style.borderRadius = '8px';
+    msgDiv.style.maxWidth = '90%';
+    msgDiv.style.lineHeight = '1.4';
+    msgDiv.style.boxShadow = '0 1px 2px rgba(0,0,0,0.1)';
+
+    if (data.type === 'in') {
+      // Mensaje Entrante (Administrador)
+      msgDiv.style.backgroundColor = 'var(--bg-secondary)';
+      msgDiv.style.alignSelf = 'flex-start';
+      msgDiv.style.borderLeft = '3px solid #3498db';
+      msgDiv.innerHTML = `
+        <div style="font-size: 11px; color: #3498db; font-weight: 700; margin-bottom: 4px;">Admin (${data.sender}) • ${data.time}</div>
+        <div style="color: var(--text-primary);">${data.text}</div>
+      `;
+    } else if (data.type === 'out') {
+      // Mensaje Saliente (Bot IA)
+      msgDiv.style.backgroundColor = 'rgba(46, 204, 113, 0.1)';
+      msgDiv.style.alignSelf = 'flex-end';
+      msgDiv.style.borderRight = '3px solid var(--success)';
+      msgDiv.innerHTML = `
+        <div style="font-size: 11px; color: var(--success); font-weight: 700; margin-bottom: 4px; text-align: right;">${data.sender} • ${data.time}</div>
+        <div style="color: var(--text-primary); text-align: right;">${data.text}</div>
+      `;
+    } else {
+      // Mensaje de Sistema / Error
+      msgDiv.style.backgroundColor = 'rgba(231, 76, 60, 0.1)';
+      msgDiv.style.alignSelf = 'center';
+      msgDiv.style.border = '1px solid var(--danger)';
+      msgDiv.style.color = 'var(--danger)';
+      msgDiv.style.textAlign = 'center';
+      msgDiv.innerHTML = `
+        <div style="font-size: 11px; font-weight: 700; margin-bottom: 4px;">${data.sender} • ${data.time}</div>
+        <div>${data.text}</div>
+      `;
+    }
+
+    monitor.appendChild(msgDiv);
+    // Auto-scroll al fondo
+    monitor.scrollTop = monitor.scrollHeight;
   }
 
   // --- ACTUALIZAR ESTADO VISUAL DE WHATSAPP ---
