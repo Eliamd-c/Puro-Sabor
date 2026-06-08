@@ -4,7 +4,7 @@
 
 document.addEventListener('DOMContentLoaded', () => {
   // ── Autenticación ──────────────────────────────────────────────────────
-  const token = localStorage.getItem('puro_sabor_token') || getCookie('puro_sabor_token');
+  const token = localStorage.getItem('puro_sabor_admin_token') || getCookie('puro_sabor_admin_token');
   if (!token) {
     window.location.href = '/admin/';
     return;
@@ -354,8 +354,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Logout
     btnLogout.addEventListener('click', () => {
-      localStorage.removeItem('puro_sabor_token');
-      document.cookie = 'puro_sabor_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+      localStorage.removeItem('puro_sabor_admin_token');
+      localStorage.removeItem('puro_sabor_admin_user');
+      document.cookie = 'puro_sabor_admin_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
       window.location.href = '/admin/';
     });
   }
