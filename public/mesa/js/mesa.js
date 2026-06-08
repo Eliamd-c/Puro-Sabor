@@ -107,43 +107,58 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ── Socket.io: Sincronización en tiempo real ──────────────────────────
   function conectarSocket() {
-    socket = io();
+    try {
+      if (typeof io === 'undefined') {
+        console.warn('Socket.io no está disponible. El modo offline está activo.');
+        return;
+      }
+      
+      socket = io();
 
-    socket.on('connect', () => {
-      socket.emit('unirse_mesa', mesaNumero);
-      syncIndicator.classList.remove('desconectado');
-      syncIndicator.querySelector('.sync-text').textContent = 'En vivo';
-      console.log('[Socket] Conectado a mesa:', mesaNumero);
-    });
+      socket.on('connect', () => {
+        socket.emit('unirse_mesa', mesaNumero);
+        if (syncIndicator) {
+          syncIndicator.classList.remove('desconectado');
+          syncIndicator.querySelector('.sync-text').textContent = 'En vivo';
+        }
+        console.log('[Socket] Conectado a mesa:', mesaNumero);
+      });
 
-    socket.on('disconnect', () => {
-      syncIndicator.classList.add('desconectado');
-      syncIndicator.querySelector('.sync-text').textContent = 'Sin conexión';
-    });
+      socket.on('disconnect', () => {
+        if (syncIndicator) {
+          syncIndicator.classList.add('desconectado');
+          syncIndicator.querySelector('.sync-text').textContent = 'Sin conexión';
+        }
+      });
 
-    // Recibir carrito actualizado (de otro celular)
-    socket.on('carrito_actualizado', (items) => {
-      carrito = items;
-      actualizarUICarrito();
+      // Recibir carrito actualizado (de otro celular)
+      socket.on('carrito_actualizado', (items) => {
+        carrito = items;
+        actualizarUICarrito();
 
-      // Pulso visual en el badge
-      cartBadge.classList.add('sync-pulse');
-      setTimeout(() => cartBadge.classList.remove('sync-pulse'), 600);
-    });
+        // Pulso visual en el badge
+        if (cartBadge) {
+          cartBadge.classList.add('sync-pulse');
+          setTimeout(() => cartBadge.classList.remove('sync-pulse'), 600);
+        }
+      });
 
-    // Pedido confirmado (por otro celular)
-    socket.on('pedido_confirmado', (resumen) => {
-      rondaActual = resumen.ronda || rondaActual;
-      carrito = [];
-      actualizarUICarrito();
-    });
+      // Pedido confirmado (por otro celular)
+      socket.on('pedido_confirmado', (resumen) => {
+        rondaActual = resumen.ronda || rondaActual;
+        carrito = [];
+        actualizarUICarrito();
+      });
 
-    // Mesa cerrada por la cajera
-    socket.on('mesa_cerrada', (data) => {
-      cerradaOverlay.style.display = 'flex';
-      successOverlay.style.display = 'none';
-      cartPanelOverlay.classList.remove('open');
-    });
+      // Mesa cerrada por la cajera
+      socket.on('mesa_cerrada', (data) => {
+        if (cerradaOverlay) cerradaOverlay.style.display = 'flex';
+        if (successOverlay) successOverlay.style.display = 'none';
+        if (cartPanelOverlay) cartPanelOverlay.classList.remove('open');
+      });
+    } catch (e) {
+      console.warn('Error al iniciar WebSockets:', e);
+    }
   }
 
   // Emitir cambios del carrito al servidor
