@@ -357,7 +357,18 @@ document.addEventListener('DOMContentLoaded', () => {
         <p style="color:var(--text-secondary); font-size:13px; margin-top:6px; max-width:260px; margin-left:auto; margin-right:auto;">
           El Agente de Inteligencia está listo y respondiendo a los administradores autorizados.
         </p>
+        <div style="margin-top: 16px; display: flex; gap: 8px; justify-content: center;">
+          <button class="btn-primary" id="btn-reconnect-inline" style="font-size:12px; padding:8px 16px;">Reconectar</button>
+          <button id="btn-logout-wa" style="font-size:12px; padding:8px 16px; background-color: var(--danger); color: white; border: none; border-radius: 6px; cursor: pointer;">Cerrar Sesión</button>
+        </div>
       `;
+
+      const btnLogoutWa = waQrContainer.querySelector('#btn-logout-wa');
+      if (btnLogoutWa) btnLogoutWa.addEventListener('click', cerrarSesionWhatsApp);
+      
+      const btnReconnectInline = waQrContainer.querySelector('#btn-reconnect-inline');
+      if (btnReconnectInline) btnReconnectInline.addEventListener('click', reconectarWhatsApp);
+
     } else if (status === 'qr' && qr) {
       waQrContainer.innerHTML = `
         <div class="qr-wrapper">
@@ -383,6 +394,26 @@ document.addEventListener('DOMContentLoaded', () => {
       if (btnRetry) {
         btnRetry.addEventListener('click', reconectarWhatsApp);
       }
+    }
+  }
+
+  // --- CERRAR SESIÓN DE WHATSAPP ---
+  async function cerrarSesionWhatsApp() {
+    if (!confirm('¿Estás seguro de que deseas cerrar la sesión de WhatsApp? Se desvinculará tu dispositivo y tendrás que volver a escanear el QR.')) return;
+    
+    actualizarEstadoWhatsApp('loading');
+    try {
+      const response = await fetch('/api/inventario/whatsapp/logout', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const result = await response.json();
+      if (!result.success) {
+        alert('Error al cerrar sesión: ' + result.message);
+      }
+    } catch (error) {
+      console.error('Error al cerrar sesión:', error);
+      alert('Error en la conexión con el servidor al cerrar sesión.');
     }
   }
 

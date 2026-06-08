@@ -131,4 +131,22 @@ router.post('/whatsapp/reconnect', verificarJWT, async (req, res) => {
   }
 });
 
+// POST /api/inventario/whatsapp/logout — Cerrar sesión y desvincular dispositivo (Admin)
+router.post('/whatsapp/logout', verificarJWT, async (req, res) => {
+  const io = req.app.get('io');
+  try {
+    await waAgent.logoutWhatsApp(io);
+    res.json({
+      success: true,
+      message: 'Se ha cerrado la sesión de WhatsApp exitosamente.'
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: 'Error al cerrar sesión.',
+      error: err.message
+    });
+  }
+});
+
 module.exports = router;

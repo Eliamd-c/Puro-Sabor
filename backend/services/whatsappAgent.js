@@ -311,5 +311,23 @@ module.exports = {
   reloadConfig: async (io) => {
     console.log('[WA Agent] Recargando configuración y reiniciando bot...');
     await inicializarWhatsApp(io);
+  },
+  logoutWhatsApp: async (io) => {
+    console.log('[WA Agent] Cerrando sesión y borrando credenciales...');
+    if (client) {
+      try {
+        await client.logout();
+      } catch (e) {
+        console.error('[WA Agent] Error al hacer logout:', e.message);
+      }
+    }
+    try {
+      fs.rmSync(authFolder, { recursive: true, force: true });
+    } catch (e) {}
+    botStatus = 'disconnected';
+    io.to('admin').emit('whatsapp_status', { status: botStatus, error: 'Sesión cerrada exitosamente.' });
+    
+    // Reiniciamos después de 2 segundos para generar QR de nuevo
+    setTimeout(() => inicializarWhatsApp(io), 2000);
   }
 };
