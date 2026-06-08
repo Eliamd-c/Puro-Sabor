@@ -124,7 +124,7 @@ function sembrarDatosIniciales() {
     if (!err && row && row.count === 0) {
       const configs = [
         ['whatsapp_numero', '3133288298'],
-        ['dominio_base', 'http://localhost:3000'],
+        ['dominio_base', 'https://restaurantepurosabor.com'],
         ['restaurante_nombre', 'Puro Sabor'],
         ['mesas_timeout_horas', '2']
       ];
