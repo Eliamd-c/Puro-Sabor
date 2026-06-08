@@ -294,7 +294,7 @@ async function procesarMensajeEntrante(message, sock, io) {
     const result = await chat.sendMessage(body);
     const response = result.response;
 
-    const functionCalls = response.getFunctionCalls();
+    const functionCalls = response.functionCalls();
     if (functionCalls && functionCalls.length > 0) {
       console.log(`[WA Agent] Gemini solicitó ejecutar ${functionCalls.length} función(es).`);
       const toolResponses = [];
