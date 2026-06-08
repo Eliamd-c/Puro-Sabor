@@ -55,8 +55,12 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 16px 20px 20px;
+  padding: 16px 20px calc(20px + env(safe-area-inset-bottom));
   border-top: 1px solid rgba(255, 255, 255, 0.07);
+  flex-shrink: 0;
+  background: var(--bg-card);
+  position: relative;
+  z-index: 10;
 }
 
 .quantity-controls {
