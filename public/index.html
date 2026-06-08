@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Puro Sabor | Menú Interactivo Premium</title>
+  <meta name="description" content="Explora el menú interactivo de Puro Sabor. Saborea las mejores especialidades al carbón, postres artesanal y bebidas refrescantes. Cocina artesanal al carbón en tu mesa.">
+  
+  <!-- Google Fonts (Outfit & Plus Jakarta Sans) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Swiper CSS (CDN for 3D coverflow carousel) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css" />
+  
+  <!-- CSS Stylesheets -->
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/animations.css">
+</head>
+<body>
+
+  <div class="app-container">
+    
+    <!-- 📋 HEADER STICKY -->
+    <header class="sticky-header">
+      <div class="brand">
+        <img src="/Logo.png" alt="Puro Sabor" class="brand-logo-img">
+        <div class="brand-text">
+          <h1>Puro Sabor</h1>
+          <p>Cocina Artesanal al Carbón</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <a href="/admin" class="admin-link">Panel Admin</a>
+      </div>
+    </header>
+
+    <!-- 🔍 HERO Y BUSCADOR -->
+    <section class="hero-section">
+      <h2 class="hero-title">El auténtico sabor <span>al carbón</span></h2>
+      <p class="hero-subtitle">Ingredientes seleccionados, carnes jugosas y la tradición de la miga de plátano en tu mesa.</p>
+      
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="search-input" placeholder="Busca tu proteína, plato o postre favorito...">
+      </div>
+    </section>
+
+    <!-- 🏷️ CATEGORÍAS (Deslizable horizontal) -->
+    <nav class="categories-container">
+      <div class="categories-scroll" id="categories-scroll">
+        <!-- Generado dinámicamente -->
+      </div>
+    </nav>
+
+    <!-- 🍔 CONTENEDOR PRINCIPAL DEL MENÚ -->
+    <main>
+      <!-- 🔥 SECCIÓN DE CAROUSEL 3D (Migas al Carbón) -->
+      <section id="migas-carousel-section" class="migas-carousel-section">
+        <div class="section-header">
+          <span class="section-tagline">Nuestra Especialidad</span>
+          <h3 class="section-title">Migas al Carbón</h3>
+        </div>
+        <div class="swiper mySwiper">
+          <div class="swiper-wrapper" id="swiper-wrapper-migas">
+            <!-- Las diapositivas se generarán dinámicamente -->
+          </div>
+          <!-- Controles de paginación del slider -->
+          <div class="swiper-pagination"></div>
+        </div>
+      </section>
+
+      <!-- 🍹 SECCIÓN DE BEBIDAS Y POSTRES (Grillas de 2 Columnas) -->
+      <section id="secondary-sections" class="secondary-sections">
+        <!-- Se generarán dinámicamente: Bebidas y/o Postres -->
+      </section>
+      
+      <!-- 🔍 CONTENEDOR PARA RESULTADOS DE BÚSQUEDA -->
+      <section id="search-results-section" class="search-results-section" style="display: none;">
+        <div class="section-header">
+          <h3 class="section-title">Resultados de Búsqueda</h3>
+        </div>
+        <div class="products-grid" id="products-grid">
+          <!-- Resultados dinámicos -->
+        </div>
+      </section>
+    </main>
+
+  </div>
+
+  <!-- 🔍 MODAL DETALLE DE PRODUCTO (NATIVO MOBILE BOTTOM SHEET) -->
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="modal-content" id="modal-content">
+      <div class="modal-drag-handle"></div>
+      <button class="btn-close-modal" id="btn-close-modal">&times;</button>
+      
+      <div class="modal-image">
+        <img id="modal-img" src="" alt="Producto">
+      </div>
+      
+      <div class="modal-body">
+        <span class="modal-category" id="modal-category">Categoría</span>
+        <h3 class="modal-title" id="modal-title">Nombre del plato</h3>
+        <div class="modal-price" id="modal-price">$0.00</div>
+        <p class="modal-desc" id="modal-desc">Descripción del plato detallando ingredientes y preparación.</p>
+        <div id="modal-size-container" class="modal-size-container" style="display:none;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Swiper JS (CDN para 3D coverflow carousel) -->
+  <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
+
+  <!-- JS Files -->
+  <script src="/js/api.js"></script>
+  <script src="/js/main.js"></script>
+</body>
+</html>

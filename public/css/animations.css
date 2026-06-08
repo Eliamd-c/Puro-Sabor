@@ -1,0 +1,121 @@
+/* 🎭 ANIMACIONES PREMIUM - PURO SABOR */
+
+/* 1. Entrada de Tarjetas en Cascada (Fade In & Slide Up) */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* 2. Pulso sutil para el botón de "Agregar al Carrito" */
+@keyframes pulseGlow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(230, 126, 34, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(230, 126, 34, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(230, 126, 34, 0);
+  }
+}
+
+.animate-pulse-glow:hover {
+  animation: pulseGlow 1.5s infinite;
+}
+
+/* 3. Animación de "Bump" (Salto) para el contador del carrito */
+@keyframes bump {
+  0% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(1.4);
+  }
+  50% {
+    transform: scale(0.8);
+  }
+  70% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.animate-bump {
+  animation: bump 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+/* 4. Transición para el modal de detalles (Slide Up) */
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* 5. Transición para el overlay de fondo (Fade In) */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+/* 6. Rotación elegante para loaders */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 0.8s linear infinite;
+}
+
+/* 7. Hover en tarjetas de productos */
+.producto-card {
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), 
+              box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.producto-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.4), 
+              0 0 15px rgba(230, 126, 34, 0.1);
+  border-color: rgba(230, 126, 34, 0.3);
+}
+
+.producto-card:hover img {
+  transform: scale(1.05);
+}
+
+/* 8. Zoom suave para imágenes de tarjetas */
+.producto-card img {
+  transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}

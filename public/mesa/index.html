@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Puro Sabor | Haz tu Pedido</title>
+  <meta name="description" content="Realiza tu pedido directamente desde tu mesa en Puro Sabor. Cocina artesanal al carbón.">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Swiper CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css"/>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/animations.css">
+  <link rel="stylesheet" href="/mesa/css/mesa.css">
+</head>
+<body>
+
+  <div class="app-container" id="app-container">
+
+    <!-- ══ HEADER MESA ══════════════════════════════════════════════════ -->
+    <header class="sticky-header mesa-header">
+      <div class="brand">
+        <img src="/Logo.png" alt="Puro Sabor" class="brand-logo-img">
+        <div class="brand-text">
+          <h1>Puro Sabor</h1>
+          <p id="mesa-label">Cargando...</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div class="sync-indicator" id="sync-indicator" title="Sincronizado con tu mesa">
+          <span class="sync-dot"></span>
+          <span class="sync-text">En vivo</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- ══ HERO ══════════════════════════════════════════════════════════ -->
+    <section class="hero-section">
+      <h2 class="hero-title">El auténtico sabor <span>al carbón</span></h2>
+      <p class="hero-subtitle">Selecciona tus platos y haz tu pedido directamente desde aquí 🔥</p>
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="search-input" placeholder="Busca tu proteína, plato o postre favorito...">
+      </div>
+    </section>
+
+    <!-- ══ CATEGORÍAS ════════════════════════════════════════════════════ -->
+    <nav class="categories-container">
+      <div class="categories-scroll" id="categories-scroll"></div>
+    </nav>
+
+    <!-- ══ MENÚ PRINCIPAL ════════════════════════════════════════════════ -->
+    <main>
+      <!-- Carousel 3D Migas -->
+      <section id="migas-carousel-section" class="migas-carousel-section">
+        <div class="section-header">
+          <span class="section-tagline">Nuestra Especialidad</span>
+          <h3 class="section-title">Migas al Carbón</h3>
+        </div>
+        <div class="swiper mySwiper">
+          <div class="swiper-wrapper" id="swiper-wrapper-migas"></div>
+          <div class="swiper-pagination"></div>
+        </div>
+      </section>
+
+      <!-- Secciones secundarias (Bebidas + Postres) -->
+      <section id="secondary-sections" class="secondary-sections"></section>
+
+      <!-- Resultados de búsqueda -->
+      <section id="search-results-section" class="search-results-section" style="display:none;">
+        <div class="section-header">
+          <h3 class="section-title">Resultados de Búsqueda</h3>
+        </div>
+        <div class="products-grid" id="products-grid"></div>
+      </section>
+    </main>
+
+    <!-- Espacio para que el carrito flotante no tape el contenido -->
+    <div style="height: 100px;"></div>
+
+  </div>
+
+  <!-- ══ MODAL DETALLE DE PRODUCTO ════════════════════════════════════════ -->
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="modal-content" id="modal-content">
+      <div class="modal-drag-handle"></div>
+      <button class="btn-close-modal" id="btn-close-modal">&times;</button>
+
+      <div class="modal-image">
+        <img id="modal-img" src="" alt="Producto">
+      </div>
+
+      <div class="modal-body">
+        <span class="modal-category" id="modal-category">Categoría</span>
+        <h3 class="modal-title" id="modal-title">Nombre del plato</h3>
+        <div class="modal-price" id="modal-price">$0</div>
+        <p class="modal-desc" id="modal-desc">Descripción del plato.</p>
+        <div id="modal-size-container" class="modal-size-container" style="display:none;"></div>
+      </div>
+
+      <!-- Controles de cantidad + Agregar al carrito -->
+      <div class="modal-cart-actions">
+        <div class="quantity-controls">
+          <button class="qty-btn" id="btn-qty-minus">−</button>
+          <span class="qty-display" id="qty-display">1</span>
+          <button class="qty-btn" id="btn-qty-plus">+</button>
+        </div>
+        <button class="btn-agregar-carrito" id="btn-agregar-carrito">
+          🛒 Agregar al Pedido
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ CARRITO FLOTANTE ══════════════════════════════════════════════════ -->
+  <div class="floating-cart" id="floating-cart" style="display:none;">
+    <button class="floating-cart-btn" id="btn-open-cart">
+      <span class="cart-icon">🛒</span>
+      <span class="cart-badge" id="cart-badge">0</span>
+      <span class="cart-label">Ver pedido</span>
+      <span class="cart-total-label" id="cart-total-label">$0</span>
+    </button>
+  </div>
+
+  <!-- ══ PANEL LATERAL DEL CARRITO ════════════════════════════════════════ -->
+  <div class="cart-panel-overlay" id="cart-panel-overlay">
+    <div class="cart-panel" id="cart-panel">
+      <div class="cart-panel-header">
+        <h3 class="cart-panel-title">🛒 Tu Pedido</h3>
+        <button class="btn-close-cart" id="btn-close-cart">&times;</button>
+      </div>
+
+      <div class="cart-panel-body" id="cart-panel-body">
+        <!-- Items del carrito se generan dinámicamente -->
+      </div>
+
+      <div class="cart-panel-footer">
+        <!-- Campo de nombre -->
+        <div class="name-container">
+          <label for="nombre-pedido">👤 ¿A nombre de quién va el pedido?</label>
+          <input type="text" id="nombre-pedido" placeholder="Ej: Juan, María..." maxlength="40" autocomplete="given-name">
+        </div>
+
+        <!-- Campo de notas -->
+        <div class="notes-container">
+          <label for="notas-pedido">📝 Nota para cocina (opcional)</label>
+          <textarea id="notas-pedido" placeholder="Ej: sin picante, bien cocido, alergia a..."></textarea>
+        </div>
+
+        <div class="cart-summary">
+          <div class="cart-summary-row">
+            <span>Subtotal</span>
+            <span id="cart-subtotal">$0</span>
+          </div>
+          <div class="cart-summary-total">
+            <span>TOTAL</span>
+            <span id="cart-total">$0</span>
+          </div>
+        </div>
+
+        <button class="btn-checkout" id="btn-checkout">
+          <span>📱 Confirmar y Enviar por WhatsApp</span>
+        </button>
+
+        <p class="checkout-disclaimer">
+          Al enviar aceptas recibir novedades de Puro Sabor vía WhatsApp 🍖
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ PANTALLA DE ÉXITO POST-PEDIDO ════════════════════════════════════ -->
+  <div class="success-overlay" id="success-overlay" style="display:none;">
+    <div class="success-modal">
+      <div class="success-icon">🎉</div>
+      <h3>¡Pedido Enviado!</h3>
+      <p id="success-mesa-text">Mesa <strong>5</strong> — Ronda <strong>#1</strong></p>
+      <p class="success-sub">Tu pedido fue enviado a cocina por WhatsApp. ¡Pronto estará listo!</p>
+      <div class="success-actions">
+        <button class="btn-nueva-ronda" id="btn-nueva-ronda">🍺 Pedir más (nueva ronda)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ PANTALLA DE MESA CERRADA ══════════════════════════════════════════ -->
+  <div class="cerrada-overlay" id="cerrada-overlay" style="display:none;">
+    <div class="cerrada-modal">
+      <div class="cerrada-icon">✅</div>
+      <h3>¡Gracias por tu visita!</h3>
+      <p>Tu cuenta fue cerrada. Esperamos haberte dado el mejor sabor al carbón 🔥</p>
+      <p class="cerrada-sub">¡Vuelve pronto a Puro Sabor!</p>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/mesa/js/mesa.js"></script>
+</body>
+</html>

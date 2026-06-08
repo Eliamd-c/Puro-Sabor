@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Puro Sabor | Panel Administrativo</title>
+  
+  <!-- CSS Stylesheets -->
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/animations.css">
+  <link rel="stylesheet" href="/admin/css/admin.css">
+</head>
+<body>
+
+  <div class="dashboard-wrapper">
+    
+    <!-- 🎛️ SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <span class="sidebar-logo">🔥</span>
+        <h2>Puro Sabor</h2>
+      </div>
+      
+      <div class="sidebar-user">
+        <p class="user-info-role">ADMINISTRADOR</p>
+        <p class="user-info-name" id="admin-display-name">Admin User</p>
+      </div>
+
+      <nav class="sidebar-menu">
+        <a href="/admin/dashboard.html" class="menu-item active">
+          <span>📦</span> Productos
+        </a>
+        <a href="/admin/mesas.html" class="menu-item">
+          <span>🪑</span> Mesas y Pedidos
+        </a>
+        <a href="/" class="menu-item" target="_blank">
+          <span>🍽️</span> Ver Menú Público
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button class="btn-logout" id="btn-logout">Cerrar Sesión</button>
+      </div>
+    </aside>
+
+    <!-- 📊 CONTENIDO PRINCIPAL -->
+    <main class="main-content">
+      
+      <!-- Encabezado del Dashboard -->
+      <div class="dashboard-header animate-fade-in-up">
+        <div class="dashboard-title">
+          <h2>Gestión de Productos</h2>
+          <p>Controla el menú, precios y niveles de stock de tu restaurante.</p>
+        </div>
+        <button class="btn-primary" id="btn-open-add-product">
+          <svg viewBox="0 0 24 24">
+            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+          </svg>
+          <span>Añadir Producto</span>
+        </button>
+      </div>
+
+      <!-- Grid de Indicadores KPI -->
+      <section class="kpi-grid animate-fade-in-up" style="animation-delay: 0.1s;">
+        <div class="kpi-card">
+          <div>
+            <p class="kpi-info-label">Total Productos</p>
+            <h3 class="kpi-info-value" id="kpi-total-products">0</h3>
+          </div>
+          <span class="kpi-icon">🍔</span>
+        </div>
+
+        <div class="kpi-card">
+          <div>
+            <p class="kpi-info-label">Productos Agotados</p>
+            <h3 class="kpi-info-value" id="kpi-out-stock" style="color: var(--danger);">0</h3>
+          </div>
+          <span class="kpi-icon" style="opacity: 0.8;">🚨</span>
+        </div>
+
+        <div class="kpi-card">
+          <div>
+            <p class="kpi-info-label">Bajo Stock (&lt; 5)</p>
+            <h3 class="kpi-info-value" id="kpi-low-stock" style="color: var(--warning);">0</h3>
+          </div>
+          <span class="kpi-icon" style="opacity: 0.8;">⚠️</span>
+        </div>
+      </section>
+
+      <!-- Tabla CRUD de Productos -->
+      <section class="table-container animate-fade-in-up" style="animation-delay: 0.2s;">
+        
+        <!-- Barra de filtros -->
+        <div class="table-header-bar">
+          <h3>Listado General</h3>
+          
+          <div class="table-actions">
+            <!-- Filtro de Búsqueda -->
+            <div class="search-box table-search">
+              <span class="search-icon">🔍</span>
+              <input type="text" id="admin-search-input" placeholder="Buscar producto...">
+            </div>
+            
+            <!-- Filtro de Categoría -->
+            <select class="table-select" id="admin-filter-category">
+              <option value="">Todas las categorías</option>
+              <!-- Generado dinámicamente -->
+            </select>
+          </div>
+        </div>
+
+        <!-- Tabla -->
+        <table>
+          <thead>
+            <tr>
+              <th class="cell-image">Imagen</th>
+              <th>Nombre</th>
+              <th>Categoría</th>
+              <th>Precio</th>
+              <th>Stock</th>
+              <th>Disponible</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="admin-products-table-body">
+            <!-- Generado dinámicamente -->
+            <tr>
+              <td colspan="7" style="text-align: center; padding: 40px; color: var(--text-secondary);">
+                Cargando inventario de productos...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- 📝 MODAL DIÁLOGO: CREAR / EDITAR PRODUCTO -->
+  <div class="admin-modal-overlay" id="product-modal">
+    <div class="admin-modal-content">
+      
+      <div class="admin-modal-header">
+        <h3 id="modal-form-title">Añadir Nuevo Producto</h3>
+        <button class="btn-close-cart" id="btn-close-product-modal">&times;</button>
+      </div>
+
+      <form id="product-form" enctype="multipart/form-data">
+        <div class="admin-modal-body">
+          <input type="hidden" id="product-id-field">
+          
+          <div class="form-group">
+            <label for="prod-name">Nombre del Producto *</label>
+            <input type="text" id="prod-name" class="form-control form-control-no-icon" placeholder="Ej. Hamburguesa Clásica" required>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="prod-category">Categoría *</label>
+              <select id="prod-category" class="table-select form-control form-control-no-icon" style="height: 48px;" required>
+                <!-- Generado dinámicamente -->
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="prod-price">Precio ($ USD) *</label>
+              <input type="number" id="prod-price" class="form-control form-control-no-icon" placeholder="Ej. 12.99" step="0.01" min="0" required>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="prod-stock">Stock Inicial</label>
+              <input type="number" id="prod-stock" class="form-control form-control-no-icon" placeholder="Ej. 25" min="0">
+            </div>
+
+            <div class="form-group" style="display: flex; flex-direction: column; justify-content: center; align-items: flex-start; height: 75px;">
+              <label style="margin-bottom: 10px;">Disponible en Menú</label>
+              <label class="switch">
+                <input type="checkbox" id="prod-available" checked>
+                <span class="slider-toggle"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="prod-desc">Descripción / Ingredientes</label>
+            <textarea id="prod-desc" class="form-control form-control-no-icon" rows="3" placeholder="Ej. Carne 100% de res al carbón, queso cheddar fundido, lechuga y tomate en pan brioche..." style="resize: vertical; min-height: 80px; font-family: inherit;"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label>Imagen del Producto</label>
+            <div class="image-upload-wrapper">
+              <div class="image-preview" id="image-upload-preview">
+                <span style="font-size: 24px; color: var(--text-muted);">🍽️</span>
+              </div>
+              <div class="file-input-custom">
+                <span class="btn-file">Examinar Archivo...</span>
+                <input type="file" id="prod-image-file" accept="image/*">
+              </div>
+              <input type="hidden" id="prod-image-url-existente">
+            </div>
+          </div>
+
+        </div>
+
+        <div class="admin-modal-footer">
+          <button type="button" class="btn-secondary" id="btn-cancel-product-modal">Cancelar</button>
+          <button type="submit" class="btn-primary" id="btn-save-product">Guardar Producto</button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+
+  <!-- 🚨 MODAL DE CONFIRMACIÓN DE ELIMINACIÓN -->
+  <div class="admin-modal-overlay" id="confirm-delete-modal" style="z-index: 3100;">
+    <div class="admin-modal-content" style="max-width: 400px; text-align: center;">
+      <div class="admin-modal-body" style="padding: 40px 30px;">
+        <span style="font-size: 54px; display: block; margin-bottom: 20px;">🗑️</span>
+        <h3 style="font-family: 'Outfit', sans-serif; font-size: 22px; font-weight: 700; margin-bottom: 12px;">¿Eliminar Producto?</h3>
+        <p style="color: var(--text-secondary); font-size: 14px; line-height: 1.5;">Esta acción quitará el producto de forma permanente del menú público y de la administración.</p>
+      </div>
+      <div class="admin-modal-footer" style="justify-content: center; gap: 16px;">
+        <button class="btn-secondary" id="btn-cancel-delete">Cancelar</button>
+        <button class="btn-primary" id="btn-confirm-delete" style="background: var(--danger); box-shadow: 0 4px 12px rgba(231, 76, 60, 0.2);">Sí, Eliminar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- JS Files -->
+  <script src="/admin/js/dashboard.js"></script>
+</body>
+</html>

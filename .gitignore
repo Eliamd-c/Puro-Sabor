@@ -1,0 +1,31 @@
+# Dependencias
+node_modules/
+
+# Base de datos
+backend/database/*.db
+
+# Variables de entorno
+.env
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Imágenes subidas por usuarios (se generan en producción)
+public/uploads/*
+!public/uploads/.gitkeep
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor
+.vscode/
+.idea/
+
+# Archivos comprimidos del proyecto
+*.zip
+
+# Gemini AI
+.gemini/

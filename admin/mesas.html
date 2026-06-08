@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Puro Sabor | Panel de Mesas</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/animations.css">
+  <link rel="stylesheet" href="/admin/css/admin.css">
+  <link rel="stylesheet" href="/admin/css/mesas.css">
+</head>
+<body>
+  <div class="dashboard-wrapper">
+
+    <!-- ═══ SIDEBAR ═══════════════════════════════════════════════════════ -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <span class="sidebar-logo">🔥</span>
+        <h2>Puro Sabor</h2>
+      </div>
+      <div class="sidebar-user">
+        <p class="user-info-role">ADMINISTRADOR</p>
+        <p class="user-info-name" id="admin-display-name">Admin</p>
+      </div>
+      <nav class="sidebar-menu">
+        <a href="/admin/dashboard.html" class="menu-item">
+          <span>📦</span> Productos
+        </a>
+        <a href="/admin/mesas.html" class="menu-item active">
+          <span>🪑</span> Mesas y Pedidos
+        </a>
+        <a href="/" class="menu-item" target="_blank">
+          <span>🍽️</span> Ver Menú Público
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        <button class="btn-logout" id="btn-logout">Cerrar Sesión</button>
+      </div>
+    </aside>
+
+    <!-- ═══ CONTENIDO PRINCIPAL ═══════════════════════════════════════════ -->
+    <main class="main-content">
+
+      <!-- Header -->
+      <div class="dashboard-header animate-fade-in-up">
+        <div class="dashboard-title">
+          <h2>🪑 Control de Mesas</h2>
+          <p>Visualiza pedidos activos, cierra mesas y genera códigos QR.</p>
+        </div>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+          <button class="btn-primary" id="btn-nueva-mesa">
+            <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+            <span>Nueva Mesa</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- KPIs -->
+      <section class="kpi-grid animate-fade-in-up" style="animation-delay:0.1s;">
+        <div class="kpi-card">
+          <div>
+            <p class="kpi-info-label">Total Mesas</p>
+            <h3 class="kpi-info-value" id="kpi-total-mesas">0</h3>
+          </div>
+          <span class="kpi-icon">🪑</span>
+        </div>
+        <div class="kpi-card">
+          <div>
+            <p class="kpi-info-label">Mesas Activas</p>
+            <h3 class="kpi-info-value" id="kpi-mesas-activas" style="color:#4CAF50;">0</h3>
+          </div>
+          <span class="kpi-icon">🟢</span>
+        </div>
+        <div class="kpi-card">
+          <div>
+            <p class="kpi-info-label">Ventas de Hoy</p>
+            <h3 class="kpi-info-value" id="kpi-ventas-hoy">$0</h3>
+          </div>
+          <span class="kpi-icon">💰</span>
+        </div>
+      </section>
+
+      <!-- Grid de Mesas -->
+      <section class="mesas-section animate-fade-in-up" style="animation-delay:0.2s;">
+        <div class="mesas-section-header">
+          <h3>Estado de Mesas en Tiempo Real</h3>
+          <div class="mesas-legend">
+            <span class="legend-item"><span class="legend-dot libre"></span> Libre</span>
+            <span class="legend-item"><span class="legend-dot activa"></span> Activa</span>
+          </div>
+        </div>
+        <div class="mesas-grid" id="mesas-grid">
+          <p style="color:var(--text-muted); text-align:center; padding:40px;">Cargando mesas...</p>
+        </div>
+      </section>
+
+      <!-- Sección QR -->
+      <section class="qr-section animate-fade-in-up" style="animation-delay:0.3s;">
+        <div class="qr-section-header">
+          <h3>📱 Generador de Códigos QR</h3>
+          <p>Descarga los QRs para imprimir y colocar en cada mesa.</p>
+        </div>
+        <div class="qr-grid" id="qr-grid">
+          <!-- Generado dinámicamente -->
+        </div>
+      </section>
+
+      <!-- Configuración -->
+      <section class="config-section animate-fade-in-up" style="animation-delay:0.4s;">
+        <h3>⚙️ Configuración del Sistema</h3>
+        <div class="config-grid">
+          <div class="config-card">
+            <label>📱 WhatsApp de Pedidos</label>
+            <div class="config-input-row">
+              <span class="config-prefix">+57</span>
+              <input type="text" id="config-whatsapp" placeholder="3133288298" class="config-input">
+            </div>
+          </div>
+          <div class="config-card">
+            <label>🌐 Dominio Base (para QRs)</label>
+            <input type="text" id="config-dominio" placeholder="https://purosabor.com" class="config-input">
+          </div>
+        </div>
+        <button class="btn-primary" id="btn-save-config" style="margin-top: 16px;">
+          <span>💾 Guardar Configuración</span>
+        </button>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ═══ MODAL: DETALLE DE PEDIDOS DE MESA ═══════════════════════════════ -->
+  <div class="admin-modal-overlay" id="modal-pedidos" style="z-index:3000;">
+    <div class="admin-modal-content" style="max-width:520px;">
+      <div class="admin-modal-header">
+        <h3 id="modal-pedidos-title">Pedidos — Mesa X</h3>
+        <button class="btn-close-cart" id="btn-close-pedidos">&times;</button>
+      </div>
+      <div class="admin-modal-body" style="max-height:60vh; overflow-y:auto;">
+        <div id="modal-pedidos-body"></div>
+      </div>
+      <div class="admin-modal-footer">
+        <div id="modal-pedidos-total" style="font-family:'Outfit',sans-serif; font-weight:800; font-size:20px; color:var(--text-primary);"></div>
+        <button class="btn-primary btn-cerrar-mesa" id="btn-cerrar-mesa-modal" style="background:var(--danger); box-shadow:0 4px 12px rgba(231,76,60,0.2);">
+          ✓ Cerrar Mesa y Cobrar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ MODAL: NUEVA MESA ═══════════════════════════════════════════════ -->
+  <div class="admin-modal-overlay" id="modal-nueva-mesa" style="z-index:3100;">
+    <div class="admin-modal-content" style="max-width:380px; text-align:center;">
+      <div class="admin-modal-body" style="padding:30px;">
+        <span style="font-size:48px; display:block; margin-bottom:16px;">🪑</span>
+        <h3 style="font-family:'Outfit',sans-serif; font-size:20px; font-weight:700; margin-bottom:16px;">Agregar Nueva Mesa</h3>
+        <div class="form-group" style="text-align:left;">
+          <label>Número de Mesa</label>
+          <input type="number" id="input-nueva-mesa-numero" class="form-control form-control-no-icon" placeholder="Ej. 7" min="1" style="text-align:center; font-size:24px; font-weight:700;">
+        </div>
+      </div>
+      <div class="admin-modal-footer" style="justify-content:center; gap:12px;">
+        <button class="btn-secondary" id="btn-cancel-nueva-mesa">Cancelar</button>
+        <button class="btn-primary" id="btn-confirm-nueva-mesa">Crear Mesa</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/admin/js/mesas.js"></script>
+</body>
+</html>

@@ -1,0 +1,387 @@
+/* ==========================================================================
+   🪑 MESAS CSS — Panel Admin de Mesas | Puro Sabor
+   ========================================================================== */
+
+/* ── Sección de mesas ────────────────────────────────────────────────────── */
+.mesas-section,
+.qr-section,
+.config-section {
+  background: var(--surface);
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.mesas-section h3,
+.qr-section-header h3,
+.config-section h3 {
+  font-family: 'Outfit', sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.mesas-section-header,
+.qr-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.qr-section-header p,
+.config-section p {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.mesas-legend {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.legend-dot.libre { background: #4CAF50; }
+.legend-dot.activa { background: #FF9800; box-shadow: 0 0 0 0 rgba(255, 152, 0, 0.5); animation: pulseOrange 2s infinite; }
+
+@keyframes pulseOrange {
+  0% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0.5); }
+  70% { box-shadow: 0 0 0 8px rgba(255, 152, 0, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0); }
+}
+
+/* ── Grid de tarjetas de mesa ────────────────────────────────────────────── */
+.mesas-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.mesa-card {
+  background: var(--card-bg);
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  padding: 20px;
+  position: relative;
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.mesa-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  border-radius: 14px 14px 0 0;
+  transition: background 0.3s;
+}
+
+.mesa-card.libre::before { background: #4CAF50; }
+.mesa-card.activa::before { background: linear-gradient(90deg, #FF9800, #FF5722); }
+
+.mesa-card:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+}
+
+.mesa-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.mesa-card-numero {
+  font-family: 'Outfit', sans-serif;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.mesa-card-estado {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 3px 10px;
+  border-radius: 12px;
+}
+
+.mesa-card.libre .mesa-card-estado {
+  color: #4CAF50;
+  background: rgba(76, 175, 80, 0.12);
+}
+
+.mesa-card.activa .mesa-card-estado {
+  color: #FF9800;
+  background: rgba(255, 152, 0, 0.12);
+}
+
+.mesa-card-info {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 14px;
+  line-height: 1.6;
+}
+
+.mesa-card-info strong {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.mesa-card-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mesa-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.mesa-btn-ver {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+
+.mesa-btn-ver:hover { background: rgba(255, 255, 255, 0.12); }
+
+.mesa-btn-cerrar {
+  background: rgba(231, 76, 60, 0.15);
+  color: #e74c3c;
+}
+
+.mesa-btn-cerrar:hover { background: rgba(231, 76, 60, 0.25); }
+
+/* ── Grid de QRs ─────────────────────────────────────────────────────────── */
+.qr-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.qr-card {
+  background: var(--card-bg);
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  padding: 20px;
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+.qr-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 15px rgba(0, 0, 0, 0.15);
+}
+
+.qr-card-title {
+  font-family: 'Outfit', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.qr-card img {
+  width: 140px;
+  height: 140px;
+  border-radius: 10px;
+  background: white;
+  padding: 8px;
+  margin-bottom: 12px;
+}
+
+.qr-card.general {
+  border-color: var(--primary);
+  background: rgba(255, 111, 0, 0.04);
+}
+
+.qr-card.general .qr-card-title {
+  color: var(--primary);
+}
+
+.btn-download-qr {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-download-qr:hover { background: rgba(255, 255, 255, 0.14); }
+
+/* ── Configuración ───────────────────────────────────────────────────────── */
+.config-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.config-card {
+  background: var(--card-bg);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  padding: 16px;
+}
+
+.config-card label {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.config-input {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-primary);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 14px;
+  padding: 10px 14px;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.config-input:focus { outline: none; border-color: var(--primary); }
+
+.config-input-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.config-prefix {
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+  font-weight: 700;
+  font-size: 14px;
+  border-right: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.config-input-row .config-input {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+/* ── Modal de pedidos ────────────────────────────────────────────────────── */
+.pedido-ronda {
+  background: var(--card-bg);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.pedido-ronda-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  font-family: 'Outfit', sans-serif;
+}
+
+.pedido-ronda-titulo {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.pedido-ronda-hora {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.pedido-item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.pedido-item-nombre { flex: 1; }
+.pedido-item-subtotal { font-weight: 700; color: var(--text-primary); }
+
+.pedido-ronda-total {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.pedido-notas {
+  background: rgba(255, 193, 7, 0.08);
+  border: 1px solid rgba(255, 193, 7, 0.2);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #ffc107;
+  margin-top: 8px;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .mesas-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .qr-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .mesas-grid {
+    grid-template-columns: 1fr;
+  }
+}
