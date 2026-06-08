@@ -119,20 +119,19 @@ function inicializarTablas() {
 }
 
 function sembrarDatosIniciales() {
-  // Sembrar configuración inicial (WhatsApp, dominio)
-  db.get("SELECT COUNT(*) as count FROM config", (err, row) => {
-    if (!err && row && row.count === 0) {
-      const configs = [
-        ['whatsapp_numero', '3133288298'],
-        ['dominio_base', 'https://restaurantepurosabor.com'],
-        ['restaurante_nombre', 'Puro Sabor'],
-        ['mesas_timeout_horas', '2']
-      ];
-      const stmt = db.prepare('INSERT OR IGNORE INTO config (key, value) VALUES (?, ?)');
-      configs.forEach(c => stmt.run(c));
-      stmt.finalize(() => console.log('✅ Config inicial sembrada.'));
-    }
-  });
+  // Sembrar configuración inicial (WhatsApp, dominio, y API de Gemini)
+  const configs = [
+    ['whatsapp_numero', '3133288298'],
+    ['dominio_base', 'https://restaurantepurosabor.com'],
+    ['restaurante_nombre', 'Puro Sabor'],
+    ['mesas_timeout_horas', '2'],
+    ['gemini_api_key', ''],
+    ['whatsapp_whitelist', '573133288298,3133288298'],
+    ['whatsapp_bot_active', '1']
+  ];
+  const stmt = db.prepare('INSERT OR IGNORE INTO config (key, value) VALUES (?, ?)');
+  configs.forEach(c => stmt.run(c));
+  stmt.finalize(() => console.log('✅ Config inicial/IA sembrada.'));
 
   // Sembrar 6 mesas iniciales
   db.get("SELECT COUNT(*) as count FROM mesas", (err, row) => {

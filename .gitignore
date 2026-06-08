@@ -29,3 +29,7 @@ npm-debug.log*
 
 # Gemini AI
 .gemini/
+
+# WhatsApp session cache
+.wwebjs_auth/
+.wwebjs_cache/

@@ -345,6 +345,11 @@ router.patch('/admin/:id/stock', verificarJWT, (req, res) => {
       });
     }
 
+    const io = req.app.get('io');
+    if (io) {
+      io.to('admin').emit('producto_actualizado', { id: parseInt(id), stock: stockVal });
+    }
+
     res.json({
       success: true,
       message: 'Stock actualizado con éxito.',

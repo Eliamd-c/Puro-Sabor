@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Puro Sabor | Inventario y Asistente IA</title>
+  
+  <!-- CSS Stylesheets -->
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/animations.css">
+  <link rel="stylesheet" href="/admin/css/admin.css">
+  
+  <style>
+    /* Estilos personalizados para el panel de inventario y bot */
+    .inventario-grid {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 24px;
+      margin-top: 24px;
+    }
+    
+    @media (max-width: 1200px) {
+      .inventario-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Ajustes en la tabla */
+    .table-container {
+      margin-bottom: 24px;
+    }
+    
+    /* Controles rápidos de Stock */
+    .stock-adjust-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    
+    .btn-stock-adjust {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      width: 30px;
+      height: 30px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: var(--transition-fast);
+      user-select: none;
+    }
+    
+    .btn-stock-adjust:hover {
+      border-color: var(--primary);
+      background: rgba(230, 126, 34, 0.1);
+      color: var(--primary);
+    }
+    
+    .stock-display-input {
+      width: 55px;
+      padding: 6px;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      text-align: center;
+      font-weight: 700;
+      font-size: 14px;
+      border-radius: 4px;
+      -moz-appearance: textfield;
+    }
+    
+    .stock-display-input::-webkit-outer-spin-button,
+    .stock-display-input::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    
+    .stock-display-input:focus {
+      border-color: var(--primary);
+      outline: none;
+      background: rgba(0, 0, 0, 0.5);
+    }
+
+    /* Caja de Configuración y QR de WhatsApp */
+    .config-card-premium {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 28px;
+      box-shadow: var(--shadow-sm);
+      margin-bottom: 24px;
+    }
+    
+    .config-card-premium h3 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 20px;
+      font-weight: 800;
+      margin-bottom: 18px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 12px;
+    }
+
+    .input-password-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+      width: 100%;
+    }
+    
+    .input-password-wrapper input {
+      padding-right: 44px !important;
+    }
+    
+    .btn-toggle-password {
+      position: absolute;
+      right: 12px;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      user-select: none;
+    }
+    
+    .btn-toggle-password:hover {
+      color: var(--text-primary);
+    }
+    
+    /* QR Visualizer Container */
+    .qr-container {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px dashed var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 30px 20px;
+      text-align: center;
+      min-height: 290px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      margin-top: 16px;
+      position: relative;
+    }
+    
+    .qr-wrapper {
+      background: white;
+      padding: 12px;
+      border-radius: var(--radius-sm);
+      display: inline-block;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+      margin-bottom: 16px;
+    }
+
+    .qr-wrapper img {
+      display: block;
+      width: 200px;
+      height: 200px;
+    }
+    
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      margin-top: 8px;
+    }
+    
+    .status-badge.ready {
+      background: rgba(46, 204, 113, 0.15);
+      color: var(--success);
+      border: 1px solid rgba(46, 204, 113, 0.3);
+    }
+    
+    .status-badge.qr {
+      background: rgba(241, 196, 15, 0.15);
+      color: #f1c40f;
+      border: 1px solid rgba(241, 196, 15, 0.3);
+    }
+    
+    .status-badge.loading {
+      background: rgba(52, 152, 219, 0.15);
+      color: #3498db;
+      border: 1px solid rgba(52, 152, 219, 0.3);
+    }
+    
+    .status-badge.disabled, .status-badge.disconnected {
+      background: rgba(231, 76, 60, 0.15);
+      color: var(--danger);
+      border: 1px solid rgba(231, 76, 60, 0.3);
+    }
+    
+    /* Loading Spinner */
+    .spinner {
+      border: 4px solid rgba(255, 255, 255, 0.1);
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border-left-color: var(--primary);
+      animation: spin 1s linear infinite;
+      margin-bottom: 16px;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="dashboard-wrapper">
+    
+    <!-- 🎛️ SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <span class="sidebar-logo">🔥</span>
+        <h2>Puro Sabor</h2>
+      </div>
+      
+      <div class="sidebar-user">
+        <p class="user-info-role">ADMINISTRADOR</p>
+        <p class="user-info-name" id="admin-display-name">Admin User</p>
+      </div>
+
+      <nav class="sidebar-menu">
+        <a href="/admin/dashboard.html" class="menu-item">
+          <span>📦</span> Productos
+        </a>
+        <a href="/admin/inventario.html" class="menu-item active">
+          <span>📈</span> Inventario / Asistente IA
+        </a>
+        <a href="/admin/mesas.html" class="menu-item">
+          <span>🪑</span> Mesas y Pedidos
+        </a>
+        <a href="/" class="menu-item" target="_blank">
+          <span>🍽️</span> Ver Menú Público
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button class="btn-logout" id="btn-logout">Cerrar Sesión</button>
+      </div>
+    </aside>
+
+    <!-- 📊 CONTENIDO PRINCIPAL -->
+    <main class="main-content">
+      
+      <!-- Encabezado -->
+      <div class="dashboard-header animate-fade-in-up">
+        <div class="dashboard-title">
+          <h2>Manejo de Inventario</h2>
+          <p>Supervisa stock en tiempo real y gestiona el Agente IA de WhatsApp.</p>
+        </div>
+      </div>
+
+      <!-- KPI Grid -->
+      <section class="kpi-grid animate-fade-in-up" style="animation-delay: 0.1s;">
+        <div class="kpi-card">
+          <div>
+            <p class="kpi-info-label">Total Productos</p>
+            <h3 class="kpi-info-value" id="kpi-total-products">0</h3>
+          </div>
+          <span class="kpi-icon">📦</span>
+        </div>
+
+        <div class="kpi-card">
+          <div>
+            <p class="kpi-info-label">Bajo Stock (< 5)</p>
+            <h3 class="kpi-info-value" id="kpi-low-stock" style="color: var(--warning);">0</h3>
+          </div>
+          <span class="kpi-icon">⚠️</span>
+        </div>
+
+        <div class="kpi-card">
+          <div>
+            <p class="kpi-info-label">Estado de WhatsApp</p>
+            <div id="wa-kpi-badge">
+              <span class="status-badge loading">Consultando...</span>
+            </div>
+          </div>
+          <span class="kpi-icon">🤖</span>
+        </div>
+      </section>
+
+      <!-- Grid Columnas: Inventario + AI Agent -->
+      <div class="inventario-grid animate-fade-in-up" style="animation-delay: 0.2s;">
+        
+        <!-- COLUMNA 1: TABLA DE INVENTARIO -->
+        <section class="table-container">
+          <div class="table-header-bar">
+            <h3>Control de Stock</h3>
+            
+            <div class="table-actions">
+              <div class="search-box table-search">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="inventario-search-input" placeholder="Buscar ingrediente/plato...">
+              </div>
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th class="cell-image">Imagen</th>
+                <th>Nombre</th>
+                <th>Categoría</th>
+                <th style="width: 210px;">Stock</th>
+                <th style="text-align: right;">Acción</th>
+              </tr>
+            </thead>
+            <tbody id="inventario-table-body">
+              <tr>
+                <td colspan="5" style="text-align: center; padding: 40px; color: var(--text-secondary);">
+                  Cargando productos de inventario...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <!-- COLUMNA 2: CONFIGURACIÓN IA & CONEXIÓN WHATSAPP -->
+        <section class="sidebar-config-col">
+          
+          <!-- Card de Conexión de WhatsApp -->
+          <div class="config-card-premium">
+            <h3>📱 Vinculación de WhatsApp</h3>
+            <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.4; margin-bottom: 16px;">
+              Escanea el código QR con tu celular en <strong>WhatsApp > Dispositivos Vinculados</strong> para activar el asistente de IA.
+            </p>
+            
+            <div class="qr-container" id="wa-qr-container">
+              <div class="spinner"></div>
+              <p style="color: var(--text-secondary); font-size: 13px;">Iniciando sesión del servidor...</p>
+            </div>
+            
+            <div style="margin-top: 16px; display: flex; justify-content: center;">
+              <button class="btn-secondary" id="btn-reconnect-wa" style="width: 100%;">
+                🔄 Forzar Reconexión
+              </button>
+            </div>
+          </div>
+
+          <!-- Card de Configuración del Agente IA -->
+          <div class="config-card-premium">
+            <h3>⚙️ Configuración del Agente IA</h3>
+            
+            <form id="form-config-ai">
+              <!-- Gemini API Key -->
+              <div class="form-group">
+                <label for="gemini-key">Google Gemini API Key *</label>
+                <div class="input-password-wrapper">
+                  <input type="password" id="gemini-key" class="form-control form-control-no-icon" placeholder="Pega tu API Key de Gemini..." required>
+                  <button type="button" class="btn-toggle-password" id="btn-toggle-gemini-key" title="Mostrar/Ocultar API Key">
+                    👁️
+                  </button>
+                </div>
+                <small style="color: var(--text-muted); font-size: 11px; margin-top: 4px; display: block;">
+                  Tu API Key se encripta de forma segura en la base de datos del servidor y nunca se expone públicamente.
+                </small>
+              </div>
+
+              <!-- Lista Blanca de WhatsApp -->
+              <div class="form-group">
+                <label for="whitelist-numbers">Números de Celular Autorizados *</label>
+                <input type="text" id="whitelist-numbers" class="form-control form-control-no-icon" placeholder="Ej: 573133288298,573001234567" required>
+                <small style="color: var(--text-muted); font-size: 11px; margin-top: 4px; display: block;">
+                  Separa los números con coma (,). Incluye el código de país sin el signo '+' (ej: 57 para Colombia). Solo estos números recibirán respuestas de la IA.
+                </small>
+              </div>
+
+              <!-- Activar Bot Slider -->
+              <div class="form-group" style="display: flex; justify-content: space-between; align-items: center; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+                <div>
+                  <label style="margin-bottom: 2px; font-weight: 700;">Activar Agente IA</label>
+                  <p style="font-size: 11px; color: var(--text-secondary);">Permite al bot de WhatsApp procesar solicitudes.</p>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" id="bot-active-toggle">
+                  <span class="slider-toggle"></span>
+                </label>
+              </div>
+
+              <!-- Mensaje de éxito/error -->
+              <div id="config-ai-alert" class="alert-box" style="display: none; padding: 10px 14px; margin-bottom: 16px;"></div>
+
+              <!-- Botón Guardar -->
+              <button type="submit" class="btn-primary" id="btn-save-ai-config" style="width: 100%; justify-content: center;">
+                <span>💾 Guardar Configuración</span>
+              </button>
+            </form>
+          </div>
+
+        </section>
+        
+      </div>
+
+    </main>
+  </div>
+
+  <!-- Scripts -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/admin/js/inventario.js"></script>
+</body>
+</html>

@@ -77,6 +77,12 @@ io.on('connection', (socket) => {
 // Guardar io en la app para usarlo en las rutas
 app.set('io', io);
 
+// ── Inicializar WhatsApp Agent ──────────────────────────────────────────────
+const waAgent = require('./services/whatsappAgent');
+waAgent.inicializarWhatsApp(io).catch(err => {
+  console.error('[Server] Error al iniciar el agente de WhatsApp:', err.message);
+});
+
 // ── Timeout automático: revisar mesas con +2h de inactividad ──────────────
 const db = require('./config/database');
 setInterval(() => {
@@ -140,12 +146,14 @@ const categoriasRoutes = require('./routes/categorias');
 const productosRoutes = require('./routes/productos');
 const mesasRoutes = require('./routes/mesas');
 const configRoutes = require('./routes/config');
+const inventarioRoutes = require('./routes/inventario');
 
 app.use('/api/admin', authRoutes);
 app.use('/api/categorias', categoriasRoutes);
 app.use('/api/productos', productosRoutes);
 app.use('/api/mesas', mesasRoutes);
 app.use('/api/config', configRoutes);
+app.use('/api/inventario', inventarioRoutes);
 
 // ── Archivos estáticos ─────────────────────────────────────────────────────
 const uploadsDir = path.join(__dirname, '..', 'public', 'uploads');
@@ -173,6 +181,9 @@ app.get('/mesa/*', (req, res) => {
 // Admin: rutas específicas de administración
 app.get('/admin/mesas*', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'admin', 'mesas.html'));
+});
+app.get('/admin/inventario*', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'admin', 'inventario.html'));
 });
 
 // Público
