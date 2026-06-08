@@ -1,12 +1,15 @@
-const { Client, LocalAuth } = require('whatsapp-web.js');
+const { makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const pino = require('pino');
 const qrcode = require('qrcode');
 const { GoogleGenerativeAI, Type } = require('@google/generative-ai');
 const db = require('../config/database');
-const { exec } = require('child_process');
+const fs = require('fs');
+const path = require('path');
 
 let client = null;
-let botStatus = 'disconnected'; // disabled, disconnected, loading, qr, authenticated, ready
+let botStatus = 'disconnected'; // disabled, disconnected, loading, qr, ready
 let latestQrDataUrl = null;
+const authFolder = path.join(__dirname, '../../baileys_auth_info');
 
 // Helpers para base de datos
 function getConfig(key) {
@@ -71,32 +74,13 @@ function adjustStockDb(id, delta) {
   });
 }
 
-function downloadChromeIfMissing() {
-  return new Promise((resolve, reject) => {
-    console.log('[WA Agent] Verificando/Instalando navegador Chrome para Puppeteer...');
-    // Ejecutar la instalación del navegador compatible con Puppeteer
-    exec('npx puppeteer browsers install chrome', (error, stdout, stderr) => {
-      if (error) {
-        console.error('[WA Agent] Error al verificar/descargar Chrome:', error.message);
-        reject(error);
-      } else {
-        console.log('[WA Agent] Verificación de Chrome completada:', stdout.trim());
-        resolve(stdout);
-      }
-    });
-  });
-}
-
-// Inicialización de WhatsApp
+// Inicialización de WhatsApp usando Baileys
 async function inicializarWhatsApp(io) {
-  // Destruir cliente existente si hay uno
   if (client) {
     console.log('[WA Agent] Cerrando instancia previa de WhatsApp...');
     try {
-      await client.destroy();
-    } catch (e) {
-      console.error('[WA Agent] Error al destruir cliente previo:', e.message);
-    }
+      client.end(undefined);
+    } catch (e) {}
     client = null;
   }
 
@@ -109,149 +93,132 @@ async function inicializarWhatsApp(io) {
     return;
   }
 
-  console.log('[WA Agent] Iniciando cliente de WhatsApp...');
+  console.log('[WA Agent] Iniciando cliente de WhatsApp con Baileys...');
   botStatus = 'loading';
   latestQrDataUrl = null;
   io.to('admin').emit('whatsapp_status', { status: botStatus });
 
-  // Asegurar que Chrome esté descargado (crítico para Hostinger)
   try {
-    await downloadChromeIfMissing();
+    const { state, saveCreds } = await useMultiFileAuthState(authFolder);
+
+    client = makeWASocket({
+      auth: state,
+      printQRInTerminal: false,
+      logger: pino({ level: 'silent' }), // Ocultar los logs ruidosos de baileys
+      browser: ['PuroSabor AI', 'Chrome', '1.0.0']
+    });
+
+    client.ev.on('creds.update', saveCreds);
+
+    client.ev.on('connection.update', async (update) => {
+      const { connection, lastDisconnect, qr } = update;
+
+      if (qr) {
+        console.log('[WA Agent] QR recibido.');
+        botStatus = 'qr';
+        try {
+          latestQrDataUrl = await qrcode.toDataURL(qr);
+          io.to('admin').emit('whatsapp_status', { status: botStatus, qr: latestQrDataUrl });
+        } catch (err) {
+          console.error('[WA Agent] Error generando QR:', err);
+        }
+      }
+
+      if (connection === 'close') {
+        const statusCode = lastDisconnect?.error?.output?.statusCode;
+        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+        console.log('[WA Agent] Conexión cerrada. Reconectar:', shouldReconnect);
+        
+        if (statusCode === DisconnectReason.loggedOut) {
+          // El usuario cerró sesión en su celular
+          fs.rmSync(authFolder, { recursive: true, force: true });
+        }
+
+        botStatus = 'disconnected';
+        latestQrDataUrl = null;
+        io.to('admin').emit('whatsapp_status', { status: botStatus, error: lastDisconnect?.error?.message });
+        
+        if (shouldReconnect) {
+          setTimeout(() => inicializarWhatsApp(io), 3000);
+        }
+      } else if (connection === 'open') {
+        console.log('[WA Agent] Cliente de WhatsApp conectado y listo.');
+        botStatus = 'ready';
+        latestQrDataUrl = null;
+        io.to('admin').emit('whatsapp_status', { status: botStatus });
+      }
+    });
+
+    client.ev.on('messages.upsert', async (m) => {
+      if (m.type !== 'notify') return;
+      const message = m.messages[0];
+      
+      // Ignorar mensajes enviados por el propio bot
+      if (message.key.fromMe) return;
+
+      try {
+        await procesarMensajeEntrante(message, client, io);
+      } catch (err) {
+        console.error('[WA Agent] Error al procesar mensaje:', err.message);
+      }
+    });
+
   } catch (err) {
-    console.warn('[WA Agent] Advertencia al descargar Chrome, continuando por si ya existe:', err.message);
-  }
-
-  client = new Client({
-    authStrategy: new LocalAuth(),
-    puppeteer: {
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process'
-      ],
-      headless: true
-    }
-  });
-
-  client.on('qr', async (qr) => {
-    console.log('[WA Agent] QR recibido.');
-    botStatus = 'qr';
-    try {
-      latestQrDataUrl = await qrcode.toDataURL(qr);
-      io.to('admin').emit('whatsapp_status', { status: botStatus, qr: latestQrDataUrl });
-    } catch (err) {
-      console.error('[WA Agent] Error generando QR Data URL:', err);
-    }
-  });
-
-  client.on('authenticated', () => {
-    console.log('[WA Agent] Cliente autenticado.');
-    botStatus = 'authenticated';
-    latestQrDataUrl = null;
-    io.to('admin').emit('whatsapp_status', { status: botStatus });
-  });
-
-  client.on('auth_failure', (msg) => {
-    console.error('[WA Agent] Falló autenticación de WhatsApp:', msg);
-    botStatus = 'disconnected';
-    latestQrDataUrl = null;
-    io.to('admin').emit('whatsapp_status', { status: botStatus, error: msg });
-  });
-
-  client.on('ready', () => {
-    console.log('[WA Agent] Cliente de WhatsApp listo y escuchando.');
-    botStatus = 'ready';
-    latestQrDataUrl = null;
-    io.to('admin').emit('whatsapp_status', { status: botStatus });
-  });
-
-  client.on('disconnected', (reason) => {
-    console.log('[WA Agent] Cliente desconectado de WhatsApp:', reason);
-    botStatus = 'disconnected';
-    latestQrDataUrl = null;
-    io.to('admin').emit('whatsapp_status', { status: botStatus });
-  });
-
-  client.on('message', async (message) => {
-    try {
-      await procesarMensajeEntrante(message, io);
-    } catch (err) {
-      console.error('[WA Agent] Error al procesar mensaje:', err.message);
-    }
-  });
-
-  try {
-    await client.initialize();
-  } catch (err) {
-    console.error('[WA Agent] Error inicializando cliente de WhatsApp:', err.message);
+    console.error('[WA Agent] Error fatal inicializando Baileys:', err.message);
     botStatus = 'disconnected';
     io.to('admin').emit('whatsapp_status', { status: botStatus, error: err.message });
   }
 }
 
-// Procesar mensajes entrantes con Gemini y Function Calling
-async function procesarMensajeEntrante(message, io) {
-  // Solo procesar chats individuales de texto por simplicidad
-  if (message.body === undefined || message.isGroup) return;
+// Procesar mensajes entrantes con Gemini
+async function procesarMensajeEntrante(message, sock, io) {
+  const remoteJid = message.key.remoteJid;
+  const isGroup = remoteJid.endsWith('@g.us');
+  if (isGroup) return; // Solo procesamos chats directos
 
-  const senderNumber = message.from.split('@')[0];
+  // Extraer el cuerpo de texto del mensaje
+  const body = message.message?.conversation || message.message?.extendedTextMessage?.text;
+  if (!body) return;
+
+  const senderNumber = remoteJid.split('@')[0];
   const whitelistStr = await getConfig('whatsapp_whitelist');
   
-  if (!whitelistStr) {
-    console.log('[WA Agent] Sin números autorizados configurados. Mensaje ignorado.');
-    return;
-  }
+  if (!whitelistStr) return;
 
   const whitelist = whitelistStr.split(',').map(num => num.trim().replace('+', ''));
   const isAuthorized = whitelist.some(num => senderNumber.endsWith(num) || num.endsWith(senderNumber));
 
   if (!isAuthorized) {
-    console.log(`[WA Agent] Mensaje ignorado del número no autorizado: ${senderNumber}`);
+    console.log(`[WA Agent] Mensaje ignorado de no autorizado: ${senderNumber}`);
     return;
   }
 
-  console.log(`[WA Agent] Mensaje recibido de admin (${senderNumber}): "${message.body}"`);
+  console.log(`[WA Agent] Mensaje de admin (${senderNumber}): "${body}"`);
 
   const apiKey = await getConfig('gemini_api_key') || process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    console.warn('[WA Agent] No se puede procesar mensaje: Falta la API Key de Gemini.');
-    await message.reply('🚨 Error: No hay API Key de Gemini configurada. Por favor, configúrala en el Dashboard de Inventario.');
+    console.warn('[WA Agent] Falta la API Key de Gemini.');
+    await sock.sendMessage(remoteJid, { text: '🚨 Error: No hay API Key de Gemini configurada en el panel administrativo.' }, { quoted: message });
     return;
   }
 
   try {
-    // Inicializar Gemini
     const genAI = new GoogleGenerativeAI(apiKey);
 
-    // Definición de las funciones disponibles para Gemini
     const obtenerInventarioDeclaration = {
       name: "obtenerInventario",
       description: "Obtiene todo el inventario de productos actual, incluyendo sus IDs, nombres, categoría, precio y stock disponible.",
-      parameters: {
-        type: Type.OBJECT,
-        properties: {},
-        required: []
-      }
+      parameters: { type: Type.OBJECT, properties: {}, required: [] }
     };
 
     const actualizarStockDeclaration = {
       name: "actualizarStock",
-      description: "Establece el stock (cantidad física) de un producto específico mediante su ID a un nuevo valor exacto.",
+      description: "Establece el stock físico de un producto mediante su ID a un nuevo valor exacto.",
       parameters: {
         type: Type.OBJECT,
         properties: {
-          id: {
-            type: Type.INTEGER,
-            description: "El ID único del producto en el inventario."
-          },
-          nuevoStock: {
-            type: Type.INTEGER,
-            description: "La nueva cantidad exacta de stock disponible en inventario."
-          }
+          id: { type: Type.INTEGER, description: "El ID único del producto." },
+          nuevoStock: { type: Type.INTEGER, description: "Nueva cantidad exacta de stock disponible." }
         },
         required: ["id", "nuevoStock"]
       }
@@ -259,18 +226,12 @@ async function procesarMensajeEntrante(message, io) {
 
     const ajustarStockDeclaration = {
       name: "ajustarStock",
-      description: "Aumenta o disminuye el stock de un producto específico mediante su ID sumando o restando una cantidad (delta). Úsalo cuando te digan expresiones como 'llegaron 10 más' (cantidad: 10) o 'resta 5 de stock' (cantidad: -5).",
+      description: "Aumenta o disminuye el stock de un producto específico sumando o restando una cantidad. Úsalo para 'llegaron 10' o 'resta 5'.",
       parameters: {
         type: Type.OBJECT,
         properties: {
-          id: {
-            type: Type.INTEGER,
-            description: "El ID único del producto."
-          },
-          cantidad: {
-            type: Type.INTEGER,
-            description: "La cantidad a sumar (positivo) o restar (negativo) al stock actual."
-          }
+          id: { type: Type.INTEGER, description: "El ID único del producto." },
+          cantidad: { type: Type.INTEGER, description: "Cantidad a sumar (positivo) o restar (negativo)." }
         },
         required: ["id", "cantidad"]
       }
@@ -280,27 +241,22 @@ async function procesarMensajeEntrante(message, io) {
       "Eres Puro Sabor IA, el asistente administrativo de inventario del restaurante Puro Sabor.\n" +
       "Tu propósito es ayudar al administrador a consultar y actualizar el inventario de productos y bebidas a través de WhatsApp.\n" +
       "Responde siempre en español, de forma muy concisa, profesional y directa al grano.\n" +
-      "Si actualizas o consultas stock, confirma los cambios realizados de manera explícita indicando el producto y su cantidad final.\n" +
-      "Si el usuario pide hacer algo que requiera buscar información, primero usa obtenerInventario para saber los IDs de los productos correspondientes.\n" +
-      "Si el usuario te dice por ejemplo 'agrega 10 a las migas de pollo' o 'llegaron 5 cocacolas', localiza el producto correcto en el inventario por su ID y usa ajustarStock o actualizarStock.";
+      "Si actualizas o consultas stock, confirma los cambios explícitamente mencionando el producto.\n" +
+      "Para buscar productos, usa primero obtenerInventario para obtener los IDs precisos.\n" +
+      "Usa ajustarStock o actualizarStock pasando los IDs correctos.";
 
     const model = genAI.getGenerativeModel({
       model: "gemini-1.5-flash",
       systemInstruction: systemInstruction,
       tools: [{
-        functionDeclarations: [
-          obtenerInventarioDeclaration,
-          actualizarStockDeclaration,
-          ajustarStockDeclaration
-        ]
+        functionDeclarations: [ obtenerInventarioDeclaration, actualizarStockDeclaration, ajustarStockDeclaration ]
       }]
     });
 
     const chat = model.startChat();
-    const result = await chat.sendMessage(message.body);
+    const result = await chat.sendMessage(body);
     const response = result.response;
 
-    // Verificar si el modelo solicitó llamar a alguna función
     const functionCalls = response.getFunctionCalls();
     if (functionCalls && functionCalls.length > 0) {
       console.log(`[WA Agent] Gemini solicitó ejecutar ${functionCalls.length} función(es).`);
@@ -314,46 +270,37 @@ async function procesarMensajeEntrante(message, io) {
           if (name === "obtenerInventario") {
             const data = await getInventarioDb();
             functionResult = { inventario: data };
-            console.log('[WA Agent] Función obtenerInventario ejecutada correctamente.');
           } else if (name === "actualizarStock") {
             const res = await updateStockDb(args.id, args.nuevoStock);
             if (res.changes > 0) {
               io.to('admin').emit('producto_actualizado', { id: args.id, stock: Math.max(0, parseInt(args.nuevoStock)) });
             }
             functionResult = { success: res.changes > 0, id: args.id, nuevoStock: args.nuevoStock };
-            console.log(`[WA Agent] Función actualizarStock ejecutada para ID ${args.id} (nuevoStock: ${args.nuevoStock}).`);
           } else if (name === "ajustarStock") {
             const res = await adjustStockDb(args.id, args.cantidad);
             if (res.changes > 0) {
               io.to('admin').emit('producto_actualizado', { id: args.id, stock: res.nuevoStock });
             }
             functionResult = { success: res.changes > 0, id: args.id, nuevoStock: res.nuevoStock, error: res.error };
-            console.log(`[WA Agent] Función ajustarStock ejecutada para ID ${args.id} (delta: ${args.cantidad}, nuevoStock: ${res.nuevoStock}).`);
           }
         } catch (dbErr) {
-          console.error(`[WA Agent] Error en DB al ejecutar función ${name}:`, dbErr.message);
           functionResult = { success: false, error: dbErr.message };
         }
 
         toolResponses.push({
-          functionResponse: {
-            name,
-            response: functionResult
-          }
+          functionResponse: { name, response: functionResult }
         });
       }
 
-      // Enviar de vuelta las respuestas de las funciones para que Gemini formule la respuesta final
       const finalResult = await chat.sendMessage(toolResponses);
-      await message.reply(finalResult.response.text());
+      await sock.sendMessage(remoteJid, { text: finalResult.response.text() }, { quoted: message });
     } else {
-      // Respuesta directa en texto
-      await message.reply(response.text());
+      await sock.sendMessage(remoteJid, { text: response.text() }, { quoted: message });
     }
 
   } catch (geminiErr) {
     console.error('[WA Agent] Error con Google Gemini:', geminiErr.message);
-    await message.reply(`⚠️ Ocurrió un error con el motor de IA (Gemini): ${geminiErr.message}`);
+    await sock.sendMessage(remoteJid, { text: `⚠️ Ocurrió un error con el motor de IA: ${geminiErr.message}` }, { quoted: message });
   }
 }
 
