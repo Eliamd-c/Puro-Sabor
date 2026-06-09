@@ -69,12 +69,12 @@ router.post('/config-ai', verificarJWT, async (req, res) => {
   const io = req.app.get('io');
 
   try {
-    // 1. Guardar la clave de Gemini solo si no está enmascarada
-    if (gemini_api_key && !gemini_api_key.includes('...')) {
+    // 1. Guardar la clave de Gemini solo si no está enmascarada y tiene contenido
+    if (gemini_api_key && !gemini_api_key.includes('...') && gemini_api_key.trim().length > 5) {
       await setConfig('gemini_api_key', gemini_api_key.trim());
     }
 
-    // 2. Guardar la lista blanca (limpiando espacios)
+    // 2. Guardar la lista blanca (SIEMPRE, independiente de la API key)
     if (whatsapp_whitelist !== undefined) {
       const whitelistLimpia = whatsapp_whitelist
         .split(',')
@@ -84,7 +84,7 @@ router.post('/config-ai', verificarJWT, async (req, res) => {
       await setConfig('whatsapp_whitelist', whitelistLimpia);
     }
 
-    // 3. Guardar el estado activo del bot
+    // 3. Guardar el estado activo del bot (SIEMPRE)
     if (whatsapp_bot_active !== undefined) {
       const activeVal = whatsapp_bot_active ? '1' : '0';
       await setConfig('whatsapp_bot_active', activeVal);
