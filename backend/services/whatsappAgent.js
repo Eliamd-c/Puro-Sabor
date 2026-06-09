@@ -6,10 +6,16 @@ const db = require('../config/database');
 const fs = require('fs');
 const path = require('path');
 
+const os = require('os');
+
 let client = null;
 let botStatus = 'disconnected'; // disabled, disconnected, loading, qr, ready
 let latestQrDataUrl = null;
-const authFolder = path.join(__dirname, '../../baileys_auth_info');
+
+// Migrar la carpeta de autenticación a los archivos temporales de Hostinger (/tmp)
+// Esto evita que Hostinger reinicie el servidor entero cada vez que se guarda una llave de encriptación.
+const authFolder = path.join(os.tmpdir(), 'purosabor_baileys_auth_info');
+const lockFile = path.join(os.tmpdir(), 'purosabor_whatsapp.lock');
 
 // Evitar múltiples intentos de reconexión paralelos
 let isReconnecting = false;
@@ -77,9 +83,47 @@ function adjustStockDb(id, delta) {
   });
 }
 
+// Sistema de Candado (Lock) para entornos de procesos múltiples (Hostinger/Phusion Passenger)
+function tryAcquireLock() {
+  try {
+    try {
+      const fd = fs.openSync(lockFile, 'wx'); // Falla atómicamente si existe
+      fs.writeSync(fd, process.pid.toString());
+      fs.closeSync(fd);
+      return true;
+    } catch (e) {
+      if (e.code === 'EEXIST') {
+        const pidStr = fs.readFileSync(lockFile, 'utf8');
+        const pid = parseInt(pidStr, 10);
+        if (pid && pid !== process.pid) {
+          try {
+            process.kill(pid, 0); // Lanza error si el proceso NO existe
+            return false; // El proceso dueño del candado sigue vivo
+          } catch (err) {
+            // El proceso anterior murió sin limpiar el candado (Fantasma). Lo robamos.
+            fs.writeFileSync(lockFile, process.pid.toString(), 'utf8');
+            return true;
+          }
+        }
+        return true; // Nosotros ya somos los dueños
+      }
+      return false;
+    }
+  } catch (err) {
+    console.error('[WA Agent] Error verificando el lock:', err.message);
+    return false;
+  }
+}
+
 // Inicialización de WhatsApp usando Baileys
 async function inicializarWhatsApp(io) {
   if (isReconnecting) return;
+  
+  if (!tryAcquireLock()) {
+    console.log('[WA Agent] 🔒 Otro proceso (Worker) ya tiene el control de WhatsApp. Ignorando inicialización en este clon.');
+    return;
+  }
+  
   isReconnecting = true;
 
   if (client) {
@@ -387,6 +431,7 @@ module.exports = {
     }
     try {
       fs.rmSync(authFolder, { recursive: true, force: true });
+      if (fs.existsSync(lockFile)) fs.unlinkSync(lockFile);
     } catch (e) {}
     botStatus = 'disconnected';
     io.to('admin').emit('whatsapp_status', { status: botStatus, error: 'Sesión cerrada exitosamente.' });
