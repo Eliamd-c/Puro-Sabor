@@ -111,6 +111,17 @@ function inicializarTablas() {
         creado_en DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (sesion_id) REFERENCES sesiones_mesa(id)
       )
+    `);
+
+    // 8. Tabla Historial de conversaciones de WhatsApp IA
+    db.run(`
+      CREATE TABLE IF NOT EXISTS wa_conversaciones (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        numero_telefono TEXT NOT NULL,
+        rol TEXT NOT NULL,
+        contenido TEXT NOT NULL,
+        creado_en DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
     `, () => {
       // Una vez creadas todas las tablas, sembrar datos iniciales
       sembrarDatosIniciales();

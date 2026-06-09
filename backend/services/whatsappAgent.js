@@ -237,16 +237,77 @@ async function inicializarWhatsApp(io) {
 }
 
 // Procesar mensajes entrantes con Gemini
+// ─── Helpers de historial de conversación ────────────────────────────────────
+
+function guardarMensajeHistorial(numero, rol, contenido) {
+  return new Promise((resolve) => {
+    db.run(
+      'INSERT INTO wa_conversaciones (numero_telefono, rol, contenido) VALUES (?, ?, ?)',
+      [numero, rol, contenido],
+      (err) => {
+        if (err) console.error('[WA Agent] Error guardando historial:', err.message);
+        resolve();
+      }
+    );
+  });
+}
+
+function obtenerHistorial(numero, limite = 15) {
+  return new Promise((resolve) => {
+    db.all(
+      `SELECT rol, contenido FROM wa_conversaciones 
+       WHERE numero_telefono = ? 
+       ORDER BY creado_en DESC LIMIT ?`,
+      [numero, limite],
+      (err, rows) => {
+        if (err) {
+          console.error('[WA Agent] Error leyendo historial:', err.message);
+          resolve([]);
+        } else {
+          // Revertir el orden para que el más antiguo quede primero
+          resolve((rows || []).reverse());
+        }
+      }
+    );
+  });
+}
+
+// ─── Ejecutar llamada de función de Gemini ────────────────────────────────────
+
+async function ejecutarFuncion(name, args, io) {
+  if (name === 'obtenerInventario') {
+    const data = await getInventarioDb();
+    return { inventario: data };
+  }
+  if (name === 'actualizarStock') {
+    const res = await updateStockDb(args.id, args.nuevoStock);
+    if (res.changes > 0) {
+      io.to('admin').emit('producto_actualizado', { id: args.id, stock: Math.max(0, parseInt(args.nuevoStock)) });
+    }
+    return { success: res.changes > 0, id: args.id, nuevoStock: args.nuevoStock };
+  }
+  if (name === 'ajustarStock') {
+    const res = await adjustStockDb(args.id, args.cantidad);
+    if (res.changes > 0) {
+      io.to('admin').emit('producto_actualizado', { id: args.id, stock: res.nuevoStock });
+    }
+    return { success: res.changes > 0, id: args.id, nuevoStock: res.nuevoStock, nombre: res.nombre, error: res.error };
+  }
+  return { error: `Función desconocida: ${name}` };
+}
+
+// ─── Procesador principal de mensajes entrantes ───────────────────────────────
+
 async function procesarMensajeEntrante(message, sock, io) {
   const remoteJid = message.key.remoteJid;
   const isGroup = remoteJid.endsWith('@g.us');
-  if (isGroup) return; // Solo procesamos chats directos
+  if (isGroup) return;
 
   const imageMsg = message.message?.imageMessage;
   const audioMsg = message.message?.audioMessage;
   const textMsg = message.message?.conversation || message.message?.extendedTextMessage?.text;
 
-  let body = textMsg || (imageMsg ? imageMsg.caption : "");
+  let body = textMsg || (imageMsg ? imageMsg.caption : '');
   let isMedia = !!(imageMsg || audioMsg);
   let mediaPart = null;
 
@@ -254,22 +315,15 @@ async function procesarMensajeEntrante(message, sock, io) {
     try {
       console.log('[WA Agent] Descargando archivo multimedia adjunto...');
       const buffer = await downloadMediaMessage(
-        message,
-        'buffer',
-        {},
+        message, 'buffer', {},
         { logger: pino({ level: 'silent' }) }
       );
       const mimeType = imageMsg ? imageMsg.mimetype : audioMsg.mimetype;
-      mediaPart = {
-        inlineData: {
-          data: buffer.toString('base64'),
-          mimeType: mimeType
-        }
-      };
-      console.log(`[WA Agent] Media descargada exitosamente: ${mimeType}`);
+      mediaPart = { inlineData: { data: buffer.toString('base64'), mimeType } };
+      console.log(`[WA Agent] Media descargada: ${mimeType}`);
     } catch (err) {
       console.error('[WA Agent] Error descargando media:', err.message);
-      io.to('admin').emit('whatsapp_message', { type: 'error', sender: 'Sistema', text: 'Error interno procesando imagen o audio.', time: new Date().toLocaleTimeString() });
+      io.to('admin').emit('whatsapp_message', { type: 'error', sender: 'Sistema', text: 'Error procesando imagen o audio.', time: new Date().toLocaleTimeString() });
     }
   }
 
@@ -280,34 +334,29 @@ async function procesarMensajeEntrante(message, sock, io) {
 
   const senderNumber = remoteJid.split('@')[0];
   const whitelistStr = await getConfig('whatsapp_whitelist');
-  
+
   if (!whitelistStr) {
     io.to('admin').emit('whatsapp_message', { type: 'error', sender: 'DEBUG', text: 'La lista blanca está vacía en BD.', time: new Date().toLocaleTimeString() });
     return;
   }
 
-  const whitelist = whitelistStr.split(',').map(num => num.trim().replace('+', ''));
-  const isAuthorized = whitelist.some(num => senderNumber.endsWith(num) || num.endsWith(senderNumber));
+  const whitelist = whitelistStr.split(',').map(n => n.trim().replace('+', ''));
+  const isAuthorized = whitelist.some(n => senderNumber.endsWith(n) || n.endsWith(senderNumber));
 
   if (!isAuthorized) {
     console.log(`[WA Agent] Mensaje ignorado de no autorizado: ${senderNumber}`);
-    io.to('admin').emit('whatsapp_message', { type: 'error', sender: 'DEBUG', text: `Mensaje rechazado. El número ${senderNumber} no está en la lista blanca: ${whitelist.join(', ')}`, time: new Date().toLocaleTimeString() });
+    io.to('admin').emit('whatsapp_message', { type: 'error', sender: 'DEBUG', text: `Mensaje rechazado. Número ${senderNumber} no está en la lista blanca.`, time: new Date().toLocaleTimeString() });
     return;
   }
 
   console.log(`[WA Agent] Mensaje de admin (${senderNumber}): "${body}"`);
-  
-  // Enviar evento de mensaje entrante al monitor UI
-  io.to('admin').emit('whatsapp_message', { 
-    type: 'in', 
-    sender: senderNumber, 
-    text: body,
-    time: new Date().toLocaleTimeString()
-  });
+  io.to('admin').emit('whatsapp_message', { type: 'in', sender: senderNumber, text: body || '[Imagen/Audio]', time: new Date().toLocaleTimeString() });
+
+  // Guardar mensaje del usuario en el historial
+  if (body) await guardarMensajeHistorial(senderNumber, 'user', body);
 
   const apiKey = await getConfig('gemini_api_key') || process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    console.warn('[WA Agent] Falta la API Key de Gemini.');
     await sock.sendMessage(remoteJid, { text: '🚨 Error: No hay API Key de Gemini configurada en el panel administrativo.' }, { quoted: message });
     return;
   }
@@ -315,137 +364,123 @@ async function procesarMensajeEntrante(message, sock, io) {
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
 
-    const obtenerInventarioDeclaration = {
-      name: "obtenerInventario",
-      description: "Obtiene todo el inventario de productos actual, incluyendo sus IDs, nombres, categoría, precio y stock disponible.",
-      parameters: { type: SchemaType.OBJECT, properties: {}, required: [] }
-    };
-
-    const actualizarStockDeclaration = {
-      name: "actualizarStock",
-      description: "Establece el stock físico de un producto mediante su ID a un nuevo valor exacto.",
-      parameters: {
-        type: SchemaType.OBJECT,
-        properties: {
-          id: { type: SchemaType.INTEGER, description: "El ID único del producto." },
-          nuevoStock: { type: SchemaType.INTEGER, description: "Nueva cantidad exacta de stock disponible." }
+    // ─── Declaraciones de herramientas ───────────────────────────────────────
+    const tools = [{
+      functionDeclarations: [
+        {
+          name: 'obtenerInventario',
+          description: 'Obtiene todo el inventario de productos actual con sus IDs, nombres, categoría, precio y stock.',
+          parameters: { type: SchemaType.OBJECT, properties: {}, required: [] }
         },
-        required: ["id", "nuevoStock"]
-      }
-    };
-
-    const ajustarStockDeclaration = {
-      name: "ajustarStock",
-      description: "Aumenta o disminuye el stock de un producto específico sumando o restando una cantidad. Úsalo para 'llegaron 10' o 'resta 5'.",
-      parameters: {
-        type: SchemaType.OBJECT,
-        properties: {
-          id: { type: SchemaType.INTEGER, description: "El ID único del producto." },
-          cantidad: { type: SchemaType.INTEGER, description: "Cantidad a sumar (positivo) o restar (negativo)." }
+        {
+          name: 'actualizarStock',
+          description: 'Establece el stock de un producto a un valor exacto usando su ID.',
+          parameters: {
+            type: SchemaType.OBJECT,
+            properties: {
+              id: { type: SchemaType.INTEGER, description: 'ID único del producto.' },
+              nuevoStock: { type: SchemaType.INTEGER, description: 'Nueva cantidad exacta de stock.' }
+            },
+            required: ['id', 'nuevoStock']
+          }
         },
-        required: ["id", "cantidad"]
-      }
-    };
+        {
+          name: 'ajustarStock',
+          description: "Suma o resta stock a un producto. Úsalo para 'llegaron 10' (cantidad positiva) o 'se usaron 5' (cantidad negativa).",
+          parameters: {
+            type: SchemaType.OBJECT,
+            properties: {
+              id: { type: SchemaType.INTEGER, description: 'ID único del producto.' },
+              cantidad: { type: SchemaType.INTEGER, description: 'Cantidad a sumar (+) o restar (-).' }
+            },
+            required: ['id', 'cantidad']
+          }
+        }
+      ]
+    }];
 
-    const systemInstruction = 
-      "Eres Puro Sabor IA, el asistente administrativo de inventario del restaurante Puro Sabor.\n" +
-      "Tu propósito es ayudar al administrador a consultar y actualizar el inventario de productos y bebidas a través de WhatsApp.\n" +
-      "Puedes recibir texto, imágenes (como fotos de bodega) y notas de voz.\n" +
-      "Responde siempre en español, de forma muy concisa, profesional y directa al grano.\n" +
-      "Si actualizas o ajustas el stock de un producto, es OBLIGATORIO que respondas confirmando que la operación fue un éxito e indiques explícitamente la cantidad actual (nuevo stock) que quedó registrada.\n" +
-      "Para buscar productos, usa primero obtenerInventario para obtener los IDs precisos.\n" +
-      "Usa ajustarStock o actualizarStock pasando los IDs correctos.";
+    const systemInstruction =
+      'Eres Puro Sabor IA, el asistente administrativo de inventario del restaurante Puro Sabor.\n' +
+      'Tu propósito es ayudar al administrador a consultar y actualizar el inventario de productos y bebidas a través de WhatsApp.\n' +
+      'Puedes recibir texto, imágenes (como fotos de bodega o facturas) y notas de voz.\n' +
+      'Responde siempre en español, de forma concisa, profesional y directa.\n' +
+      'REGLA OBLIGATORIA: Cuando actualices o ajustes el stock de cualquier producto, SIEMPRE confirma la operación indicando el nombre del producto y la cantidad exacta que quedó registrada en el sistema.\n' +
+      'Para encontrar un producto, usa primero obtenerInventario para obtener los IDs correctos antes de modificar.\n' +
+      'Usa ajustarStock para sumas y restas relativas, y actualizarStock para fijar un valor absoluto.';
+
+    // ─── Recuperar historial y construir contexto deslizante ─────────────────
+    const historialPrevio = await obtenerHistorial(senderNumber, 15);
+    const historialGemini = historialPrevio.map(h => ({
+      role: h.rol === 'user' ? 'user' : 'model',
+      parts: [{ text: h.contenido }]
+    }));
 
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
-      systemInstruction: systemInstruction,
-      tools: [{
-        functionDeclarations: [ obtenerInventarioDeclaration, actualizarStockDeclaration, ajustarStockDeclaration ]
-      }]
+      model: 'gemini-2.5-flash',
+      systemInstruction,
+      tools
     });
 
-    const chat = model.startChat();
-    
+    const chat = model.startChat({ history: historialGemini });
+
+    // ─── Mensaje inicial con soporte multimedia ───────────────────────────────
     let contentParts = [];
     if (mediaPart) contentParts.push(mediaPart);
     if (body) contentParts.push(body);
 
-    const result = await chat.sendMessage(contentParts);
-    const response = result.response;
+    let result = await chat.sendMessage(contentParts);
 
-    const functionCalls = response.functionCalls();
-    if (functionCalls && functionCalls.length > 0) {
-      console.log(`[WA Agent] Gemini solicitó ejecutar ${functionCalls.length} función(es).`);
-      const toolResponses = [];
+    // ─── Bucle de Function Calling (Gemini 2.5 while-loop pattern) ───────────
+    let iteraciones = 0;
+    const MAX_ITERACIONES = 5;
 
+    while (iteraciones < MAX_ITERACIONES) {
+      iteraciones++;
+      const response = result.response;
+      const functionCalls = response.functionCalls();
+
+      if (!functionCalls || functionCalls.length === 0) {
+        // Respuesta final de texto
+        const finalText = response.text();
+        await sock.sendMessage(remoteJid, { text: finalText }, { quoted: message });
+        await guardarMensajeHistorial(senderNumber, 'model', finalText);
+        io.to('admin').emit('whatsapp_message', { type: 'out', sender: 'Bot IA', text: finalText, time: new Date().toLocaleTimeString() });
+        break;
+      }
+
+      console.log(`[WA Agent] Gemini solicitó ${functionCalls.length} función(es). Iteración ${iteraciones}`);
+
+      // Ejecutar todas las funciones pedidas y armar las respuestas
+      const toolResponseParts = [];
       for (const call of functionCalls) {
-        const { name, args } = call;
-        let functionResult = null;
-
-        try {
-          if (name === "obtenerInventario") {
-            const data = await getInventarioDb();
-            functionResult = { inventario: data };
-          } else if (name === "actualizarStock") {
-            const res = await updateStockDb(args.id, args.nuevoStock);
-            if (res.changes > 0) {
-              io.to('admin').emit('producto_actualizado', { id: args.id, stock: Math.max(0, parseInt(args.nuevoStock)) });
-            }
-            functionResult = { success: res.changes > 0, id: args.id, nuevoStock: args.nuevoStock };
-          } else if (name === "ajustarStock") {
-            const res = await adjustStockDb(args.id, args.cantidad);
-            if (res.changes > 0) {
-              io.to('admin').emit('producto_actualizado', { id: args.id, stock: res.nuevoStock });
-            }
-            functionResult = { success: res.changes > 0, id: args.id, nuevoStock: res.nuevoStock, error: res.error };
+        const functionResult = await ejecutarFuncion(call.name, call.args, io);
+        console.log(`[WA Agent] Función "${call.name}" ejecutada. Resultado:`, JSON.stringify(functionResult).slice(0, 120));
+        toolResponseParts.push({
+          functionResponse: {
+            name: call.name,
+            response: { output: functionResult }
           }
-        } catch (dbErr) {
-          functionResult = { success: false, error: dbErr.message };
-        }
-
-        toolResponses.push({
-          functionResponse: { name, response: functionResult }
         });
       }
 
-      const finalResult = await chat.sendMessage(toolResponses);
-      const finalText = finalResult.response.text();
-      
-      await sock.sendMessage(remoteJid, { text: finalText }, { quoted: message });
-      
-      // Enviar evento de mensaje saliente al monitor UI
-      io.to('admin').emit('whatsapp_message', { 
-        type: 'out', 
-        sender: 'Bot IA', 
-        text: finalText,
-        time: new Date().toLocaleTimeString()
-      });
-    } else {
-      const responseText = response.text();
-      await sock.sendMessage(remoteJid, { text: responseText }, { quoted: message });
-      
-      // Enviar evento de mensaje saliente al monitor UI
-      io.to('admin').emit('whatsapp_message', { 
-        type: 'out', 
-        sender: 'Bot IA', 
-        text: responseText,
-        time: new Date().toLocaleTimeString()
-      });
+      // Enviar respuestas de funciones de vuelta a Gemini
+      result = await chat.sendMessage(toolResponseParts);
+    }
+
+    if (iteraciones >= MAX_ITERACIONES) {
+      console.warn('[WA Agent] Se alcanzó el límite de iteraciones del bucle de funciones.');
+      await sock.sendMessage(remoteJid, { text: '⚠️ La IA tardó demasiado en procesar tu solicitud. Por favor, inténtalo de nuevo.' }, { quoted: message });
     }
 
   } catch (geminiErr) {
     console.error('[WA Agent] Error con Google Gemini:', geminiErr.message);
     const errorText = `⚠️ Ocurrió un error con el motor de IA: ${geminiErr.message}`;
     await sock.sendMessage(remoteJid, { text: errorText }, { quoted: message });
-    
-    io.to('admin').emit('whatsapp_message', { 
-      type: 'error', 
-      sender: 'Sistema', 
-      text: errorText,
-      time: new Date().toLocaleTimeString()
-    });
+    io.to('admin').emit('whatsapp_message', { type: 'error', sender: 'Sistema', text: errorText, time: new Date().toLocaleTimeString() });
   }
 }
+
+
 
 module.exports = {
   inicializarWhatsApp,
