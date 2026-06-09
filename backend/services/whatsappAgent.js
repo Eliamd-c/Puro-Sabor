@@ -1,4 +1,4 @@
-const { makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers } = require('@whiskeysockets/baileys');
+const { makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers, downloadMediaMessage } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const qrcode = require('qrcode');
 const { GoogleGenerativeAI, SchemaType } = require('@google/generative-ai');
@@ -242,10 +242,39 @@ async function procesarMensajeEntrante(message, sock, io) {
   const isGroup = remoteJid.endsWith('@g.us');
   if (isGroup) return; // Solo procesamos chats directos
 
-  // Extraer el cuerpo de texto del mensaje
-  const body = message.message?.conversation || message.message?.extendedTextMessage?.text;
-  if (!body) {
-    io.to('admin').emit('whatsapp_message', { type: 'error', sender: 'DEBUG', text: 'El mensaje no tiene cuerpo de texto (posible imagen o sistema).', time: new Date().toLocaleTimeString() });
+  const imageMsg = message.message?.imageMessage;
+  const audioMsg = message.message?.audioMessage;
+  const textMsg = message.message?.conversation || message.message?.extendedTextMessage?.text;
+
+  let body = textMsg || (imageMsg ? imageMsg.caption : "");
+  let isMedia = !!(imageMsg || audioMsg);
+  let mediaPart = null;
+
+  if (isMedia) {
+    try {
+      console.log('[WA Agent] Descargando archivo multimedia adjunto...');
+      const buffer = await downloadMediaMessage(
+        message,
+        'buffer',
+        {},
+        { logger: pino({ level: 'silent' }) }
+      );
+      const mimeType = imageMsg ? imageMsg.mimetype : audioMsg.mimetype;
+      mediaPart = {
+        inlineData: {
+          data: buffer.toString('base64'),
+          mimeType: mimeType
+        }
+      };
+      console.log(`[WA Agent] Media descargada exitosamente: ${mimeType}`);
+    } catch (err) {
+      console.error('[WA Agent] Error descargando media:', err.message);
+      io.to('admin').emit('whatsapp_message', { type: 'error', sender: 'Sistema', text: 'Error interno procesando imagen o audio.', time: new Date().toLocaleTimeString() });
+    }
+  }
+
+  if (!body && !mediaPart) {
+    io.to('admin').emit('whatsapp_message', { type: 'error', sender: 'DEBUG', text: 'El mensaje no tiene cuerpo de texto ni multimedia legible.', time: new Date().toLocaleTimeString() });
     return;
   }
 
@@ -321,8 +350,9 @@ async function procesarMensajeEntrante(message, sock, io) {
     const systemInstruction = 
       "Eres Puro Sabor IA, el asistente administrativo de inventario del restaurante Puro Sabor.\n" +
       "Tu propósito es ayudar al administrador a consultar y actualizar el inventario de productos y bebidas a través de WhatsApp.\n" +
+      "Puedes recibir texto, imágenes (como fotos de bodega) y notas de voz.\n" +
       "Responde siempre en español, de forma muy concisa, profesional y directa al grano.\n" +
-      "Si actualizas o consultas stock, confirma los cambios explícitamente mencionando el producto.\n" +
+      "Si actualizas o ajustas el stock de un producto, es OBLIGATORIO que respondas confirmando que la operación fue un éxito e indiques explícitamente la cantidad actual (nuevo stock) que quedó registrada.\n" +
       "Para buscar productos, usa primero obtenerInventario para obtener los IDs precisos.\n" +
       "Usa ajustarStock o actualizarStock pasando los IDs correctos.";
 
@@ -335,7 +365,12 @@ async function procesarMensajeEntrante(message, sock, io) {
     });
 
     const chat = model.startChat();
-    const result = await chat.sendMessage(body);
+    
+    let contentParts = [];
+    if (mediaPart) contentParts.push(mediaPart);
+    if (body) contentParts.push(body);
+
+    const result = await chat.sendMessage(contentParts);
     const response = result.response;
 
     const functionCalls = response.functionCalls();
