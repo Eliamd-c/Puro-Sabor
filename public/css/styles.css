@@ -602,7 +602,7 @@ body {
 }
 
 .modal-body {
-  padding: 20px 20px 30px 20px;
+  padding: 20px 20px 90px 20px;
   overflow-y: auto;
   flex-grow: 1;
 }
