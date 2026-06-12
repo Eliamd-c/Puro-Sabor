@@ -239,7 +239,7 @@ document.addEventListener('DOMContentLoaded', () => {
         sliderHtml += `
           <div class="swiper-slide" data-nombre="${prod.nombre}">
             <div class="slide-image">
-              <img src="${prod.imagen_url}" alt="${prod.nombre}" onerror="this.src='/assets/images/default-food.jpg'">
+              <img src="${prod.imagen_url}?v=2" alt="${prod.nombre}" onerror="this.src='/assets/images/default-food.jpg'">
             </div>
             <div class="slide-content">
               <h4 class="slide-title">${prod.nombre}</h4>
@@ -312,7 +312,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return `
       <div class="secondary-card animate-fade-in-up" data-nombre="${prod.nombre}">
         <div class="secondary-card-image">
-          <img src="${prod.imagen_url}" alt="${prod.nombre}" onerror="this.src='/assets/images/default-food.jpg'">
+          <img src="${prod.imagen_url}?v=2" alt="${prod.nombre}" onerror="this.src='/assets/images/default-food.jpg'">
         </div>
         <div class="secondary-card-content">
           <h4 class="secondary-card-title">${prod.nombre}</h4>
@@ -385,7 +385,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function abrirModalDetalle(prodGrouped) {
     productoSeleccionado = prodGrouped;
     
-    modalImg.src = prodGrouped.imagen_url;
+    modalImg.src = prodGrouped.imagen_url + '?v=2';
     modalImg.onerror = () => { modalImg.src = '/assets/images/default-food.jpg'; };
     modalCategory.textContent = prodGrouped.categoria_nombre;
     modalTitle.textContent = prodGrouped.nombre;
