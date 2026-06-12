@@ -387,8 +387,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- MÓDULO DE DETALLE (BOTTOM SHEET) ---
 
-  let varianteActivaId = null;
-
   function actualizarPrecioModal(id, precio) {
     varianteActivaId = id;
     modalPrice.textContent = `$${precio.toLocaleString('es-CO', { minimumFractionDigits: 0 })} COP`;
