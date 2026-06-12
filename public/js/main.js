@@ -8,11 +8,24 @@ document.addEventListener('DOMContentLoaded', () => {
   let categorias = [];
   let categoriaActiva = '';
   let productoSeleccionado = null;
+  let varianteActivaId = null;
   let swiperInstance = null;
+  
+  // Estado del Carrito
+  let carrito = [];
 
   // --- ELEMENTOS DEL DOM ---
   const categoriesScroll = document.getElementById('categories-scroll');
   const searchInput = document.getElementById('search-input');
+  
+  // Elementos del Carrito y FABs
+  const fabCart = document.getElementById('fab-cart');
+  const cartBadge = document.getElementById('cart-badge');
+  const cartOverlay = document.getElementById('cart-overlay');
+  const btnCloseCart = document.getElementById('btn-close-cart');
+  const cartItems = document.getElementById('cart-items');
+  const cartTotalPrice = document.getElementById('cart-total-price');
+  const btnCheckout = document.getElementById('btn-checkout');
   
   // Contenedores del Menú
   const migasCarouselSection = document.getElementById('migas-carousel-section');
@@ -451,6 +464,129 @@ document.addEventListener('DOMContentLoaded', () => {
     productoSeleccionado = null;
   }
 
+  // --- LÓGICA DEL CARRITO ---
+  
+  function abrirCarrito() {
+    cartOverlay.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function cerrarCarrito() {
+    cartOverlay.classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  function agregarAlCarrito(productoId) {
+    const producto = productos.find(p => p.id === productoId);
+    if (!producto) return;
+
+    const itemExistente = carrito.find(item => item.id === productoId);
+    
+    if (itemExistente) {
+      itemExistente.cantidad += 1;
+    } else {
+      carrito.push({
+        ...producto,
+        cantidad: 1
+      });
+    }
+    
+    actualizarCarrito();
+    cerrarModalDetalle();
+    
+    // Animación de feedback en el FAB
+    fabCart.style.transform = 'scale(1.2)';
+    setTimeout(() => fabCart.style.transform = '', 200);
+  }
+
+  function eliminarDelCarrito(productoId) {
+    carrito = carrito.filter(item => item.id !== productoId);
+    actualizarCarrito();
+  }
+
+  function cambiarCantidadCarrito(productoId, delta) {
+    const item = carrito.find(item => item.id === productoId);
+    if (!item) return;
+    
+    item.cantidad += delta;
+    if (item.cantidad <= 0) {
+      eliminarDelCarrito(productoId);
+    } else {
+      actualizarCarrito();
+    }
+  }
+
+  function actualizarCarrito() {
+    let totalPrecio = 0;
+    let totalItems = 0;
+    
+    carrito.forEach(item => {
+      totalPrecio += item.precio * item.cantidad;
+      totalItems += item.cantidad;
+    });
+    
+    if (totalItems > 0) {
+      cartBadge.style.display = 'flex';
+      cartBadge.textContent = totalItems;
+      btnCheckout.disabled = false;
+    } else {
+      cartBadge.style.display = 'none';
+      btnCheckout.disabled = true;
+    }
+    
+    cartTotalPrice.textContent = `$${totalPrecio.toLocaleString('es-CO', { minimumFractionDigits: 0 })} COP`;
+    renderizarItemsCarrito();
+  }
+
+  function renderizarItemsCarrito() {
+    if (carrito.length === 0) {
+      cartItems.innerHTML = '<div class="empty-cart-msg">Tu carrito está vacío.</div>';
+      return;
+    }
+    
+    let html = '';
+    carrito.forEach(item => {
+      html += `
+        <div class="cart-item">
+          <img class="cart-item-img" src="${item.imagen_url}?v=2" alt="${item.nombre}" onerror="this.src='/assets/images/default-food.jpg'">
+          <div class="cart-item-details">
+            <h4 class="cart-item-title">${item.nombre}</h4>
+            <div class="cart-item-price">$${(item.precio * item.cantidad).toLocaleString('es-CO', { minimumFractionDigits: 0 })}</div>
+            <div class="cart-item-actions">
+              <button class="btn-qty" onclick="window.cambiarCantidad(${item.id}, -1)">-</button>
+              <span class="item-qty">${item.cantidad}</span>
+              <button class="btn-qty" onclick="window.cambiarCantidad(${item.id}, 1)">+</button>
+            </div>
+          </div>
+          <button class="btn-remove-item" onclick="window.eliminarItem(${item.id})">&times;</button>
+        </div>
+      `;
+    });
+    cartItems.innerHTML = html;
+  }
+  
+  // Exponer globales para onclick
+  window.cambiarCantidad = cambiarCantidadCarrito;
+  window.eliminarItem = eliminarDelCarrito;
+
+  function enviarPedidoWhatsApp() {
+    if (carrito.length === 0) return;
+    
+    let texto = '¡Hola! Quiero hacer un pedido en *Puro Sabor*:%0A%0A';
+    let total = 0;
+    
+    carrito.forEach(item => {
+      let subtotal = item.precio * item.cantidad;
+      total += subtotal;
+      texto += `▪️ ${item.cantidad}x ${item.nombre} - $${subtotal.toLocaleString('es-CO')}%0A`;
+    });
+    
+    texto += `%0A*Total: $${total.toLocaleString('es-CO')}*`;
+    
+    const numero = '573133288298';
+    window.open(`https://wa.me/${numero}?text=${texto}`, '_blank');
+  }
+
   // --- CONTROLADORES DE EVENTOS ---
 
   function configurarEventos() {
@@ -473,7 +609,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-    // Permitir arrastrar/deslizar hacia abajo en móviles para cerrar el Bottom Sheet
     let touchStartY = 0;
     modalContent.addEventListener('touchstart', (e) => {
       touchStartY = e.touches[0].clientY;
@@ -481,11 +616,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
     modalContent.addEventListener('touchend', (e) => {
       let touchEndY = e.changedTouches[0].clientY;
-      // Si desliza hacia abajo más de 80px en el cuerpo superior o handle del modal, lo cierra
       if (touchEndY - touchStartY > 80 && modalContent.scrollTop === 0) {
         cerrarModalDetalle();
       }
     });
+
+    // Eventos del Carrito
+    fabCart.addEventListener('click', abrirCarrito);
+    btnCloseCart.addEventListener('click', cerrarCarrito);
+    cartOverlay.addEventListener('click', (e) => {
+      if (e.target === cartOverlay) cerrarCarrito();
+    });
+    btnCheckout.addEventListener('click', enviarPedidoWhatsApp);
+
+    // Botón Agregar al Carrito del Modal
+    const btnAddToCart = document.getElementById('btn-add-to-cart');
+    if (btnAddToCart) {
+      btnAddToCart.addEventListener('click', () => {
+        if (varianteActivaId) {
+          agregarAlCarrito(varianteActivaId);
+        }
+      });
+    }
   }
 
   // --- EJECUCIÓN INICIAL ---
