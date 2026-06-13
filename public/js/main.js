@@ -581,7 +581,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     texto += `%0A*Total: $${total.toLocaleString('es-CO')}*`;
     
-    const numero = '573133288298';
+    const numero = '573142146407';
     window.open(`https://wa.me/${numero}?text=${texto}`, '_blank');
   }
 

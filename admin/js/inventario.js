@@ -38,6 +38,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnToggleGeminiKey = document.getElementById('btn-toggle-gemini-key');
   const whitelistNumbersInput = document.getElementById('whitelist-numbers');
   const botActiveToggle = document.getElementById('bot-active-toggle');
+  const botHorarioToggle = document.getElementById('bot-horario-toggle');
+  const botMensajeAusenciaInput = document.getElementById('bot-mensaje-ausencia');
   const configAiAlert = document.getElementById('config-ai-alert');
 
   // --- INICIALIZACIÓN ---
@@ -100,6 +102,8 @@ document.addEventListener('DOMContentLoaded', () => {
         geminiKeyInput.value = config.gemini_api_key || '';
         whitelistNumbersInput.value = config.whatsapp_whitelist || '';
         botActiveToggle.checked = config.whatsapp_bot_active;
+        botHorarioToggle.checked = config.bot_horario_activo == '1';
+        botMensajeAusenciaInput.value = config.bot_mensaje_ausencia || '';
         
         // Actualizar el estado visual del QR / Conexión
         actualizarEstadoWhatsApp(config.bot_status, config.bot_qr);
@@ -535,6 +539,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const gemini_api_key = geminiKeyInput.value.trim();
         const whatsapp_whitelist = whitelistNumbersInput.value.trim();
         const whatsapp_bot_active = botActiveToggle.checked;
+        const bot_horario_activo = botHorarioToggle.checked ? '1' : '0';
+        const bot_mensaje_ausencia = botMensajeAusenciaInput.value.trim();
 
         // Visualización de carga en botón
         const btnSave = document.getElementById('btn-save-ai-config');
@@ -553,7 +559,9 @@ document.addEventListener('DOMContentLoaded', () => {
             body: JSON.stringify({
               gemini_api_key,
               whatsapp_whitelist,
-              whatsapp_bot_active
+              whatsapp_bot_active,
+              bot_horario_activo,
+              bot_mensaje_ausencia
             })
           });
           const result = await response.json();

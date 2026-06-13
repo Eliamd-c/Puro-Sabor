@@ -43,6 +43,8 @@ router.get('/config-ai', verificarJWT, async (req, res) => {
     const geminiKey = await getConfig('gemini_api_key') || '';
     const whitelist = await getConfig('whatsapp_whitelist') || '';
     const botActive = await getConfig('whatsapp_bot_active') || '0';
+    const botHorarioActivo = await getConfig('bot_horario_activo') || '0';
+    const botMensajeAusencia = await getConfig('bot_mensaje_ausencia') || '';
 
     res.json({
       success: true,
@@ -50,6 +52,8 @@ router.get('/config-ai', verificarJWT, async (req, res) => {
         gemini_api_key: maskApiKey(geminiKey),
         whatsapp_whitelist: whitelist,
         whatsapp_bot_active: botActive === '1',
+        bot_horario_activo: botHorarioActivo,
+        bot_mensaje_ausencia: botMensajeAusencia,
         bot_status: waAgent.getBotStatus(),
         bot_qr: waAgent.getLatestQr()
       }
@@ -65,7 +69,7 @@ router.get('/config-ai', verificarJWT, async (req, res) => {
 
 // POST /api/inventario/config-ai — Guardar la configuración de IA y WhatsApp (Admin)
 router.post('/config-ai', verificarJWT, async (req, res) => {
-  const { gemini_api_key, whatsapp_whitelist, whatsapp_bot_active } = req.body;
+  const { gemini_api_key, whatsapp_whitelist, whatsapp_bot_active, bot_horario_activo, bot_mensaje_ausencia } = req.body;
   const io = req.app.get('io');
 
   try {
@@ -88,6 +92,14 @@ router.post('/config-ai', verificarJWT, async (req, res) => {
     if (whatsapp_bot_active !== undefined) {
       const activeVal = whatsapp_bot_active ? '1' : '0';
       await setConfig('whatsapp_bot_active', activeVal);
+    }
+
+    // 4. Guardar Horario Activo y Mensaje
+    if (bot_horario_activo !== undefined) {
+      await setConfig('bot_horario_activo', bot_horario_activo);
+    }
+    if (bot_mensaje_ausencia !== undefined) {
+      await setConfig('bot_mensaje_ausencia', bot_mensaje_ausencia);
     }
 
     // Recargar el bot de WhatsApp con la nueva configuración en segundo plano

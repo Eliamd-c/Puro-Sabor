@@ -343,29 +343,16 @@ async function procesarMensajeEntrante(message, sock, io) {
   const whitelist = whitelistStr.split(',').map(n => n.trim().replace('+', ''));
   const isAuthorized = whitelist.some(n => senderNumber.endsWith(n) || n.endsWith(senderNumber));
 
-  if (!isAuthorized) {
-    console.log(`[WA Agent] Mensaje ignorado de no autorizado: ${senderNumber}`);
-    io.to('admin').emit('whatsapp_message', { type: 'error', sender: 'DEBUG', text: `Mensaje rechazado. Número ${senderNumber} no está en la lista blanca.`, time: new Date().toLocaleTimeString() });
-    return;
-  }
+  // Lógica "Cerebro Doble" (Admin vs Cliente)
+  let systemInstruction = '';
+  let tools = [];
 
-  console.log(`[WA Agent] Mensaje de admin (${senderNumber}): "${body}"`);
-  io.to('admin').emit('whatsapp_message', { type: 'in', sender: senderNumber, text: body || '[Imagen/Audio]', time: new Date().toLocaleTimeString() });
+  if (isAuthorized) {
+    console.log(`[WA Agent] Mensaje de ADMIN (${senderNumber}): "${body}"`);
+    io.to('admin').emit('whatsapp_message', { type: 'in', sender: `Admin (${senderNumber})`, text: body || '[Imagen/Audio]', time: new Date().toLocaleTimeString() });
 
-  // Guardar mensaje del usuario en el historial
-  if (body) await guardarMensajeHistorial(senderNumber, 'user', body);
-
-  const apiKey = await getConfig('gemini_api_key') || process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    await sock.sendMessage(remoteJid, { text: '🚨 Error: No hay API Key de Gemini configurada en el panel administrativo.' }, { quoted: message });
-    return;
-  }
-
-  try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-
-    // ─── Declaraciones de herramientas ───────────────────────────────────────
-    const tools = [{
+    // Herramientas de Admin
+    tools = [{
       functionDeclarations: [
         {
           name: 'obtenerInventario',
@@ -399,14 +386,43 @@ async function procesarMensajeEntrante(message, sock, io) {
       ]
     }];
 
-    const systemInstruction =
+    systemInstruction =
       'Eres Puro Sabor IA, el asistente administrativo de inventario del restaurante Puro Sabor.\n' +
-      'Tu propósito es ayudar al administrador a consultar y actualizar el inventario de productos y bebidas a través de WhatsApp.\n' +
-      'Puedes recibir texto, imágenes (como fotos de bodega o facturas) y notas de voz.\n' +
+      'Tu propósito es ayudar al administrador a consultar y actualizar el inventario a través de WhatsApp.\n' +
+      'Puedes recibir texto e imágenes.\n' +
       'Responde siempre en español, de forma concisa, profesional y directa.\n' +
-      'REGLA OBLIGATORIA: Cuando actualices o ajustes el stock de cualquier producto, SIEMPRE confirma la operación indicando el nombre del producto y la cantidad exacta que quedó registrada en el sistema.\n' +
-      'Para encontrar un producto, usa primero obtenerInventario para obtener los IDs correctos antes de modificar.\n' +
-      'Usa ajustarStock para sumas y restas relativas, y actualizarStock para fijar un valor absoluto.';
+      'REGLA OBLIGATORIA: Cuando actualices o ajustes el stock, SIEMPRE confirma la operación indicando el nombre del producto y la cantidad exacta resultante.\n' +
+      'Para encontrar un producto, usa primero obtenerInventario para obtener los IDs correctos antes de modificar.';
+
+  } else {
+    console.log(`[WA Agent] Mensaje de CLIENTE (${senderNumber}): "${body}"`);
+    io.to('admin').emit('whatsapp_message', { type: 'in', sender: `Cliente (${senderNumber})`, text: body || '[Imagen/Audio]', time: new Date().toLocaleTimeString() });
+
+    const dominio = await getConfig('dominio_base') || 'https://restaurantepurosabor.com';
+    const horarioActivo = await getConfig('bot_horario_activo') === '1';
+    const mensajeAusencia = await getConfig('bot_mensaje_ausencia') || 'Iniciamos atención el sábado desde las 6 pm.';
+
+    systemInstruction = 
+      'Eres el asistente virtual y recepcionista oficial de Puro Sabor.\n' +
+      'Atiendes a los clientes de manera MUY amable, cordial y rápida.\n' +
+      `ESTADO ACTUAL DEL RESTAURANTE: ${horarioActivo ? 'ABIERTO' : 'CERRADO'}.\n` +
+      (!horarioActivo ? `REGLA ESTRICTA 1: El restaurante está cerrado. En tu primera respuesta de la conversación, DEBES mencionar la siguiente información exacta: "${mensajeAusencia}".\n` : '') +
+      'REGLA ESTRICTA 2: Si el cliente te pide el menú, ver los platos, o hacer un pedido, DEBES entregarle este enlace directo al menú web interactivo: 👉 ' + dominio + '\n' +
+      'Instruye al cliente que puede armar su pedido agregando productos al carrito dentro de esa misma página web y luego enviarlo por aquí.\n' +
+      'No inventes precios ni platos que no conozcas. Tu principal objetivo es enviar a los clientes a la página del menú para que hagan el pedido allá.';
+  }
+
+  // Guardar mensaje del usuario en el historial
+  if (body) await guardarMensajeHistorial(senderNumber, 'user', body);
+
+  const apiKey = await getConfig('gemini_api_key') || process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    if (isAuthorized) await sock.sendMessage(remoteJid, { text: '🚨 Error: No hay API Key de Gemini configurada.' }, { quoted: message });
+    return;
+  }
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
 
     // ─── Recuperar historial y construir contexto deslizante ─────────────────
     const historialPrevio = await obtenerHistorial(senderNumber, 15);
@@ -415,11 +431,14 @@ async function procesarMensajeEntrante(message, sock, io) {
       parts: [{ text: h.contenido }]
     }));
 
-    const model = genAI.getGenerativeModel({
+    const modelConfig = {
       model: 'gemini-2.5-flash',
-      systemInstruction,
-      tools
-    });
+      systemInstruction
+    };
+    if (tools && tools.length > 0) {
+      modelConfig.tools = tools;
+    }
+    const model = genAI.getGenerativeModel(modelConfig);
 
     const chat = model.startChat({ history: historialGemini });
 

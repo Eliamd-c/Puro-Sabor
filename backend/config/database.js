@@ -132,13 +132,15 @@ function inicializarTablas() {
 function sembrarDatosIniciales() {
   // Sembrar configuración inicial (WhatsApp, dominio, y API de Gemini)
   const configs = [
-    ['whatsapp_numero', '3133288298'],
+    ['whatsapp_numero', '3142146407'],
     ['dominio_base', 'https://restaurantepurosabor.com'],
     ['restaurante_nombre', 'Puro Sabor'],
     ['mesas_timeout_horas', '2'],
     ['gemini_api_key', ''],
-    ['whatsapp_whitelist', '573133288298,3133288298'],
-    ['whatsapp_bot_active', '1']
+    ['whatsapp_whitelist', '573142146407,3142146407'],
+    ['whatsapp_bot_active', '1'],
+    ['bot_horario_activo', '0'],
+    ['bot_mensaje_ausencia', '¡Hola! Gracias por contactarte con Puro Sabor. 🍖 Te informamos que iniciaremos atención este próximo Sábado a partir de las 6:00 de la tarde. \n\nSin embargo, puedes ir antojándote y revisando nuestros platos en nuestro menú web: 👉 https://restaurantepurosabor.com \n\n¡Te esperamos el sábado!']
   ];
   const stmt = db.prepare('INSERT OR IGNORE INTO config (key, value) VALUES (?, ?)');
   configs.forEach(c => stmt.run(c));
