@@ -101,10 +101,10 @@ const db = {
 };
 
 // --- CREACIÓN DE TABLAS (MIGRACIÓN A POSTGRESQL) ---
-function inicializarTablas() {
-  db.serialize(() => {
+async function inicializarTablas() {
+  try {
     // 1. Tabla Categorías
-    pool.query(`
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS categorias (
         id SERIAL PRIMARY KEY,
         nombre VARCHAR(255) NOT NULL UNIQUE,
@@ -113,10 +113,10 @@ function inicializarTablas() {
         activa INTEGER DEFAULT 1,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
-    `).catch(e => console.error(e));
+    `);
 
     // 2. Tabla Productos
-    pool.query(`
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS productos (
         id SERIAL PRIMARY KEY,
         nombre VARCHAR(255) NOT NULL,
@@ -131,10 +131,10 @@ function inicializarTablas() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (categoria_id) REFERENCES categorias(id)
       )
-    `).catch(e => console.error(e));
+    `);
 
     // 3. Tabla Admins
-    pool.query(`
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS admins (
         id SERIAL PRIMARY KEY,
         usuario VARCHAR(255) NOT NULL UNIQUE,
@@ -144,19 +144,19 @@ function inicializarTablas() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         last_login TIMESTAMP
       )
-    `).catch(e => console.error(e));
+    `);
 
     // 4. Tabla Config
-    pool.query(`
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS config (
         key VARCHAR(255) PRIMARY KEY,
         value TEXT NOT NULL,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
-    `).catch(e => console.error(e));
+    `);
 
     // 5. Tabla Mesas
-    pool.query(`
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS mesas (
         id SERIAL PRIMARY KEY,
         numero INTEGER UNIQUE NOT NULL,
@@ -164,10 +164,10 @@ function inicializarTablas() {
         activa INTEGER DEFAULT 1,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
-    `).catch(e => console.error(e));
+    `);
 
     // 6. Tabla Sesiones de Mesa
-    pool.query(`
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS sesiones_mesa (
         id SERIAL PRIMARY KEY,
         mesa_numero INTEGER NOT NULL,
@@ -177,10 +177,10 @@ function inicializarTablas() {
         cerrada_en TIMESTAMP,
         cerrada_por VARCHAR(255)
       )
-    `).catch(e => console.error(e));
+    `);
 
     // 7. Tabla Pedidos
-    pool.query(`
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS pedidos (
         id SERIAL PRIMARY KEY,
         sesion_id INTEGER NOT NULL,
@@ -192,10 +192,10 @@ function inicializarTablas() {
         creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (sesion_id) REFERENCES sesiones_mesa(id)
       )
-    `).catch(e => console.error(e));
+    `);
 
     // 8. Tabla Historial WA
-    pool.query(`
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS wa_conversaciones (
         id SERIAL PRIMARY KEY,
         numero_telefono VARCHAR(50) NOT NULL,
@@ -203,10 +203,13 @@ function inicializarTablas() {
         contenido TEXT NOT NULL,
         creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
-    `).then(() => {
-      sembrarDatosIniciales();
-    }).catch(e => console.error(e));
-  });
+    `);
+
+    console.log('✅ Tablas verificadas/creadas en Postgres.');
+    sembrarDatosIniciales();
+  } catch (e) {
+    console.error('Error al inicializar tablas en Postgres:', e);
+  }
 }
 
 function sembrarDatosIniciales() {
