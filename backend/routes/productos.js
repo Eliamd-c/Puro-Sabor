@@ -199,10 +199,12 @@ router.post('/admin', verificarJWT, upload.single('imagen'), (req, res) => {
   const dispVal = disponible === undefined ? 1 : (disponible === 'true' || disponible === '1' || disponible === true ? 1 : 0);
   const stockVal = stock ? parseInt(stock) : 0;
 
+    const precioLimpio = precio.toString().replace(/[^0-9.]/g, '');
+
   const params = [
     nombre, 
     descripcion || '', 
-    parseFloat(precio), 
+    parseFloat(precioLimpio) || 0, 
     parseInt(categoria_id), 
     stockVal, 
     imagen_url,
@@ -263,10 +265,12 @@ router.put('/admin/:id', verificarJWT, upload.single('imagen'), (req, res) => {
     WHERE id = ? AND activo = 1
   `;
 
+  const precioLimpio = precio.toString().replace(/[^0-9.]/g, '');
+
   const params = [
     nombre, 
     descripcion || '', 
-    parseFloat(precio), 
+    parseFloat(precioLimpio) || 0, 
     parseInt(categoria_id), 
     stockVal, 
     imagen_url, 
