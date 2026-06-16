@@ -514,7 +514,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // 2. Toggle visibilidad clave Gemini
-    if (btnToggleGeminiKey && geminiKeyInput) {
+    if (btnToggleGeminiKey) {
       btnToggleGeminiKey.addEventListener('click', () => {
         if (geminiKeyInput.type === 'password') {
           geminiKeyInput.type = 'text';
@@ -528,10 +528,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 3. Reconectar Bot botón
     if (btnReconnectWa) {
+    if (btnReconnectWa) {
       btnReconnectWa.addEventListener('click', reconectarWhatsApp);
+    }
     }
 
     // 4. Guardar configuración IA
+    if (formConfigAi) {
     if (formConfigAi) {
       formConfigAi.addEventListener('submit', async (e) => {
         e.preventDefault();

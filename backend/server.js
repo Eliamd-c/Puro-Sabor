@@ -95,10 +95,10 @@ io.on('connection', (socket) => {
 // Guardar io en la app para usarlo en las rutas
 app.set('io', io);
 
-// ── Inicializar WhatsApp Agent ──────────────────────────────────────────────
+// ── Inicializar WhatsApp Agent Dual ───────────────────────────────────────────
 const waAgent = require('./services/whatsappAgent');
-waAgent.inicializarWhatsApp(io).catch(err => {
-  console.error('[Server] Error al iniciar el agente de WhatsApp:', err.message);
+waAgent.inicializarTodos(io).catch(err => {
+  console.error('[Server] Error al iniciar los agentes de WhatsApp:', err.message);
 });
 
 // ── Timeout automático: revisar mesas con +2h de inactividad ──────────────
@@ -196,13 +196,19 @@ const productosRoutes = require('./routes/productos');
 const mesasRoutes = require('./routes/mesas');
 const configRoutes = require('./routes/config');
 const inventarioRoutes = require('./routes/inventario');
+const pedidosRoutes = require('./routes/pedidos');
+const statsRoutes = require('./routes/stats');
+const chatbotsRoutes = require('./routes/chatbots');
 
 app.use('/api/admin', authRoutes);
 app.use('/api/categorias', categoriasRoutes);
 app.use('/api/productos', productosRoutes);
 app.use('/api/mesas', mesasRoutes);
+app.use('/api/pedidos', pedidosRoutes);
 app.use('/api/config', configRoutes);
 app.use('/api/inventario', inventarioRoutes);
+app.use('/api/stats', statsRoutes);
+app.use('/api/chatbots', chatbotsRoutes);
 
 // ── Archivos estáticos ─────────────────────────────────────────────────────
 const uploadsDir = path.join(__dirname, '..', 'public', 'uploads');

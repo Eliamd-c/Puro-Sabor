@@ -83,36 +83,4 @@ router.post('/config-ai', verificarJWT, apiLimiter, async (req, res, next) => {
   }
 });
 
-// POST /api/inventario/whatsapp/reconnect — Forzar reconexión manual del bot (Admin)
-router.post('/whatsapp/reconnect', verificarJWT, apiLimiter, async (req, res, next) => {
-  const io = req.app.get('io');
-  try {
-    await configService.setConfig('whatsapp_bot_active', '1');
-    waAgent.reloadConfig(io).catch(err => {
-      console.error('[WA Route] Error al reconectar el bot:', err.message);
-    });
-
-    res.json({
-      success: true,
-      message: 'Se ha solicitado la reconexión de WhatsApp.'
-    });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// POST /api/inventario/whatsapp/logout — Cerrar sesión y desvincular dispositivo (Admin)
-router.post('/whatsapp/logout', verificarJWT, apiLimiter, async (req, res, next) => {
-  const io = req.app.get('io');
-  try {
-    await waAgent.logoutWhatsApp(io);
-    res.json({
-      success: true,
-      message: 'Se ha cerrado la sesión de WhatsApp exitosamente.'
-    });
-  } catch (err) {
-    next(err);
-  }
-});
-
 module.exports = router;

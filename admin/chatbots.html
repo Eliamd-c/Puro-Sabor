@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Puro Sabor | Chatbots IA</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/animations.css">
+  <link rel="stylesheet" href="/admin/css/admin.css">
+  <link rel="stylesheet" href="/admin/css/mesas.css"> <!-- Reutilizando estilos de tarjetas -->
+  <style>
+    .bots-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+      gap: 24px;
+      margin-top: 24px;
+    }
+    .bot-card {
+      background: var(--surface);
+      border-radius: 20px;
+      padding: 24px;
+      border: 1px solid var(--border);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    }
+    .bot-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .bot-icon {
+      font-size: 32px;
+      background: rgba(255,255,255,0.05);
+      padding: 12px;
+      border-radius: 12px;
+    }
+    .bot-title h3 {
+      font-size: 20px;
+      margin: 0;
+      color: var(--text-primary);
+    }
+    .bot-title p {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin: 4px 0 0 0;
+    }
+    .qr-container {
+      background: var(--bg);
+      border: 2px dashed var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      text-align: center;
+      min-height: 200px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+    .qr-container img {
+      width: 200px;
+      height: 200px;
+      border-radius: 12px;
+      margin-bottom: 12px;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      background: rgba(255,255,255,0.1);
+      margin-bottom: 12px;
+    }
+    .status-badge.connected { background: rgba(46,204,113,0.1); color: #2ecc71; }
+    .status-badge.disconnected { background: rgba(231,76,60,0.1); color: #e74c3c; }
+    .status-badge.loading { background: rgba(241,196,15,0.1); color: #f1c40f; }
+  </style>
+</head>
+<body>
+  <div class="dashboard-wrapper">
+
+    <!-- ═══ SIDEBAR ═══════════════════════════════════════════════════════ -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <span class="sidebar-logo">🔥</span>
+        <h2>Puro Sabor</h2>
+      </div>
+      <div class="sidebar-user">
+        <p class="user-info-role">ADMINISTRADOR</p>
+        <p class="user-info-name" id="admin-display-name">Admin</p>
+      </div>
+      <nav class="sidebar-menu">
+        <a href="/admin/dashboard.html" class="menu-item">
+          <span>📦</span> Productos
+        </a>
+        <a href="/admin/inventario.html" class="menu-item">
+          <span>📈</span> Inventario
+        </a>
+        <a href="/admin/mesas.html" class="menu-item">
+          <span>🪑</span> Mesas y Pedidos
+        </a>
+        <a href="/admin/chatbots.html" class="menu-item active">
+          <span>🤖</span> Chatbots IA
+        </a>
+        <a href="/" class="menu-item" target="_blank">
+          <span>🍽️</span> Ver Menú Público
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        <button class="btn-logout" id="btn-logout">Cerrar Sesión</button>
+      </div>
+    </aside>
+
+    <!-- ═══ CONTENIDO PRINCIPAL ═══════════════════════════════════════════ -->
+    <main class="main-content">
+
+      <!-- Header -->
+      <div class="dashboard-header animate-fade-in-up">
+        <div class="dashboard-title">
+          <h2>🤖 Inteligencia Artificial</h2>
+          <p>Gestiona los asistentes virtuales de WhatsApp</p>
+        </div>
+      </div>
+
+      <div class="bots-container animate-fade-in-up" style="animation-delay: 0.1s;">
+        
+        <!-- BOT CLIENTES -->
+        <div class="bot-card">
+          <div class="bot-header">
+            <div class="bot-icon">💬</div>
+            <div class="bot-title">
+              <h3>Bot Clientes</h3>
+              <p>Atiende pedidos y muestra el menú.</p>
+            </div>
+          </div>
+          
+          <div class="qr-container" id="qr-client-container">
+            <div class="status-badge disconnected" id="status-client-badge">
+              <span>●</span> Desconectado
+            </div>
+            <img id="qr-client-image" src="" alt="Código QR" style="display:none;">
+            <p id="qr-client-text" style="color:var(--text-secondary); font-size:14px; margin:0;">
+              Esperando código QR...
+            </p>
+          </div>
+
+          <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <button class="btn-primary" id="btn-reconnect-client" style="flex: 1;">
+              🔄 Reconectar
+            </button>
+            <button class="btn-secondary" id="btn-logout-client" style="flex: 1; border-color: var(--danger); color: var(--danger);">
+              🚫 Desvincular
+            </button>
+          </div>
+        </div>
+
+        <!-- BOT ADMIN -->
+        <div class="bot-card">
+          <div class="bot-header">
+            <div class="bot-icon">👔</div>
+            <div class="bot-title">
+              <h3>Bot Administrativo</h3>
+              <p>Gestiona el inventario y métricas.</p>
+            </div>
+          </div>
+          
+          <div class="qr-container" id="qr-admin-container">
+            <div class="status-badge disconnected" id="status-admin-badge">
+              <span>●</span> Desconectado
+            </div>
+            <img id="qr-admin-image" src="" alt="Código QR" style="display:none;">
+            <p id="qr-admin-text" style="color:var(--text-secondary); font-size:14px; margin:0;">
+              Esperando código QR...
+            </p>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 20px;">
+            <label style="font-size:13px; color:var(--text-secondary);">Números Autorizados (separados por coma)</label>
+            <input type="text" id="input-admin-numbers" class="form-control" placeholder="+57314..., +57310...">
+            <button class="btn-secondary" id="btn-save-numbers" style="margin-top: 8px; width: 100%; padding: 8px;">💾 Guardar Números</button>
+          </div>
+
+          <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <button class="btn-primary" id="btn-reconnect-admin" style="flex: 1;">
+              🔄 Reconectar
+            </button>
+            <button class="btn-secondary" id="btn-logout-admin" style="flex: 1; border-color: var(--danger); color: var(--danger);">
+              🚫 Desvincular
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/admin/js/chatbots.js"></script>
+</body>
+</html>

@@ -247,6 +247,9 @@
         <a href="/admin/mesas.html" class="menu-item">
           <span>🪑</span> Mesas y Pedidos
         </a>
+        <a href="/admin/chatbots.html" class="menu-item">
+          <span>🤖</span> Chatbots IA
+        </a>
         <a href="/" class="menu-item" target="_blank">
           <span>🍽️</span> Ver Menú Público
         </a>
@@ -336,26 +339,7 @@
         <!-- COLUMNA 2: CONFIGURACIÓN IA & CONEXIÓN WHATSAPP -->
         <section class="sidebar-config-col">
           
-          <!-- Card de Conexión de WhatsApp -->
-          <div class="config-card-premium">
-            <h3>📱 Vinculación de WhatsApp</h3>
-            <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.4; margin-bottom: 16px;">
-              Escanea el código QR con tu celular en <strong>WhatsApp > Dispositivos Vinculados</strong> para activar el asistente de IA.
-            </p>
-            
-            <div class="qr-container" id="wa-qr-container">
-              <div class="spinner"></div>
-              <p style="color: var(--text-secondary); font-size: 13px;">Iniciando sesión del servidor...</p>
-            </div>
-            
-            <div style="margin-top: 16px; display: flex; justify-content: center;">
-              <button class="btn-secondary" id="btn-reconnect-wa" style="width: 100%;">
-                🔄 Forzar Reconexión
-              </button>
-            </div>
-          </div>
 
-          <!-- Card de Configuración del Agente IA -->
           <div class="config-card-premium">
             <h3>⚙️ Configuración del Agente IA</h3>
             
@@ -374,16 +358,7 @@
                 </small>
               </div>
 
-              <!-- Lista Blanca de WhatsApp -->
-              <div class="form-group">
-                <label for="whitelist-numbers">Números de Celular Autorizados *</label>
-                <input type="text" id="whitelist-numbers" class="form-control form-control-no-icon" placeholder="Ej: 573133288298,573001234567" required>
-                <small style="color: var(--text-muted); font-size: 11px; margin-top: 4px; display: block;">
-                  Separa los números con coma (,). Incluye el código de país sin el signo '+' (ej: 57 para Colombia). Solo estos números recibirán respuestas de la IA.
-                </small>
-              </div>
 
-              <!-- Estado del Restaurante -->
               <div class="form-group" style="display: flex; justify-content: space-between; align-items: center; margin-top: 16px;">
                 <div>
                   <label style="margin-bottom: 2px; font-weight: 700;">Restaurante Abierto</label>
