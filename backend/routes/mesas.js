@@ -6,7 +6,33 @@ const waAgent = require('../services/whatsappAgent');
 const Joi = require('joi');
 const validate = require('../middleware/validate');
 
-// GET /api/mesas/activas
+/**
+ * @swagger
+ * /api/mesas/activas:
+ *   get:
+ *     summary: Obtener mesas activas
+ *     description: Retorna todas las sesiones de mesas activas (requiere autenticación)
+ *     tags:
+ *       - Mesas
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Mesas obtenidas exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 sesiones:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Mesa'
+ *       401:
+ *         description: No autorizado - JWT requerido
+ */
 router.get('/activas', verificarJWT, async (req, res, next) => {
   try {
     const sesiones = await mesaService.getAll();

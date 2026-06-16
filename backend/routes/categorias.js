@@ -6,7 +6,30 @@ const schemas = require('../schemas');
 const { verificarJWT } = require('../middleware/auth');
 const { cacheMiddleware, invalidateCachePattern } = require('../middleware/cache');
 
-// GET /api/categorias (PÚBLICO - CACHEADO 10 minutos)
+/**
+ * @swagger
+ * /api/categorias:
+ *   get:
+ *     summary: Obtener categorías públicas
+ *     description: Retorna todas las categorías de productos disponibles (cacheado 10 min)
+ *     tags:
+ *       - Categorías
+ *     responses:
+ *       200:
+ *         description: Lista de categorías obtenida exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Categoria'
+ *       500:
+ *         description: Error del servidor
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 router.get('/', cacheMiddleware('categorias_public', 600), async (req, res, next) => {
   try {
     const categorias = await categoriaService.getAll();

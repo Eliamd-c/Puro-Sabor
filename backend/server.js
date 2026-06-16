@@ -7,6 +7,8 @@ const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const { Server } = require('socket.io');
+const swaggerUi = require('swagger-ui-express');
+const swaggerSpecs = require('./config/swagger');
 
 const app = express();
 const server = http.createServer(app);
@@ -178,6 +180,14 @@ app.use((req, res, next) => {
   logger.info({ method: req.method, url: req.url });
   next();
 });
+
+// ── Swagger Documentation ──────────────────────────────────────────────────
+app.use('/api-docs', swaggerUi.serve);
+app.get('/api-docs', swaggerUi.setup(swaggerSpecs, {
+  swaggerOptions: {
+    persistAuthorization: true
+  }
+}));
 
 // ── Rutas API ──────────────────────────────────────────────────────────────
 const authRoutes = require('./routes/auth');

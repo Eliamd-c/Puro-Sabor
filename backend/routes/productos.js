@@ -7,7 +7,47 @@ const { verificarJWT } = require('../middleware/auth');
 const { upload, optimizeImage, handleImageUpload } = require('../middleware/imageUpload');
 const { cacheMiddleware, invalidateCachePattern } = require('../middleware/cache');
 
-// GET /api/productos?page=1&limit=20&categoria_id=5&search=migas
+/**
+ * @swagger
+ * /api/productos:
+ *   get:
+ *     summary: Obtener productos con paginación
+ *     description: Retorna productos paginados con soporte para búsqueda y filtrado por categoría
+ *     tags:
+ *       - Productos
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Número de página
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *         description: Items por página
+ *       - in: query
+ *         name: categoria_id
+ *         schema:
+ *           type: integer
+ *         description: Filtrar por categoría
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Búsqueda por nombre o descripción
+ *     responses:
+ *       200:
+ *         description: Productos obtenidos exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/PaginatedResponse'
+ *       500:
+ *         description: Error del servidor
+ */
 router.get('/', async (req, res, next) => {
   try {
     const page = parseInt(req.query.page) || 1;
