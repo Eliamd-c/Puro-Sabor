@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const waAgent = require('../services/whatsappAgent');
 const configService = require('../services/configService');
-const { verificarJWT } = require('../middlewares/auth');
+const { verificarJWT } = require('../middleware/auth');
 
 // GET /api/chatbots/:type/status
 router.get('/:type/status', verificarJWT, (req, res) => {

@@ -196,18 +196,14 @@ const productosRoutes = require('./routes/productos');
 const mesasRoutes = require('./routes/mesas');
 const configRoutes = require('./routes/config');
 const inventarioRoutes = require('./routes/inventario');
-const pedidosRoutes = require('./routes/pedidos');
-const statsRoutes = require('./routes/stats');
 const chatbotsRoutes = require('./routes/chatbots');
 
 app.use('/api/admin', authRoutes);
 app.use('/api/categorias', categoriasRoutes);
 app.use('/api/productos', productosRoutes);
 app.use('/api/mesas', mesasRoutes);
-app.use('/api/pedidos', pedidosRoutes);
 app.use('/api/config', configRoutes);
 app.use('/api/inventario', inventarioRoutes);
-app.use('/api/stats', statsRoutes);
 app.use('/api/chatbots', chatbotsRoutes);
 
 // ── Archivos estáticos ─────────────────────────────────────────────────────
