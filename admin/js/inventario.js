@@ -60,6 +60,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Cargar Datos Iniciales
     cargarProductos();
+    loadAdminBotStatus();
+    loadAdminNumbers();
     cargarConfiguracionIA();
 
     // Conectar por WebSockets
@@ -298,8 +300,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
 
-      // Escuchar cambios de estado del bot de WhatsApp
-      socket.on('whatsapp_status', (data) => {
+      // Escuchar cambios del admin bot
+      socket.on('whatsapp_admin_status', (data) => updateAdminBotUI(data.status, data.qr, data.error));
         console.log('[Socket] WhatsApp Status recibido:', data);
         actualizarEstadoWhatsApp(data.status, data.qr, data.error);
       });
@@ -607,6 +609,118 @@ document.addEventListener('DOMContentLoaded', () => {
           ⚠️ ${mensaje}
         </td>
       </tr>`;
+  }
+
+  // --- ADMIN BOT LOGIC ---
+  const botAdmin = {
+    badge: document.getElementById('status-admin-badge'),
+    image: document.getElementById('qr-admin-image'),
+    text: document.getElementById('qr-admin-text'),
+    btnReconnect: document.getElementById('btn-reconnect-admin'),
+    btnLogout: document.getElementById('btn-logout-admin')
+  };
+
+  const inputAdminNumbers = document.getElementById('input-admin-numbers');
+  const btnSaveNumbers = document.getElementById('btn-save-numbers');
+
+  async function loadAdminBotStatus() {
+    try {
+      const res = await fetch(`/api/chatbots/admin/status`, { headers: { 'Authorization': `Bearer ${token}` } });
+      const data = await res.json();
+      if (data.success) {
+        updateAdminBotUI(data.status, data.qr);
+      }
+    } catch (err) {
+      console.error('Error loading admin bot status:', err);
+    }
+  }
+
+  async function loadAdminNumbers() {
+    try {
+      const res = await fetch('/api/config', { headers: { 'Authorization': `Bearer ${token}` } });
+      const data = await res.json();
+      if (data.success) {
+        if(inputAdminNumbers) inputAdminNumbers.value = data.data.admin_whatsapp_numbers || '';
+      }
+    } catch (err) {
+      console.error('Error loading config:', err);
+    }
+  }
+
+  if (btnSaveNumbers) {
+    btnSaveNumbers.addEventListener('click', async () => {
+      try {
+        const res = await fetch('/api/config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ admin_whatsapp_numbers: inputAdminNumbers.value })
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert('Números autorizados guardados correctamente.');
+        } else {
+          alert('Error al guardar: ' + data.message);
+        }
+      } catch (err) {
+        alert('Error de conexión al guardar.');
+      }
+    });
+  }
+
+  if (botAdmin.btnReconnect) {
+    botAdmin.btnReconnect.addEventListener('click', async () => {
+      botAdmin.btnReconnect.disabled = true;
+      try {
+        await fetch(`/api/chatbots/admin/reconnect`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+      } catch (err) {
+        console.error('Error reconnecting', err);
+      }
+      setTimeout(() => { botAdmin.btnReconnect.disabled = false; }, 3000);
+    });
+  }
+
+  if (botAdmin.btnLogout) {
+    botAdmin.btnLogout.addEventListener('click', async () => {
+      if (!confirm(`¿Estás seguro de desvincular el Bot ADMINISTRATIVO?`)) return;
+      botAdmin.btnLogout.disabled = true;
+      try {
+        await fetch(`/api/chatbots/admin/logout`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+      } catch (err) {
+        console.error('Error logout', err);
+      }
+      setTimeout(() => { botAdmin.btnLogout.disabled = false; }, 3000);
+    });
+  }
+
+  function updateAdminBotUI(status, qr = null, error = null) {
+    if (!botAdmin.badge) return;
+    botAdmin.badge.className = 'status-badge';
+    if (status === 'ready') {
+      botAdmin.badge.classList.add('connected');
+      botAdmin.badge.innerHTML = '<span>●</span> Conectado';
+      botAdmin.image.style.display = 'none';
+      botAdmin.text.innerText = 'Bot funcionando correctamente.';
+    } else if (status === 'qr') {
+      botAdmin.badge.classList.add('loading');
+      botAdmin.badge.innerHTML = '<span>●</span> Escanea el QR';
+      if (qr) {
+        botAdmin.image.src = qr;
+        botAdmin.image.style.display = 'block';
+        botAdmin.text.style.display = 'none';
+      }
+    } else if (status === 'loading') {
+      botAdmin.badge.classList.add('loading');
+      botAdmin.badge.innerHTML = '<span>●</span> Conectando...';
+      botAdmin.image.style.display = 'none';
+      botAdmin.text.style.display = 'block';
+      botAdmin.text.innerText = 'Inicializando cliente...';
+    } else {
+      botAdmin.badge.classList.add('disconnected');
+      botAdmin.badge.innerHTML = '<span>●</span> Desconectado';
+      botAdmin.image.style.display = 'none';
+      botAdmin.text.style.display = 'block';
+      botAdmin.text.innerText = error || 'El bot no está enlazado a ningún dispositivo.';
+    }
   }
 
   // --- EJECUTAR ---

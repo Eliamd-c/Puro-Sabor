@@ -27,18 +27,9 @@ document.addEventListener('DOMContentLoaded', () => {
       text: document.getElementById('qr-client-text'),
       btnReconnect: document.getElementById('btn-reconnect-client'),
       btnLogout: document.getElementById('btn-logout-client')
-    },
-    admin: {
-      badge: document.getElementById('status-admin-badge'),
-      image: document.getElementById('qr-admin-image'),
-      text: document.getElementById('qr-admin-text'),
-      btnReconnect: document.getElementById('btn-reconnect-admin'),
-      btnLogout: document.getElementById('btn-logout-admin')
     }
   };
 
-  const inputAdminNumbers = document.getElementById('input-admin-numbers');
-  const btnSaveNumbers = document.getElementById('btn-save-numbers');
   const btnLogoutGlobal = document.getElementById('btn-logout');
 
   // Socket
@@ -148,16 +139,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Socket listeners
   socket.on('whatsapp_client_status', (data) => updateUI('client', data.status, data.qr, data.error));
-  socket.on('whatsapp_admin_status', (data) => updateUI('admin', data.status, data.qr, data.error));
 
-  btnLogoutGlobal.addEventListener('click', () => {
-    localStorage.removeItem('puro_sabor_admin_token');
-    document.cookie = 'puro_sabor_admin_token=; Max-Age=-99999999;';
-    window.location.href = '/admin/';
-  });
+  if(btnLogoutGlobal) {
+    btnLogoutGlobal.addEventListener('click', () => {
+      localStorage.removeItem('puro_sabor_admin_token');
+      document.cookie = 'puro_sabor_admin_token=; Max-Age=-99999999;';
+      window.location.href = '/admin/';
+    });
+  }
 
   // Init
   loadStatus('client');
-  loadStatus('admin');
-  loadConfig();
 });
