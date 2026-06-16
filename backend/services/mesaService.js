@@ -27,8 +27,8 @@ class MesaService {
     }
     
     await dbAsync.run(
-      "INSERT INTO sesiones_mesa (mesa_numero, estado, solicitada_por) VALUES (?, 'activa', ?)",
-      [mesaNumero, solicitadaPor]
+      "INSERT INTO sesiones_mesa (mesa_numero, estado) VALUES (?, 'activa')",
+      [mesaNumero]
     );
     
     return await this.getSession(mesaNumero);
