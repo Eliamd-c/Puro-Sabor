@@ -1,24 +1,123 @@
-const { makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers, downloadMediaMessage } = require('@whiskeysockets/baileys');
+const { makeWASocket, DisconnectReason, Browsers, downloadMediaMessage, proto, initAuthCreds, BufferJSON } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const qrcode = require('qrcode');
 const { GoogleGenerativeAI, SchemaType } = require('@google/generative-ai');
 const db = require('../config/database');
-const fs = require('fs');
-const path = require('path');
+const { Pool } = require('pg');
+require('dotenv').config({ path: require('path').join(__dirname, '..', '..', '.env') });
 
-const os = require('os');
+// Pool directo a Supabase para operaciones de auth (evita conflictos con el adaptador principal)
+const pgPool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+});
 
 let client = null;
 let botStatus = 'disconnected'; // disabled, disconnected, loading, qr, ready
 let latestQrDataUrl = null;
 
-// Migrar la carpeta de autenticación a los archivos temporales de Hostinger (/tmp)
-// Esto evita que Hostinger reinicie el servidor entero cada vez que se guarda una llave de encriptación.
-const authFolder = path.join(os.tmpdir(), 'purosabor_baileys_auth_info');
-const lockFile = path.join(os.tmpdir(), 'purosabor_whatsapp.lock');
-
 // Evitar múltiples intentos de reconexión paralelos
 let isReconnecting = false;
+
+// ─── Adaptador de Auth en Supabase ───────────────────────────────────────────
+// Reemplaza useMultiFileAuthState (que usa /tmp) por una versión que usa la BD.
+async function useSupabaseAuthState() {
+  async function readData(key) {
+    try {
+      const res = await pgPool.query('SELECT value FROM wa_auth WHERE key = $1', [key]);
+      if (res.rows.length === 0) return null;
+      return JSON.parse(res.rows[0].value, BufferJSON.reviver);
+    } catch {
+      return null;
+    }
+  }
+
+  async function writeData(key, value) {
+    const serialized = JSON.stringify(value, BufferJSON.replacer);
+    await pgPool.query(
+      `INSERT INTO wa_auth (key, value, updated_at) VALUES ($1, $2, NOW())
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+      [key, serialized]
+    );
+  }
+
+  async function removeData(key) {
+    await pgPool.query('DELETE FROM wa_auth WHERE key = $1', [key]);
+  }
+
+  const creds = (await readData('creds')) || initAuthCreds();
+
+  return {
+    state: {
+      creds,
+      keys: {
+        get: async (type, ids) => {
+          const data = {};
+          for (const id of ids) {
+            const val = await readData(`${type}-${id}`);
+            if (val) data[id] = val;
+          }
+          return data;
+        },
+        set: async (data) => {
+          for (const [type, typeData] of Object.entries(data)) {
+            for (const [id, val] of Object.entries(typeData)) {
+              const key = `${type}-${id}`;
+              if (val) {
+                await writeData(key, val);
+              } else {
+                await removeData(key);
+              }
+            }
+          }
+        }
+      }
+    },
+    saveCreds: async () => {
+      await writeData('creds', creds);
+    }
+  };
+}
+
+// ─── Lock distribuido en Supabase ────────────────────────────────────────────
+// Reemplaza el lock de archivo en /tmp por uno en la base de datos.
+const LOCK_KEY = 'whatsapp_lock_pid';
+const LOCK_TTL_MS = 30000; // 30 segundos sin renovar = lock muerto
+
+async function tryAcquireLockDB() {
+  const myPid = process.pid.toString();
+  const now = new Date();
+  const expiry = new Date(now.getTime() - LOCK_TTL_MS);
+
+  // Intentar leer el lock actual
+  const res = await pgPool.query('SELECT value, updated_at FROM wa_auth WHERE key = $1', [LOCK_KEY]);
+
+  if (res.rows.length > 0) {
+    const lockPid = res.rows[0].value;
+    const lockTime = new Date(res.rows[0].updated_at);
+
+    // Si el lock es nuestro o está expirado, lo tomamos
+    if (lockPid !== myPid && lockTime > expiry) {
+      return false; // Otro proceso activo tiene el lock
+    }
+  }
+
+  // Tomar/renovar el lock
+  await pgPool.query(
+    `INSERT INTO wa_auth (key, value, updated_at) VALUES ($1, $2, NOW())
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+    [LOCK_KEY, myPid]
+  );
+  return true;
+}
+
+async function releaseLockDB() {
+  await pgPool.query('DELETE FROM wa_auth WHERE key = $1', [LOCK_KEY]);
+}
+
+async function clearSupabaseAuth() {
+  await pgPool.query("DELETE FROM wa_auth WHERE key != $1", [LOCK_KEY]);
+}
 
 // Helpers para base de datos
 function getConfig(key) {
@@ -83,47 +182,23 @@ function adjustStockDb(id, delta) {
   });
 }
 
-// Sistema de Candado (Lock) para entornos de procesos múltiples (Hostinger/Phusion Passenger)
-function tryAcquireLock() {
-  try {
-    try {
-      const fd = fs.openSync(lockFile, 'wx'); // Falla atómicamente si existe
-      fs.writeSync(fd, process.pid.toString());
-      fs.closeSync(fd);
-      return true;
-    } catch (e) {
-      if (e.code === 'EEXIST') {
-        const pidStr = fs.readFileSync(lockFile, 'utf8');
-        const pid = parseInt(pidStr, 10);
-        if (pid && pid !== process.pid) {
-          try {
-            process.kill(pid, 0); // Lanza error si el proceso NO existe
-            return false; // El proceso dueño del candado sigue vivo
-          } catch (err) {
-            // El proceso anterior murió sin limpiar el candado (Fantasma). Lo robamos.
-            fs.writeFileSync(lockFile, process.pid.toString(), 'utf8');
-            return true;
-          }
-        }
-        return true; // Nosotros ya somos los dueños
-      }
-      return false;
-    }
-  } catch (err) {
-    console.error('[WA Agent] Error verificando el lock:', err.message);
-    return false;
-  }
-}
+// (Lock de archivo eliminado — reemplazado por tryAcquireLockDB() basado en Supabase)
 
-// Inicialización de WhatsApp usando Baileys
+// Inicialización de WhatsApp usando Baileys con Auth en Supabase
 async function inicializarWhatsApp(io) {
   if (isReconnecting) return;
-  
-  if (!tryAcquireLock()) {
-    console.log('[WA Agent] 🔒 Otro proceso (Worker) ya tiene el control de WhatsApp. Ignorando inicialización en este clon.');
+
+  try {
+    const hasLock = await tryAcquireLockDB();
+    if (!hasLock) {
+      console.log('[WA Agent] 🔒 Otro proceso ya tiene el control de WhatsApp en Supabase. Ignorando.');
+      return;
+    }
+  } catch (err) {
+    console.error('[WA Agent] Error verificando lock en Supabase:', err.message);
     return;
   }
-  
+
   isReconnecting = true;
 
   if (client) {
@@ -142,23 +217,24 @@ async function inicializarWhatsApp(io) {
     latestQrDataUrl = null;
     io.to('admin').emit('whatsapp_status', { status: botStatus });
     isReconnecting = false;
+    await releaseLockDB();
     return;
   }
 
-  console.log('[WA Agent] Iniciando cliente de WhatsApp con Baileys...');
+  console.log('[WA Agent] Iniciando cliente de WhatsApp con Baileys (Auth en Supabase)...');
   botStatus = 'loading';
   latestQrDataUrl = null;
   io.to('admin').emit('whatsapp_status', { status: botStatus });
 
   try {
-    const { state, saveCreds } = await useMultiFileAuthState(authFolder);
+    const { state, saveCreds } = await useSupabaseAuthState();
 
     client = makeWASocket({
       auth: state,
       printQRInTerminal: false,
-      logger: pino({ level: 'silent' }), // Ocultar los logs ruidosos de baileys
-      browser: Browsers.macOS('Desktop'), // Usar una firma de navegador estándar para evitar bloqueos
-      syncFullHistory: false // Prevenir que colapse la memoria al conectarse
+      logger: pino({ level: 'silent' }),
+      browser: Browsers.macOS('Desktop'),
+      syncFullHistory: false
     });
 
     isReconnecting = false;
@@ -185,10 +261,13 @@ async function inicializarWhatsApp(io) {
         console.log('[WA Agent] Conexión cerrada. Reconectar:', shouldReconnect);
         
         if (statusCode === DisconnectReason.loggedOut) {
-          // El usuario cerró sesión en su celular
+          // El usuario cerró sesión en su celular — borrar credenciales de Supabase
           try {
-            fs.rmSync(authFolder, { recursive: true, force: true });
-          } catch(e) {}
+            await clearSupabaseAuth();
+            console.log('[WA Agent] Sesión cerrada remotamente. Auth limpiada de Supabase.');
+          } catch(e) {
+            console.error('[WA Agent] Error limpiando auth tras logout remoto:', e.message);
+          }
         }
 
         botStatus = 'disconnected';
@@ -527,12 +606,15 @@ module.exports = {
       }
     }
     try {
-      fs.rmSync(authFolder, { recursive: true, force: true });
-      if (fs.existsSync(lockFile)) fs.unlinkSync(lockFile);
-    } catch (e) {}
+      await clearSupabaseAuth();
+      await releaseLockDB();
+      console.log('[WA Agent] Credenciales eliminadas de Supabase.');
+    } catch (e) {
+      console.error('[WA Agent] Error limpiando auth en Supabase:', e.message);
+    }
     botStatus = 'disconnected';
     io.to('admin').emit('whatsapp_status', { status: botStatus, error: 'Sesión cerrada exitosamente.' });
-    
+
     // Reiniciamos después de 2 segundos para generar QR de nuevo
     setTimeout(() => inicializarWhatsApp(io), 2000);
   }
