@@ -1,0 +1,283 @@
+/* Dark Mode Theme - Puro Sabor */
+
+:root {
+  --color-primary: #d4531f;
+  --color-secondary: #f59e0b;
+  --color-danger: #ef4444;
+  --color-success: #10b981;
+
+  /* Light Mode (Default) */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8fafc;
+  --bg-tertiary: #f1f5f9;
+  --text-primary: #1f2937;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --border-color: #e5e7eb;
+  --shadow-color: rgba(0, 0, 0, 0.1);
+  --card-bg: #ffffff;
+  --input-bg: #f9fafb;
+  --input-border: #d1d5db;
+  --hover-bg: #f3f4f6;
+  --overlay-bg: rgba(0, 0, 0, 0.5);
+}
+
+/* Dark Mode CSS Variables */
+html.dark-mode {
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-tertiary: #334155;
+  --text-primary: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --border-color: #475569;
+  --shadow-color: rgba(0, 0, 0, 0.3);
+  --card-bg: #1e293b;
+  --input-bg: #0f172a;
+  --input-border: #475569;
+  --hover-bg: #334155;
+  --overlay-bg: rgba(0, 0, 0, 0.8);
+}
+
+/* ═══════════════════════════════════════════════════════════════ */
+/* DARK MODE OVERRIDES */
+/* ═══════════════════════════════════════════════════════════════ */
+
+html.dark-mode body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+/* Header */
+html.dark-mode .sticky-header {
+  background-color: var(--bg-secondary);
+  border-bottom-color: var(--border-color);
+  box-shadow: 0 2px 8px var(--shadow-color);
+}
+
+html.dark-mode .brand-text h1,
+html.dark-mode .brand-text p {
+  color: var(--text-primary);
+}
+
+/* Hero Section */
+html.dark-mode .hero-section {
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+}
+
+html.dark-mode .hero-title,
+html.dark-mode .hero-subtitle {
+  color: var(--text-primary);
+}
+
+/* Search Box */
+html.dark-mode .search-box {
+  background-color: var(--input-bg);
+  border-color: var(--input-border);
+}
+
+html.dark-mode .search-box input {
+  background-color: var(--input-bg);
+  color: var(--text-primary);
+  border-color: var(--input-border);
+}
+
+html.dark-mode .search-box input::placeholder {
+  color: var(--text-muted);
+}
+
+/* Categories */
+html.dark-mode .categories-scroll {
+  background-color: var(--bg-secondary);
+}
+
+html.dark-mode .category-tab {
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border-color: var(--border-color);
+}
+
+html.dark-mode .category-tab.active {
+  background-color: var(--color-primary);
+  color: white;
+}
+
+/* Cards */
+html.dark-mode .secondary-card {
+  background-color: var(--card-bg);
+  border-color: var(--border-color);
+  box-shadow: 0 2px 8px var(--shadow-color);
+}
+
+html.dark-mode .secondary-card-title,
+html.dark-mode .secondary-card-price {
+  color: var(--text-primary);
+}
+
+/* Modals */
+html.dark-mode .modal-overlay {
+  background-color: var(--overlay-bg);
+}
+
+html.dark-mode .modal-content {
+  background-color: var(--card-bg);
+  border-color: var(--border-color);
+}
+
+html.dark-mode .modal-title,
+html.dark-mode .modal-category,
+html.dark-mode .modal-desc {
+  color: var(--text-primary);
+}
+
+html.dark-mode .modal-price {
+  color: var(--color-primary);
+}
+
+/* Buttons */
+html.dark-mode .btn-primary,
+html.dark-mode .btn-add-to-cart,
+html.dark-mode .btn-checkout,
+html.dark-mode .btn-slide-action {
+  background-color: var(--color-primary);
+  color: white;
+}
+
+html.dark-mode .btn-primary:hover,
+html.dark-mode .btn-add-to-cart:hover,
+html.dark-mode .btn-checkout:hover,
+html.dark-mode .btn-slide-action:hover {
+  background-color: #c64a1a;
+}
+
+/* Cart */
+html.dark-mode .cart-overlay {
+  background-color: var(--overlay-bg);
+}
+
+html.dark-mode .cart-panel {
+  background-color: var(--card-bg);
+  border-color: var(--border-color);
+}
+
+html.dark-mode .cart-item {
+  background-color: var(--bg-tertiary);
+  border-color: var(--border-color);
+}
+
+html.dark-mode .cart-item-title,
+html.dark-mode .cart-item-price {
+  color: var(--text-primary);
+}
+
+html.dark-mode .empty-cart-msg {
+  color: var(--text-muted);
+}
+
+/* Swiper Carousel */
+html.dark-mode .swiper-slide {
+  background-color: var(--card-bg);
+}
+
+html.dark-mode .slide-title,
+html.dark-mode .slide-desc {
+  color: var(--text-primary);
+}
+
+/* Section Headers */
+html.dark-mode .section-title {
+  color: var(--text-primary);
+}
+
+html.dark-mode .section-tagline {
+  color: var(--text-secondary);
+}
+
+/* Input Fields */
+html.dark-mode input,
+html.dark-mode textarea,
+html.dark-mode select {
+  background-color: var(--input-bg);
+  color: var(--text-primary);
+  border-color: var(--input-border);
+}
+
+html.dark-mode input::placeholder,
+html.dark-mode textarea::placeholder {
+  color: var(--text-muted);
+}
+
+/* Loader */
+html.dark-mode .spinner {
+  border-color: var(--border-color);
+  border-top-color: var(--color-primary);
+}
+
+html.dark-mode .loader-container p {
+  color: var(--text-primary);
+}
+
+/* Links */
+html.dark-mode a {
+  color: var(--color-primary);
+}
+
+html.dark-mode a:hover {
+  opacity: 0.8;
+}
+
+/* Badge */
+html.dark-mode #cart-badge {
+  background-color: var(--color-danger);
+  color: white;
+}
+
+/* Size Options */
+html.dark-mode .size-option-btn {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+html.dark-mode .size-option-btn.active {
+  background-color: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
+/* Animations remain same */
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) {
+    --bg-primary: #0f172a;
+    --bg-secondary: #1e293b;
+    --bg-tertiary: #334155;
+    --text-primary: #f1f5f9;
+    --text-secondary: #cbd5e1;
+    --text-muted: #94a3b8;
+    --border-color: #475569;
+    --shadow-color: rgba(0, 0, 0, 0.3);
+    --card-bg: #1e293b;
+    --input-bg: #0f172a;
+    --input-border: #475569;
+    --hover-bg: #334155;
+    --overlay-bg: rgba(0, 0, 0, 0.8);
+  }
+}
+
+/* Print Mode - Always Light */
+@media print {
+  html {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f8fafc;
+    --text-primary: #1f2937;
+  }
+}
+
+/* Transition smooth */
+html {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+html.dark-mode {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
