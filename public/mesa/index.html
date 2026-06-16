@@ -3,6 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#d4531f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Puro Sabor">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/png" href="/assets/icons/icon-192.png">
+  <link rel="apple-touch-icon" href="/assets/icons/icon-192.png">
   <title>Puro Sabor | Haz tu Pedido</title>
   <meta name="description" content="Realiza tu pedido directamente desde tu mesa en Puro Sabor. Cocina artesanal al carbón.">
 
@@ -203,5 +210,20 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="/js/api.js"></script>
   <script src="/mesa/js/mesa.js"></script>
+
+  <!-- Service Worker Registration -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/js/service-worker.js')
+          .then((registration) => {
+            console.log('✅ Service Worker registrado:', registration);
+          })
+          .catch((error) => {
+            console.warn('⚠️ Error registrando Service Worker:', error);
+          });
+      });
+    }
+  </script>
 </body>
 </html>
