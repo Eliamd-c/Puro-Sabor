@@ -51,9 +51,10 @@ const db = {
     }
     const pgSql = convertQueryToPg(sql);
     
-    // Si es un INSERT, PostgreSQL necesita "RETURNING id" para emular el "this.lastID" de SQLite
+    // Si es un INSERT, PostgreSQL necesita "RETURNING *" para emular el "this.lastID" de SQLite.
+    // Usamos * en lugar de id porque hay tablas (como config) que no tienen columna id.
     const isInsert = pgSql.trim().toUpperCase().startsWith('INSERT');
-    const finalSql = isInsert ? `${pgSql} RETURNING id` : pgSql;
+    const finalSql = isInsert ? `${pgSql} RETURNING *` : pgSql;
 
     pool.query(finalSql, params, (err, result) => {
       if (err) {
