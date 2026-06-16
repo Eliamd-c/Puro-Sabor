@@ -1,54 +1,43 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../config/database');
+const configService = require('../services/configService');
 const { verificarJWT } = require('../middleware/auth');
 
-// GET /api/config — Obtener configuración pública (número WA, dominio, nombre)
-router.get('/', (req, res) => {
-  db.all('SELECT key, value FROM config', [], (err, rows) => {
-    if (err) {
-      return res.status(500).json({ success: false, message: 'Error al obtener configuración.', error: err.message });
-    }
-    const config = {};
-    rows.forEach(r => { config[r.key] = r.value; });
-    res.json({ success: true, data: config });
-  });
+// GET /api/config/:key (Público, para cosas como mesas_activadas)
+router.get('/:key', async (req, res, next) => {
+  try {
+    const value = await configService.getConfig(req.params.key);
+    res.json({
+      success: true,
+      key: req.params.key,
+      value
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
-// PUT /api/config — Actualizar uno o varios valores de configuración (admin)
-router.put('/', verificarJWT, (req, res) => {
-  const updates = req.body; // { key: value, key2: value2, ... }
-
-  if (!updates || Object.keys(updates).length === 0) {
-    return res.status(400).json({ success: false, message: 'No se recibieron datos de configuración.' });
-  }
-
-  // Claves permitidas para actualizar
-  const CLAVES_PERMITIDAS = ['whatsapp_numero', 'dominio_base', 'restaurante_nombre', 'mesas_timeout_horas'];
-
-  const stmt = db.prepare(`
-    INSERT INTO config (key, value, updated_at)
-    VALUES (?, ?, CURRENT_TIMESTAMP)
-    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
-  `);
-
-  let errores = [];
-  Object.entries(updates).forEach(([key, value]) => {
-    if (!CLAVES_PERMITIDAS.includes(key)) {
-      errores.push(`Clave no permitida: ${key}`);
-      return;
+// POST /api/config (Admin)
+router.post('/', verificarJWT, async (req, res, next) => {
+  try {
+    const keys = Object.keys(req.body);
+    for (const key of keys) {
+      await configService.setConfig(key, req.body[key]);
     }
-    stmt.run([key, String(value)], (err) => {
-      if (err) errores.push(`Error al actualizar ${key}: ${err.message}`);
+    
+    // Notificar a todos los clientes (ej. activar_mesas = 1)
+    const io = req.app.get('io');
+    if (io && req.body.hasOwnProperty('activar_mesas')) {
+      io.emit('config_actualizada', { activar_mesas: req.body.activar_mesas });
+    }
+    
+    res.json({
+      success: true,
+      message: 'Configuración actualizada.'
     });
-  });
-
-  stmt.finalize((err) => {
-    if (err || errores.length > 0) {
-      return res.status(500).json({ success: false, message: 'Error al guardar configuración.', errores });
-    }
-    res.json({ success: true, message: 'Configuración actualizada con éxito.' });
-  });
+  } catch (error) {
+    next(error);
+  }
 });
 
 module.exports = router;

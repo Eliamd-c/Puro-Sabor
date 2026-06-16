@@ -447,6 +447,14 @@ async function procesarMensajeEntrante(message, sock, io) {
     if (mediaPart) contentParts.push(mediaPart);
     if (body) contentParts.push(body);
 
+    // Emitir estado al administrador
+    io.to('admin').emit('whatsapp_message', { 
+      type: 'system', 
+      sender: 'Sistema', 
+      text: '🤖 Bot está analizando y respondiendo...', 
+      time: new Date().toLocaleTimeString() 
+    });
+
     let result = await chat.sendMessage(contentParts);
 
     // ─── Bucle de Function Calling (Gemini 2.5 while-loop pattern) ───────────

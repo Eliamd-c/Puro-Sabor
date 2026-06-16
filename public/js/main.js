@@ -10,9 +10,16 @@ document.addEventListener('DOMContentLoaded', () => {
   let productoSeleccionado = null;
   let varianteActivaId = null;
   let swiperInstance = null;
-  
+
   // Estado del Carrito
   let carrito = [];
+
+  // --- ESTADO DE PAGINACIÓN ---
+  let paginaActual = 1;
+  let tieneProductosMas = true;
+  let cargandoMas = false;
+  let ultimoFiltro = { categoria: '', busqueda: '' };
+  let lastSearchTerm = '';
 
   // --- ELEMENTOS DEL DOM ---
   const categoriesScroll = document.getElementById('categories-scroll');
@@ -47,11 +54,14 @@ document.addEventListener('DOMContentLoaded', () => {
   // --- INICIALIZACIÓN ---
   async function init() {
     mostrarCarga();
-    
-    // Cargar categorías y productos iniciales
+
+    // Cargar categorías y productos iniciales (primera página)
     categorias = await API.getCategorias();
-    productos = await API.getProductos();
-    
+    productos = await API.getProductos({ page: 1, limit: 20 });
+
+    paginaActual = 1;
+    tieneProductosMas = productos.length >= 20;
+
     // Buscar la categoría 'Migas al Carbón' para activarla por defecto
     const catMigas = categorias.find(c => c.nombre.toLowerCase().includes('migas'));
     if (catMigas) {
@@ -59,12 +69,120 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       categoriaActiva = '';
     }
-    
+
     renderCategorias();
     renderMenu();
-    
+
     // Configurar escuchas de eventos
     configurarEventos();
+    configurarLazyLoading();
+  }
+
+  // --- LAZY LOADING ---
+  async function cargarMasProductos() {
+    if (cargandoMas || !tieneProductosMas) return;
+
+    cargandoMas = true;
+    const pageToLoad = paginaActual + 1;
+    const filtros = {
+      page: pageToLoad,
+      limit: 20,
+      categoria_id: categoriaActiva || undefined,
+      search: lastSearchTerm || undefined
+    };
+
+    try {
+      const productosNuevos = await API.getProductos(filtros);
+      if (productosNuevos && productosNuevos.length > 0) {
+        productos = [...productos, ...productosNuevos];
+        paginaActual = pageToLoad;
+        tieneProductosMas = productosNuevos.length >= 20;
+        // Renderizar solo las nuevas tarjetas en lugar de todo el menú
+        anadirProductosAlMenu(productosNuevos);
+      } else {
+        tieneProductosMas = false;
+      }
+    } catch (error) {
+      console.error('Error cargando más productos:', error);
+    } finally {
+      cargandoMas = false;
+    }
+  }
+
+  function configurarLazyLoading() {
+    window.addEventListener('scroll', () => {
+      const scrollPosition = window.innerHeight + window.scrollY;
+      const pageHeight = document.body.offsetHeight;
+      // Cargar más cuando hay 500px hasta el final
+      if (scrollPosition >= pageHeight - 500 && !cargandoMas && tieneProductosMas) {
+        cargarMasProductos();
+      }
+    });
+  }
+
+  function anadirProductosAlMenu(productosNuevos) {
+    const term = lastSearchTerm.trim().toLowerCase();
+    const productosAgrupados = agruparProductos(productosNuevos);
+
+    if (term.length > 0) {
+      // En modo búsqueda, agregar a los resultados de búsqueda
+      const filtrados = productosAgrupados.filter(p =>
+        p.nombre.toLowerCase().includes(term) ||
+        (p.descripcion && p.descripcion.toLowerCase().includes(term))
+      );
+
+      if (filtrados.length === 0) return;
+
+      let gridHtml = '';
+      filtrados.forEach(prod => {
+        gridHtml += renderCardSecundaria(prod);
+      });
+
+      // Reemplazar mensaje "no encontrado" si existe
+      if (productsGrid.innerHTML.includes('not-found-container')) {
+        productsGrid.innerHTML = gridHtml;
+      } else {
+        productsGrid.innerHTML += gridHtml;
+      }
+
+      // Agregar eventos a las nuevas tarjetas
+      agregarEventosClicGrid(filtrados, '.secondary-card');
+    } else {
+      // En modo normal, no se soporta lazy loading - rerenderizar todo
+      // (Las secciones de Bebidas y Postres se muestran de una vez)
+      // Para evitar replicación, solo renderizamos si hay espacio
+      const catBebidas = categorias.find(c => c.nombre.toLowerCase().includes('bebidas'));
+      const catPostres = categorias.find(c => c.nombre.toLowerCase().includes('postres'));
+
+      const bebidasNuevas = productosAgrupados.filter(p => catBebidas && p.categoria_id === catBebidas.id);
+      const postresNuevos = productosAgrupados.filter(p => catPostres && p.categoria_id === catPostres.id);
+
+      // Encontrar secciones existentes y agregar productos
+      const containers = secondarySections.querySelectorAll('.secondary-category-container');
+
+      containers.forEach(container => {
+        const title = container.querySelector('.section-title');
+        const grid = container.querySelector('.secondary-grid');
+
+        if (title && grid) {
+          if (title.textContent.includes('Bebidas')) {
+            bebidasNuevas.forEach(prod => {
+              grid.innerHTML += renderCardSecundaria(prod);
+            });
+            if (bebidasNuevas.length > 0) {
+              agregarEventosClicGrid(bebidasNuevas, '.secondary-card');
+            }
+          } else if (title.textContent.includes('Postres')) {
+            postresNuevos.forEach(prod => {
+              grid.innerHTML += renderCardSecundaria(prod);
+            });
+            if (postresNuevos.length > 0) {
+              agregarEventosClicGrid(postresNuevos, '.secondary-card');
+            }
+          }
+        }
+      });
+    }
   }
 
   // --- RENDERS ---
@@ -179,14 +297,22 @@ document.addEventListener('DOMContentLoaded', () => {
       tab.addEventListener('click', async () => {
         document.querySelectorAll('.category-tab').forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
-        
+
         categoriaActiva = tab.getAttribute('data-id');
-        
-        // Limpiar búsqueda
+
+        // Limpiar búsqueda y resetear paginación
         searchInput.value = '';
-        
+        lastSearchTerm = '';
+        paginaActual = 1;
+        tieneProductosMas = true;
+
         mostrarCarga();
-        productos = await API.getProductos();
+        const filtros = { page: 1, limit: 20 };
+        if (categoriaActiva) {
+          filtros.categoria_id = categoriaActiva;
+        }
+        productos = await API.getProductos(filtros);
+        tieneProductosMas = productos.length >= 20;
         renderMenu();
       });
     });
@@ -591,6 +717,15 @@ document.addEventListener('DOMContentLoaded', () => {
     let timeoutBusqueda = null;
     searchInput.addEventListener('input', (e) => {
       clearTimeout(timeoutBusqueda);
+      const nuevoTermino = searchInput.value.trim().toLowerCase();
+
+      // Si cambió el término de búsqueda, resetear paginación
+      if (nuevoTermino !== lastSearchTerm) {
+        paginaActual = 1;
+        tieneProductosMas = true;
+        lastSearchTerm = nuevoTermino;
+      }
+
       timeoutBusqueda = setTimeout(() => {
         renderMenu();
       }, 300);

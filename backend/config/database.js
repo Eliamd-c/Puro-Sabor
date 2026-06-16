@@ -14,12 +14,31 @@ pool.on('error', (err, client) => {
 
 console.log('Conectado a la base de datos PostgreSQL (Supabase).');
 
-// Función auxiliar para convertir las consultas de SQLite (con "?") a PostgreSQL (con "$1", "$2")
+/**
+ * SEGURIDAD: Función auxiliar para convertir consultas SQLite → PostgreSQL
+ *
+ * ⚠️  IMPORTANTE:
+ * - Los parámetros SIEMPRE deben ser pasados en el array `params`, NUNCA como strings interpolados
+ * - Ejemplo CORRECTO:   db.get('SELECT * FROM admins WHERE usuario = ?', [usuario], ...)
+ * - Ejemplo INCORRECTO: db.get(`SELECT * FROM admins WHERE usuario = '${usuario}'`, [], ...)
+ *
+ * PostgreSQL usa prepared statements nativamente. Los placeholders ($1, $2, etc.)
+ * separados de los parámetros previenen SQL injection.
+ *
+ * Convierte:  SELECT * FROM users WHERE id = ? AND status = ?
+ * A:          SELECT * FROM users WHERE id = $1 AND status = $2
+ *
+ * Parámetros: [5, 'active']
+ *
+ * @param {string} sql - Consulta SQL con placeholders "?"
+ * @returns {string} - Consulta SQL con placeholders PostgreSQL "$1", "$2", etc.
+ */
 function convertQueryToPg(sql) {
   let i = 1;
-  // Reemplaza los "?" que no estén dentro de comillas simples (de forma básica)
-  // Como convención en nuestras rutas no hay "?" literales en las sentencias.
-  return sql.replace(/\?/g, () => `$${i++}`);
+  // Regex: mantiene strings entre comillas simples sin cambios, reemplaza "?" fuera de strings
+  return sql.replace(/'[^']*'|\?/g, (match) => {
+    return match === '?' ? `$${i++}` : match;
+  });
 }
 
 // Wrapper (Adaptador) para que las rutas existentes diseñadas para SQLite (db.run, db.get, db.all) 
@@ -189,6 +208,7 @@ async function inicializarTablas() {
         items_json TEXT NOT NULL,
         total REAL NOT NULL,
         notas TEXT,
+        estado VARCHAR(50) DEFAULT 'pendiente',
         creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (sesion_id) REFERENCES sesiones_mesa(id)
       )
@@ -206,9 +226,71 @@ async function inicializarTablas() {
     `);
 
     console.log('✅ Tablas verificadas/creadas en Postgres.');
+    await crearIndices();
     sembrarDatosIniciales();
   } catch (e) {
     console.error('Error al inicializar tablas en Postgres:', e);
+  }
+}
+
+/**
+ * Crea índices en la base de datos para optimizar queries
+ * Los índices mejoran la velocidad de búsqueda en gran medida
+ */
+async function crearIndices() {
+  try {
+    // 1. Índice para búsqueda rápida de usuarios por email/username (Login)
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_admins_usuario
+      ON admins(usuario)
+    `);
+
+    // 2. Índice para filtrado de productos por categoría
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_productos_categoria
+      ON productos(categoria_id)
+    `);
+
+    // 3. Índice para búsqueda de productos activos
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_productos_activo
+      ON productos(activo)
+      WHERE activo = 1
+    `);
+
+    // 4. Índice para búsqueda de sesiones activas
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_sesiones_estado
+      ON sesiones_mesa(estado, ultima_actividad DESC)
+    `);
+
+    // 5. Índice para historial de pedidos por mesa
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_pedidos_mesa_fecha
+      ON pedidos(mesa_numero, creado_en DESC)
+    `);
+
+    // 6. Índice para sesiones activas por mesa
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_sesiones_mesa
+      ON sesiones_mesa(mesa_numero, estado)
+    `);
+
+    // 7. Índice para historial de WhatsApp por número
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_wa_numero_fecha
+      ON wa_conversaciones(numero_telefono, creado_en DESC)
+    `);
+
+    // 8. Índice para búsqueda por config key (consultas frecuentes)
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_config_key
+      ON config(key)
+    `);
+
+    console.log('✅ Índices verificados/creados en Postgres.');
+  } catch (e) {
+    console.error('Error al crear índices en Postgres:', e);
   }
 }
 

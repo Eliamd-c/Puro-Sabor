@@ -1,4 +1,6 @@
-require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
+// ── Cargar y validar variables de entorno ─────────────────────────────────
+const env = require('./config/env');
+
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -8,11 +10,25 @@ const { Server } = require('socket.io');
 
 const app = express();
 const server = http.createServer(app);
-const PORT = process.env.PORT || 3000;
+const PORT = env.PORT;
+
+// ── CORS Config ────────────────────────────────────────────────────────────
+const allowedOrigins = [
+  env.FRONTEND_URL,
+  'https://www.restaurantepurosabor.com',
+  env.isDevelopment() ? 'http://localhost:3005' : null,
+  env.isDevelopment() ? 'http://localhost:3000' : null
+].filter(Boolean);
 
 // ── Socket.io ──────────────────────────────────────────────────────────────
 const io = new Server(server, {
-  cors: { origin: '*', methods: ['GET', 'POST'] }
+  cors: { 
+    origin: allowedOrigins,
+    methods: ['GET', 'POST'],
+    credentials: true
+  },
+  pingTimeout: 60000,
+  pingInterval: 25000
 });
 
 // Estado en memoria del carrito compartido por mesa
@@ -117,9 +133,31 @@ setInterval(() => {
 }, 30 * 60 * 1000); // Revisar cada 30 minutos
 
 // ── Middlewares ────────────────────────────────────────────────────────────
-app.use(cors({ origin: true, credentials: true }));
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true,
+  optionsSuccessStatus: 200
+}));
+
+// Compresión Gzip para reducir tamaño de respuestas
+const compression = require('compression');
+app.use(compression({
+  filter: (req, res) => {
+    // No comprimir si el cliente lo rechaza
+    if (req.headers['x-no-compression']) {
+      return false;
+    }
+    // Usar el filter default (comprime basado en Content-Type)
+    return compression.filter(req, res);
+  },
+  level: 6 // Nivel 6: buen balance entre velocidad y compresión
+}));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+const xss = require('xss-clean');
+app.use(xss());
 
 app.use((req, res, next) => {
   req.cookies = {};
@@ -135,8 +173,9 @@ app.use((req, res, next) => {
   next();
 });
 
+const logger = require('./config/logger');
 app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString().split('T')[1].slice(0, 8)}] ${req.method} ${req.url}`);
+  logger.info({ method: req.method, url: req.url });
   next();
 });
 
@@ -195,14 +234,8 @@ app.get('*', (req, res, next) => {
 });
 
 // ── Manejo de errores ──────────────────────────────────────────────────────
-app.use((err, req, res, next) => {
-  console.error('Error no controlado:', err.stack);
-  res.status(500).json({
-    success: false,
-    message: 'Ocurrió un error en el servidor.',
-    error: process.env.NODE_ENV === 'development' ? err.message : {}
-  });
-});
+const errorHandler = require('./middleware/errorHandler');
+app.use(errorHandler);
 
 // ── Iniciar servidor ───────────────────────────────────────────────────────
 server.listen(PORT, () => {

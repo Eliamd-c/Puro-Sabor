@@ -69,25 +69,86 @@ const API = {
     }
   },
 
-  // Obtener productos activos (con filtros opcionales de búsqueda y categoría)
-  async getProductos(categoria = '', buscar = '') {
+  // Obtener productos activos (con filtros opcionales de búsqueda, categoría y paginación)
+  // Retorna un array de productos (para backward compatibility cuando se llama sin parámetros)
+  async getProductos(opciones = {}) {
+    // Soportar tanto getProductos(categoria, buscar) como getProductos({page, limit, categoria_id, search})
+    let filtros = opciones;
+    if (typeof opciones === 'string') {
+      // Modo legacy: getProductos(categoria, buscar)
+      const categoria = opciones;
+      const buscar = arguments[1] || '';
+      filtros = { categoria_id: categoria, search: buscar, page: 1, limit: 20 };
+    }
+
+    const { page = 1, limit = 20, categoria_id = '', search = '' } = filtros;
+
     if (isStaticMode) {
-      return this._filtrarProductosEstaticos(categoria, buscar);
+      return this._filtrarProductosEstaticosConPaginacion(categoria_id, search, page, limit);
     }
 
     try {
       const params = new URLSearchParams();
-      if (categoria) params.append('categoria', categoria);
-      if (buscar) params.append('buscar', buscar);
+      params.append('page', page);
+      params.append('limit', limit);
+      if (categoria_id) params.append('categoria_id', categoria_id);
+      if (search) params.append('search', search);
 
       const response = await fetch(`${API_BASE_URL}/api/productos?${params.toString()}`);
       if (!response.ok) throw new Error('API no disponible');
       const result = await response.json();
       if (!result.success) throw new Error(result.message);
+      // Devolver solo el array de datos para mantener compatibilidad
       return result.data;
     } catch (error) {
       isStaticMode = true;
-      return this._filtrarProductosEstaticos(categoria, buscar);
+      return this._filtrarProductosEstaticosConPaginacion(categoria_id, search, page, limit);
+    }
+  },
+
+  // Obtener productos con información de paginación completa
+  async getProductosPaginado(opciones = {}) {
+    const { page = 1, limit = 20, categoria_id = '', search = '' } = opciones;
+
+    if (isStaticMode) {
+      const datos = this._filtrarProductosEstaticosConPaginacion(categoria_id, search, page, limit);
+      const total = this._countProductosEstaticos(categoria_id, search);
+      return {
+        data: datos,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit),
+          hasMore: page < Math.ceil(total / limit)
+        }
+      };
+    }
+
+    try {
+      const params = new URLSearchParams();
+      params.append('page', page);
+      params.append('limit', limit);
+      if (categoria_id) params.append('categoria_id', categoria_id);
+      if (search) params.append('search', search);
+
+      const response = await fetch(`${API_BASE_URL}/api/productos?${params.toString()}`);
+      if (!response.ok) throw new Error('API no disponible');
+      return await response.json();
+    } catch (error) {
+      isStaticMode = true;
+      const datos = this._filtrarProductosEstaticosConPaginacion(categoria_id, search, page, limit);
+      const total = this._countProductosEstaticos(categoria_id, search);
+      return {
+        data: datos,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit),
+          hasMore: page < Math.ceil(total / limit)
+        }
+      };
     }
   },
 
@@ -119,12 +180,52 @@ const API = {
 
     if (buscar) {
       const q = buscar.toLowerCase();
-      filtrados = filtrados.filter(p => 
-        p.nombre.toLowerCase().includes(q) || 
+      filtrados = filtrados.filter(p =>
+        p.nombre.toLowerCase().includes(q) ||
         (p.descripcion && p.descripcion.toLowerCase().includes(q))
       );
     }
 
     return filtrados;
+  },
+
+  // Helper para filtrar y paginar productos en modo estático
+  _filtrarProductosEstaticosConPaginacion(categoria_id = '', search = '', page = 1, limit = 20) {
+    let filtrados = [...STATIC_PRODUCTS];
+
+    if (categoria_id) {
+      filtrados = filtrados.filter(p => p.categoria_id === parseInt(categoria_id));
+    }
+
+    if (search) {
+      const q = search.toLowerCase();
+      filtrados = filtrados.filter(p =>
+        p.nombre.toLowerCase().includes(q) ||
+        (p.descripcion && p.descripcion.toLowerCase().includes(q))
+      );
+    }
+
+    const inicio = (page - 1) * limit;
+    const fin = inicio + limit;
+    return filtrados.slice(inicio, fin);
+  },
+
+  // Helper para contar total de productos con filtros en modo estático
+  _countProductosEstaticos(categoria_id = '', search = '') {
+    let filtrados = [...STATIC_PRODUCTS];
+
+    if (categoria_id) {
+      filtrados = filtrados.filter(p => p.categoria_id === parseInt(categoria_id));
+    }
+
+    if (search) {
+      const q = search.toLowerCase();
+      filtrados = filtrados.filter(p =>
+        p.nombre.toLowerCase().includes(q) ||
+        (p.descripcion && p.descripcion.toLowerCase().includes(q))
+      );
+    }
+
+    return filtrados.length;
   }
 };
