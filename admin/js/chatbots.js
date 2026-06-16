@@ -49,37 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Load Config (Authorized numbers)
-  async function loadConfig() {
-    try {
-      const res = await fetch('/api/config', { headers: authHeaders });
-      const data = await res.json();
-      if (data.success) {
-        inputAdminNumbers.value = data.data.admin_whatsapp_numbers || '';
-      }
-    } catch (err) {
-      console.error('Error loading config:', err);
-    }
-  }
 
-  // Save Config
-  btnSaveNumbers.addEventListener('click', async () => {
-    try {
-      const res = await fetch('/api/config', {
-        method: 'PUT',
-        headers: authHeaders,
-        body: JSON.stringify({ admin_whatsapp_numbers: inputAdminNumbers.value })
-      });
-      const data = await res.json();
-      if (data.success) {
-        alert('Números autorizados guardados correctamente.');
-      } else {
-        alert('Error al guardar: ' + data.message);
-      }
-    } catch (err) {
-      alert('Error de conexión al guardar.');
-    }
-  });
 
   // Action Buttons
   Object.keys(bots).forEach(type => {
