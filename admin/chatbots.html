@@ -159,7 +159,96 @@
           </div>
         </div>
 
+        </div>
 
+        <!-- CONFIGURACIÓN DEL BOT CLIENTES -->
+        <div class="bot-card" style="grid-column: 1 / -1; max-width: 800px; margin: 0 auto; width: 100%;">
+          <div class="bot-header">
+            <div class="bot-icon">⚙️</div>
+            <div class="bot-title">
+              <h3>Configuración del Agente IA</h3>
+              <p>Ajusta el comportamiento y conocimiento del bot.</p>
+            </div>
+          </div>
+          
+          <form id="form-config-ai" style="padding: 20px;">
+            <!-- URL del menú -->
+            <div class="form-group" style="margin-bottom: 20px;">
+              <label for="bot-menu-url" style="font-weight: 700; font-size: 13px;">Enlace del Menú Digital</label>
+              <input type="url" id="bot-menu-url" class="form-control" placeholder="Ej: https://restaurantepurosabor.com/">
+              <small style="color: var(--text-muted); font-size: 11px;">El bot enviará este enlace a los clientes para que hagan su pedido.</small>
+            </div>
+
+            <!-- System Prompt -->
+            <div class="form-group" style="margin-bottom: 20px;">
+              <label for="bot-system-prompt" style="font-weight: 700; font-size: 13px;">Personalidad del Bot (Instrucciones Secretas)</label>
+              <textarea id="bot-system-prompt" class="form-control" style="min-height: 120px; resize: vertical;" placeholder="Ej: Eres María, la asistente virtual de Puro Sabor. Eres amable, usas emojis..."></textarea>
+              <small style="color: var(--text-muted); font-size: 11px;">Define cómo debe comportarse el bot y qué tono usar.</small>
+            </div>
+
+            <!-- Gemini API Key -->
+            <div class="form-group" style="margin-bottom: 20px;">
+              <label for="gemini-key" style="font-weight: 700; font-size: 13px;">Google Gemini API Key *</label>
+              <div class="input-password-wrapper" style="display: flex; gap: 8px;">
+                <input type="password" id="gemini-key" class="form-control form-control-no-icon" placeholder="Pega tu API Key de Gemini..." required style="flex: 1;">
+                <button type="button" class="btn-secondary" id="btn-toggle-gemini-key" title="Mostrar/Ocultar API Key" style="padding: 0 12px;">
+                  👁️
+                </button>
+              </div>
+              <small style="color: var(--text-muted); font-size: 11px;">Requerido para que la IA funcione.</small>
+            </div>
+
+            <div class="form-group" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--border-color);">
+              <div>
+                <label style="margin-bottom: 2px; font-weight: 700;">Restaurante Abierto</label>
+                <p style="font-size: 11px; color: var(--text-secondary);">Si está desactivado, el bot enviará el Mensaje de Ausencia.</p>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="bot-horario-toggle">
+                <span class="slider-toggle"></span>
+              </label>
+            </div>
+
+            <!-- Mensaje de Ausencia -->
+            <div class="form-group" style="margin-bottom: 20px;">
+              <label for="bot-mensaje-ausencia" style="font-weight: 700; font-size: 13px;">Mensaje de Ausencia (Cerrado)</label>
+              <textarea id="bot-mensaje-ausencia" class="form-control" style="min-height: 80px; resize: vertical;" placeholder="Ej: Iniciamos atención el sábado desde las 6 pm."></textarea>
+            </div>
+
+            <div class="form-group" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-top: 20px; border-top: 1px solid var(--border-color);">
+              <div>
+                <label style="margin-bottom: 2px; font-weight: 700;">Activar Agente IA</label>
+                <p style="font-size: 11px; color: var(--text-secondary);">Si se apaga, el bot ignorará todos los mensajes.</p>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="bot-active-toggle">
+                <span class="slider-toggle"></span>
+              </label>
+            </div>
+
+            <div id="config-ai-alert" class="alert-box" style="display: none; padding: 10px 14px; margin-bottom: 16px;"></div>
+
+            <button type="submit" class="btn-primary" id="btn-save-ai-config" style="width: 100%; justify-content: center; margin-top: 10px;">
+              <span>💾 Guardar Configuración</span>
+            </button>
+          </form>
+        </div>
+
+        <!-- MONITOR DE ACTIVIDAD -->
+        <div class="bot-card" style="grid-column: 1 / -1; max-width: 800px; margin: 0 auto; width: 100%;">
+          <div class="bot-header">
+            <div class="bot-icon">💬</div>
+            <div class="bot-title">
+              <h3>Monitor de Actividad</h3>
+              <p>Supervisa las conversaciones del bot en tiempo real.</p>
+            </div>
+          </div>
+          <div id="ai-chat-monitor" style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: 8px; height: 350px; overflow-y: auto; padding: 16px; margin: 20px; display: flex; flex-direction: column; gap: 12px; font-size: 13px;">
+            <div id="ai-chat-empty-msg" style="text-align: center; color: var(--text-muted); margin-top: auto; margin-bottom: auto;">
+              Esperando mensajes...
+            </div>
+          </div>
+        </div>
 
       </div>
     </main>
