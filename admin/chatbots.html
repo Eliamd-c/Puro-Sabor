@@ -234,6 +234,38 @@
           </form>
         </div>
 
+        <!-- BANDEJA DE PENDIENTES (HANDOFF) -->
+        <div class="bot-card" style="grid-column: 1 / -1; max-width: 800px; margin: 0 auto; width: 100%; border: 1px solid var(--primary-light);">
+          <div class="bot-header">
+            <div class="bot-icon" style="background: rgba(231, 76, 60, 0.1); color: #e74c3c;">🚨</div>
+            <div class="bot-title">
+              <h3 style="color: #e74c3c;">Bandeja de Asistencia Humana</h3>
+              <p>Clientes en espera de respuesta por un asesor.</p>
+            </div>
+          </div>
+          <div style="padding: 20px;">
+            <div id="handoff-list" style="display: flex; flex-direction: column; gap: 10px; max-height: 250px; overflow-y: auto; margin-bottom: 20px;">
+              <div style="text-align: center; color: var(--text-muted); padding: 20px;">No hay clientes en espera. 🎉</div>
+            </div>
+
+            <!-- Caja de Respuesta Rápida (Oculta por defecto) -->
+            <div id="handoff-reply-box" style="display: none; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; margin-top: 15px;">
+              <h4 id="handoff-reply-title" style="margin-bottom: 8px; font-size: 14px;">Respondiendo a: ...</h4>
+              <p id="handoff-reply-question" style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px; font-style: italic;"></p>
+              
+              <div class="form-group" style="margin-bottom: 12px;">
+                <textarea id="handoff-reply-text" class="form-control" style="min-height: 80px; resize: vertical;" placeholder="Escribe tu respuesta al cliente aquí..."></textarea>
+                <small style="color: var(--text-muted); font-size: 11px;">Al enviar, el bot aprenderá esta respuesta y volverá a atender a este cliente.</small>
+              </div>
+              
+              <div style="display: flex; gap: 10px;">
+                <button class="btn-primary" id="btn-send-reply" style="flex: 1;">📤 Enviar y Reactivar Bot</button>
+                <button class="btn-secondary" id="btn-cancel-reply" style="flex: 0.3;">Cancelar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- MONITOR DE ACTIVIDAD -->
         <div class="bot-card" style="grid-column: 1 / -1; max-width: 800px; margin: 0 auto; width: 100%;">
           <div class="bot-header">

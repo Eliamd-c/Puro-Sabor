@@ -226,6 +226,27 @@ async function inicializarTablas() {
       )
     `);
 
+    // 9. Tabla Chatbots Paused (Asistencia Humana)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS chatbots_paused (
+        id SERIAL PRIMARY KEY,
+        telefono VARCHAR(50) NOT NULL UNIQUE,
+        nombre_cliente VARCHAR(255),
+        ultimo_mensaje TEXT,
+        fecha_pausa TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // 10. Tabla Chatbots Knowledge Base (Entrenamiento)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS chatbots_kb (
+        id SERIAL PRIMARY KEY,
+        pregunta TEXT NOT NULL,
+        respuesta TEXT NOT NULL,
+        fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     console.log('✅ Tablas verificadas/creadas en Postgres.');
     await crearIndices();
     sembrarDatosIniciales();

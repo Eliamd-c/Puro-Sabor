@@ -107,6 +107,35 @@ function obtenerHistorial(numero, botType, limite = 15) {
   });
 }
 
+// --- Nuevos helpers para Fase 2 ---
+function isChatPaused(telefono) {
+  return new Promise((resolve) => {
+    db.get('SELECT id FROM chatbots_paused WHERE telefono = ?', [telefono], (err, row) => {
+      resolve(!!row);
+    });
+  });
+}
+
+function pauseChat(telefono, nombre, ultimoMensaje) {
+  return new Promise((resolve) => {
+    // Usamos el query de Postgres: ON CONFLICT(telefono) DO UPDATE...
+    db.run(
+      'INSERT INTO chatbots_paused (telefono, nombre_cliente, ultimo_mensaje) VALUES (?, ?, ?) ON CONFLICT (telefono) DO UPDATE SET ultimo_mensaje = EXCLUDED.ultimo_mensaje, fecha_pausa = CURRENT_TIMESTAMP',
+      [telefono, nombre, ultimoMensaje],
+      () => resolve()
+    );
+  });
+}
+
+function getKnowledgeBase() {
+  return new Promise((resolve) => {
+    db.all('SELECT pregunta, respuesta FROM chatbots_kb ORDER BY fecha_creacion DESC LIMIT 50', [], (err, rows) => {
+      resolve(rows || []);
+    });
+  });
+}
+// ----------------------------------
+
 class WhatsAppBot {
   constructor(botType, io) {
     this.botType = botType; // 'client' o 'admin'
@@ -411,6 +440,14 @@ class WhatsAppBot {
 
     this.emitMessage({ type: 'in', sender: senderNumber, text: body || '[Imagen/Audio]', time: new Date().toLocaleTimeString() });
 
+    if (this.botType === 'client') {
+      const paused = await isChatPaused(senderNumber);
+      if (paused) {
+        console.log(`[WA Agent client] Chat en pausa para ${senderNumber}. Ignorando IA.`);
+        return;
+      }
+    }
+
     let systemInstruction = '';
     let tools = [];
 
@@ -457,13 +494,23 @@ class WhatsAppBot {
       const dominio = await getConfig('dominio_base') || 'https://restaurantepurosabor.com';
       const horarioActivo = await getConfig('bot_horario_activo') === '1';
       const mensajeAusencia = await getConfig('bot_mensaje_ausencia') || 'Iniciamos atención el sábado desde las 6 pm.';
+      const menuUrl = await getConfig('bot_menu_url') || dominio;
+      const customPrompt = await getConfig('bot_system_prompt') || '';
+      
+      const kb = await getKnowledgeBase();
+      let kbText = '';
+      if (kb.length > 0) {
+        kbText = '\nBASE DE CONOCIMIENTO (Aprende de aquí):\n' + kb.map(k => `Q: ${k.pregunta}\nA: ${k.respuesta}`).join('\n') + '\n';
+      }
 
       systemInstruction = 
         'Eres el recepcionista oficial de Puro Sabor.\n' +
+        (customPrompt ? `${customPrompt}\n` : '') +
         `ESTADO: ${horarioActivo ? 'ABIERTO' : 'CERRADO'}.\n` +
         (!horarioActivo ? `REGLA 1: Debes mencionar: "${mensajeAusencia}".\n` : '') +
-        'REGLA 2: Si piden menú, precios o hacer pedido, entrega siempre este link: 👉 ' + dominio + '\n' +
-        'Diles a los clientes que armen su pedido tocando el botón de carrito en ese enlace.';
+        'REGLA 2: Si piden menú, precios o hacer pedido, entrega siempre este link: 👉 ' + menuUrl + '\n' +
+        'REGLA 3 (HANDOFF): Si el cliente pide hablar con un humano, asesor, o pregunta algo que no sabes, RESPONDE ÚNICAMENTE CON LA PALABRA EXACTA: [HUMAN_HANDOFF]. No añadas ningún otro texto.\n' +
+        kbText;
     }
 
     if (body) await guardarMensajeHistorial(senderNumber, 'user', body, this.botType);
@@ -506,6 +553,30 @@ class WhatsAppBot {
 
         if (!functionCalls || functionCalls.length === 0) {
           const finalText = response.text();
+          
+          if (finalText.trim().includes('[HUMAN_HANDOFF]')) {
+            await pauseChat(senderNumber, message.pushName || 'Cliente', body);
+            const handoffMsg = 'Un momento por favor, te estoy transfiriendo con un asesor humano. 🧑‍💼';
+            await this.client.sendMessage(remoteJid, { text: handoffMsg }, { quoted: message });
+            await guardarMensajeHistorial(senderNumber, 'model', handoffMsg, this.botType);
+            this.emitMessage({ type: 'system', sender: 'Sistema', text: `Usuario transferido a Asistencia Humana.`, time: new Date().toLocaleTimeString() });
+            
+            // Notify admin via Admin Bot
+            const adminNumbersStr = await getConfig('admin_whatsapp_numbers') || '';
+            const authorizedNumbers = adminNumbersStr.split(',').map(n => n.trim().replace('+', '')).filter(Boolean);
+            const adminBot = bots.admin?.client;
+            if (adminBot) {
+              const alertMsg = `🚨 *Asistencia Requerida*\nEl cliente ${senderNumber} necesita ayuda.\nÚltimo mensaje: "${body}"\n\nIngresa al panel web para responderle.`;
+              for (const adminNum of authorizedNumbers) {
+                try {
+                  await adminBot.sendMessage(`${adminNum}@s.whatsapp.net`, { text: alertMsg });
+                } catch(e){}
+              }
+            }
+            this.io.emit('whatsapp_handoff_requested');
+            break;
+          }
+
           await this.client.sendMessage(remoteJid, { text: finalText }, { quoted: message });
           await guardarMensajeHistorial(senderNumber, 'model', finalText, this.botType);
           this.emitMessage({ type: 'out', sender: 'Bot IA', text: finalText, time: new Date().toLocaleTimeString() });
@@ -561,5 +632,23 @@ module.exports = {
       clientBot.inicializarWhatsApp(),
       adminBot.inicializarWhatsApp()
     ]);
+  },
+  guardarMensajeHistorial,
+  notificarPedidoMesaAdmin: async (mesaNumero, items, total) => {
+    const adminBot = bots.admin?.client;
+    if (!adminBot) return;
+    
+    const getConfig = require('./configService').getConfig;
+    const adminNumbersStr = await getConfig('admin_whatsapp_numbers') || '';
+    const authorizedNumbers = adminNumbersStr.split(',').map(n => n.trim().replace('+', '')).filter(Boolean);
+    
+    let itemsTexto = items.map(i => `- ${i.cantidad}x ${i.nombre}`).join('\n');
+    const msg = `🍔 *¡Nuevo Pedido! (Mesa ${mesaNumero})*\n\n${itemsTexto}\n\n*Total:* $${total}`;
+    
+    for (const adminNum of authorizedNumbers) {
+      try {
+        await adminBot.sendMessage(`${adminNum}@s.whatsapp.net`, { text: msg });
+      } catch(e){}
+    }
   }
 };

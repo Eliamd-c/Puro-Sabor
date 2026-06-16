@@ -3,6 +3,7 @@ const router = express.Router();
 const waAgent = require('../services/whatsappAgent');
 const configService = require('../services/configService');
 const { verificarJWT } = require('../middleware/auth');
+const db = require('../config/database');
 
 // GET /api/chatbots/:type/status
 router.get('/:type/status', verificarJWT, (req, res) => {
@@ -129,6 +130,61 @@ router.post('/config-ai', verificarJWT, async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+// --- FASE 2: ASISTENCIA HUMANA ---
+
+// GET /api/chatbots/paused
+router.get('/paused', verificarJWT, (req, res, next) => {
+  db.all('SELECT * FROM chatbots_paused ORDER BY fecha_pausa DESC', [], (err, rows) => {
+    if (err) return next(err);
+    res.json({ success: true, data: rows || [] });
+  });
+});
+
+// POST /api/chatbots/reply
+router.post('/reply', verificarJWT, async (req, res, next) => {
+  const { telefono, pregunta, respuesta } = req.body;
+  if (!telefono || !respuesta) return res.status(400).json({ success: false, message: 'Faltan datos.' });
+
+  try {
+    const io = req.app.get('io');
+    const clientBot = waAgent.getBot('client', io);
+    
+    // 1. Enviar mensaje por WhatsApp Client Bot
+    if (clientBot && clientBot.client) {
+      await clientBot.client.sendMessage(telefono + '@s.whatsapp.net', { text: respuesta });
+      // Guardar historial manualmente
+      await waAgent.guardarMensajeHistorial(telefono, 'model', respuesta, 'client');
+      // Emitir al monitor
+      clientBot.emitMessage({ type: 'out', sender: 'Asesor Humano', text: respuesta, time: new Date().toLocaleTimeString() });
+    }
+
+    // 2. Insertar en Base de Conocimientos si hay pregunta
+    if (pregunta) {
+      await new Promise((resolve) => {
+        db.run('INSERT INTO chatbots_kb (pregunta, respuesta) VALUES (?, ?)', [pregunta, respuesta], () => resolve());
+      });
+    }
+
+    // 3. Remover de Pausados
+    await new Promise((resolve) => {
+      db.run('DELETE FROM chatbots_paused WHERE telefono = ?', [telefono], () => resolve());
+    });
+
+    res.json({ success: true, message: 'Respuesta enviada y bot reactivado.' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/chatbots/resume
+router.post('/resume', verificarJWT, (req, res, next) => {
+  const { telefono } = req.body;
+  db.run('DELETE FROM chatbots_paused WHERE telefono = ?', [telefono], (err) => {
+    if (err) return next(err);
+    res.json({ success: true, message: 'Chat reactivado sin enviar respuesta.' });
+  });
 });
 
 module.exports = router;
