@@ -40,4 +40,21 @@ router.post('/', verificarJWT, async (req, res, next) => {
   }
 });
 
+// PUT /api/config — alias para retrocompatibilidad con el frontend (mesas.html usa PUT)
+router.put('/', verificarJWT, async (req, res, next) => {
+  try {
+    const keys = Object.keys(req.body);
+    for (const key of keys) {
+      await configService.setConfig(key, req.body[key]);
+    }
+    const io = req.app.get('io');
+    if (io && req.body.hasOwnProperty('activar_mesas')) {
+      io.emit('config_actualizada', { activar_mesas: req.body.activar_mesas });
+    }
+    res.json({ success: true, message: 'Configuración actualizada.' });
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;

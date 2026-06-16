@@ -33,10 +33,37 @@ const validate = require('../middleware/validate');
  *       401:
  *         description: No autorizado - JWT requerido
  */
+// GET /api/mesas/activas — para admin panel
 router.get('/activas', verificarJWT, async (req, res, next) => {
   try {
     const sesiones = await mesaService.getAll();
-    res.json({ success: true, sesiones });
+    res.json({ success: true, sesiones, data: sesiones });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/mesas — alias raíz para el frontend del panel admin
+router.get('/', verificarJWT, async (req, res, next) => {
+  try {
+    const sesiones = await mesaService.getAll();
+    res.json({ success: true, data: sesiones });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/mesas — crear mesa desde panel admin { numero }
+router.post('/', verificarJWT, async (req, res, next) => {
+  try {
+    const { numero } = req.body;
+    if (!numero) {
+      return res.status(400).json({ success: false, message: 'Número de mesa requerido.' });
+    }
+    const sesion = await mesaService.startSession(numero, 'admin');
+    const io = req.app.get('io');
+    if (io) io.to('admin').emit('mesa_actualizada', { mesa: numero, estado: 'activa' });
+    res.json({ success: true, message: 'Mesa creada.', sesion });
   } catch (error) {
     next(error);
   }
@@ -92,6 +119,28 @@ router.post('/:numero/cerrar', verificarJWT, async (req, res, next) => {
       io.to('admin').emit('mesa_actualizada', { mesa: req.params.numero, estado: 'libre' });
     }
     
+    res.json({ success: true, message: 'Sesión cerrada exitosamente.' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// PATCH /api/mesas/:numero/cerrar — alias para retrocompatibilidad con el frontend
+router.patch('/:numero/cerrar', verificarJWT, async (req, res, next) => {
+  try {
+    const sesion = await mesaService.getSession(req.params.numero);
+    if (!sesion) {
+      return res.status(404).json({ success: false, message: 'No hay sesión activa.' });
+    }
+    await mesaService.closeSession(sesion.id, 'admin');
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`mesa_${req.params.numero}`).emit('mesa_cerrada', {
+        mesa: req.params.numero,
+        mensaje: 'La sesión ha sido cerrada por el administrador.'
+      });
+      io.to('admin').emit('mesa_actualizada', { mesa: req.params.numero, estado: 'libre' });
+    }
     res.json({ success: true, message: 'Sesión cerrada exitosamente.' });
   } catch (error) {
     next(error);
