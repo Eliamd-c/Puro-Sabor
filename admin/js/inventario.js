@@ -530,13 +530,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 3. Reconectar Bot botón
     if (btnReconnectWa) {
-    if (btnReconnectWa) {
       btnReconnectWa.addEventListener('click', reconectarWhatsApp);
-    }
     }
 
     // 4. Guardar configuración IA
-    if (formConfigAi) {
     if (formConfigAi) {
       formConfigAi.addEventListener('submit', async (e) => {
         e.preventDefault();
