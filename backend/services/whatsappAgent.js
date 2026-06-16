@@ -225,11 +225,13 @@ class WhatsAppBot {
     try {
       const hasLock = await this.tryAcquireLockDB();
       if (!hasLock) {
-        console.log(`[WA Agent ${this.botType}] 🔒 Otro proceso ya tiene el control. Ignorando.`);
+        console.log(`[WA Agent ${this.botType}] 🔒 Otro proceso ya tiene el control. Reintentando en 5s...`);
+        setTimeout(() => this.inicializarWhatsApp(), 5000);
         return;
       }
     } catch (err) {
       console.error(`[WA Agent ${this.botType}] Error verificando lock:`, err.message);
+      setTimeout(() => this.inicializarWhatsApp(), 5000);
       return;
     }
 

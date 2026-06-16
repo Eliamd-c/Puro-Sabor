@@ -301,9 +301,9 @@ document.addEventListener('DOMContentLoaded', () => {
       });
 
       // Escuchar cambios del admin bot
-      socket.on('whatsapp_admin_status', (data) => updateAdminBotUI(data.status, data.qr, data.error));
+      socket.on('whatsapp_admin_status', (data) => {
         console.log('[Socket] WhatsApp Status recibido:', data);
-        actualizarEstadoWhatsApp(data.status, data.qr, data.error);
+        updateAdminBotUI(data.status, data.qr, data.error);
       });
 
       // Escuchar mensajes en tiempo real para el Monitor de Chat
