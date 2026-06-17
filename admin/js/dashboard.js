@@ -82,8 +82,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const response = await fetch('/api/categorias');
       const result = await response.json();
       
-      if (result.success) {
-        categorias = result.data;
+      categorias = Array.isArray(result) ? result : (result.data || []);
+      
+      if (categorias.length > 0) {
         
         // Renderizar en el select de filtros de tabla
         let filterHtml = '<option value="">Todas las categorías</option>';
