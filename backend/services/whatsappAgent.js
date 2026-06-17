@@ -656,10 +656,20 @@ class WhatsAppBot {
         kbText = '\nBASE DE CONOCIMIENTO (Aprende de aquí):\n' + kb.map(k => `[ID:${k.id}] Q: ${k.pregunta}\nA: ${k.respuesta}`).join('\n') + '\n';
       }
 
+      // Obtener hora local de Colombia para inyectar al prompt de la IA
+      const now = new Date();
+      const colombiaTime = new Date(now.getTime() - (5 * 60 * 60 * 1000));
+      const dias = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
+      const hoyName = dias[colombiaTime.getUTCDay()];
+      const hour = colombiaTime.getUTCHours().toString().padStart(2, '0');
+      const min = colombiaTime.getUTCMinutes().toString().padStart(2, '0');
+      const timeStrLocal = `${hour}:${min}`;
+
       systemInstruction = 
         'Eres el recepcionista oficial de Puro Sabor.\n' +
         (customPrompt ? `${customPrompt}\n` : '') +
         ruleSaludo +
+        `FECHA Y HORA ACTUAL (Colombia): ${hoyName}, ${timeStrLocal}.\n` +
         'ESTADO: ABIERTO.\n' +
         'REGLA 2: Para realizar pedidos, ver el menú completo o consultar precios, entrega siempre el enlace de nuestro menú digital: 👉 ' + menuUrl + '. Explica al cliente que toda la plataforma de pedidos está allí para que ordene de forma rápida y segura. No intentes tomar el pedido directamente en este chat.\n' +
         'REGLA 3 (HANDOFF): Si el cliente pide hablar con un humano, asesor, o pregunta algo que no sabes (no está en la Base de Conocimiento ni en las Promociones), responde ÚNICAMENTE con la palabra exacta: [HUMAN_HANDOFF]. No añadas ningún otro texto.\n' +
@@ -683,7 +693,16 @@ class WhatsAppBot {
     try {
       const genAI = new GoogleGenerativeAI(apiKey);
       const historialPrevio = await obtenerHistorial(senderNumber, this.botType, 15);
-      const historialGemini = historialPrevio.map(h => ({
+      
+      // Filtrar mensajes automáticos de ausencia para que no confundan a Gemini en el historial
+      const historialFiltrado = historialPrevio.filter(h => {
+        const text = h.contenido || '';
+        return !text.includes('fuera de nuestro horario de servicio') && 
+               !text.includes('iniciaremos atención este próximo') &&
+               !text.includes('mensaje de ausencia');
+      });
+
+      const historialGemini = historialFiltrado.map(h => ({
         role: h.rol === 'user' ? 'user' : 'model',
         parts: [{ text: h.contenido }]
       }));
