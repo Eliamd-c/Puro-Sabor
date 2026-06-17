@@ -541,6 +541,50 @@ class WhatsAppBot {
         await logChatbotInteraction(senderNumber, message.pushName || 'Cliente', 'cierre_automatico', body, mensajeAusencia);
         return;
       }
+
+      // --- INTERCEPTAR PEDIDO ENVIADO DESDE LA APLICACIÓN ---
+      const isOrderSummary = body && (
+        body.includes('Quiero hacer un pedido') && 
+        (body.includes('Total') || body.includes('▪') || body.includes('•') || body.includes('x '))
+      );
+
+      if (isOrderSummary) {
+        console.log(`[WA Agent client] Interceptado resumen de pedido de ${senderNumber}. Iniciando handoff humano.`);
+        
+        const orderConfirmMsg = '¡Hola! Hemos recibido el detalle de tu pedido correctamente. 📝\n\nUn asesor humano revisará los datos en este instante para confirmar tu pedido, dirección/mesa y método de pago para enviarlo a la cocina de inmediato. ¡Muchas gracias por tu compra! 🍖';
+        
+        // 1. Enviar mensaje de confirmación al cliente
+        await this.client.sendMessage(remoteJid, { text: orderConfirmMsg }, { quoted: message });
+        
+        // 2. Guardar en el historial de chat
+        await guardarMensajeHistorial(senderNumber, 'model', orderConfirmMsg, this.botType);
+        
+        // 3. Emitir al Monitor de Actividad en tiempo real
+        this.emitMessage({ type: 'out', sender: 'Bot IA (Pedido)', text: orderConfirmMsg });
+        
+        // 4. Pausar el bot para este cliente (activar asistencia humana)
+        await pauseChat(senderNumber, message.pushName || 'Cliente', body);
+        
+        // 5. Registrar analítica
+        await logChatbotInteraction(senderNumber, message.pushName || 'Cliente', 'pedido_recibido', body, orderConfirmMsg);
+        
+        // 6. Enviar alerta por WhatsApp a los administradores
+        const adminNumbersStr = await getConfig('admin_whatsapp_numbers') || '';
+        const authorizedNumbers = adminNumbersStr.split(',').map(n => n.trim().replace('+', '')).filter(Boolean);
+        const adminBot = bots.admin?.client;
+        if (adminBot) {
+          const alertMsg = `🚨 *Nuevo Pedido Recibido via WhatsApp*\nEl cliente ${senderNumber} (${message.pushName || 'Cliente'}) acaba de enviar un pedido.\n\n*Detalles del pedido:*\n${body}\n\nIngresa al panel web para responder y gestionarlo.`;
+          for (const adminNum of authorizedNumbers) {
+            try {
+              await adminBot.sendMessage(`${adminNum}@s.whatsapp.net`, { text: alertMsg });
+            } catch (e) {}
+          }
+        }
+        
+        // 7. Notificar por Socket a la pantalla de administración
+        this.io.emit('whatsapp_handoff_requested');
+        return; // Detener flujo para no procesar con Gemini
+      }
     }
 
     let systemInstruction = '';
