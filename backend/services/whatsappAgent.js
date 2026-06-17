@@ -307,6 +307,19 @@ class WhatsAppBot {
   }
 
   emitMessage(data) {
+    // Forzar que el campo 'time' enviado al Monitor sea la hora local de Colombia (UTC-5)
+    try {
+      const now = new Date();
+      const colombiaTime = new Date(now.getTime() - (5 * 60 * 60 * 1000));
+      const hours = colombiaTime.getUTCHours();
+      const minutes = colombiaTime.getUTCMinutes().toString().padStart(2, '0');
+      const seconds = colombiaTime.getUTCSeconds().toString().padStart(2, '0');
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      const displayHours = hours % 12 || 12;
+      data.time = `${displayHours}:${minutes}:${seconds} ${ampm}`;
+    } catch (e) {
+      console.error('[WA Agent] Error al formatear la hora del mensaje para el monitor:', e);
+    }
     this.io.to('admin').emit(`whatsapp_${this.botType}_message`, data);
   }
 
