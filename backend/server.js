@@ -233,7 +233,6 @@ app.use((req, res, next) => {
   next();
 });
 
-const logger = require('./config/logger');
 app.use((req, res, next) => {
   logger.info({ method: req.method, url: req.url });
   next();
