@@ -66,7 +66,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ── Socket.io ──────────────────────────────────────────────────────────
   function conectarSocket() {
-    socket = io();
+    socket = io({
+      transports: ['polling', 'websocket'],
+      reconnectionAttempts: 10,
+      reconnectionDelay: 2000
+    });
+
+    socket.on('connect_error', (err) => {
+      console.error('[Socket Admin] Error de conexión:', err.message);
+    });
+
     socket.on('connect', () => {
       socket.emit('unirse_admin');
     });

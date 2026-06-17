@@ -35,6 +35,36 @@ const configService = require('../services/configService');
  *       401:
  *         description: No autorizado - JWT requerido
  */
+// GET /api/mesas/debug/sockets — Endpoint para diagnosticar sockets
+router.get('/debug/sockets', verificarJWT, async (req, res, next) => {
+  try {
+    const io = req.app.get('io');
+    if (!io) return res.json({ error: 'Socket.io no inicializado' });
+    
+    const dbAsync = require('../config/database-promise');
+    const mesas = await dbAsync.all('SELECT numero FROM mesas WHERE activa = 1');
+    const resultado = { admin: 0, mesas: {} };
+    
+    resultado.admin = io.sockets.adapter.rooms.get('admin')?.size || 0;
+    
+    for (const mesa of mesas) {
+      const sala = `mesa_${mesa.numero}`;
+      let viendo = 0;
+      try {
+        const sockets = await io.in(sala).fetchSockets();
+        viendo = Math.max(sockets.length, io.sockets.adapter.rooms.get(sala)?.size || 0);
+      } catch (e) {
+        viendo = io.sockets.adapter.rooms.get(sala)?.size || 0;
+      }
+      resultado.mesas[sala] = viendo;
+    }
+    
+    res.json({ success: true, timestamp: Date.now(), conexiones: resultado });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // GET /api/mesas/activas — para admin panel
 router.get('/activas', verificarJWT, async (req, res, next) => {
   try {
@@ -60,8 +90,13 @@ router.get('/', verificarJWT, async (req, res, next) => {
       const sala = `mesa_${mesa.numero}`;
       let viendo = 0;
       if (io) {
-        const sockets = await io.in(sala).fetchSockets();
-        viendo = sockets.length;
+        try {
+          const sockets = await io.in(sala).fetchSockets();
+          const adapterSize = io.sockets.adapter.rooms.get(sala)?.size || 0;
+          viendo = Math.max(sockets.length, adapterSize);
+        } catch (e) {
+          viendo = io.sockets.adapter.rooms.get(sala)?.size || 0;
+        }
       }
       
       const sesion = await dbAsync.get(

@@ -18,6 +18,9 @@ const PORT = env.PORT;
 const allowedOrigins = [
   env.FRONTEND_URL,
   'https://www.restaurantepurosabor.com',
+  'https://restaurantepurosabor.com',
+  'http://restaurantepurosabor.com',
+  'http://www.restaurantepurosabor.com',
   env.isDevelopment() ? 'http://localhost:3005' : null,
   env.isDevelopment() ? 'http://localhost:3000' : null
 ].filter(Boolean);
@@ -29,6 +32,8 @@ const io = new Server(server, {
     methods: ['GET', 'POST'],
     credentials: true
   },
+  allowEIO3: true, // Compatibilidad con clientes antiguos
+  transports: ['polling', 'websocket'], // Forzar polling primero por LiteSpeed
   pingTimeout: 60000,
   pingInterval: 25000
 });

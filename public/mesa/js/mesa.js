@@ -273,8 +273,19 @@ document.addEventListener('DOMContentLoaded', () => {
         console.warn('Socket.io no está disponible. El modo offline está activo.');
         return;
       }
-      
-      socket = io();
+      socket = io({
+        transports: ['polling', 'websocket'],
+        reconnectionAttempts: 10,
+        reconnectionDelay: 2000
+      });
+
+      socket.on('connect_error', (err) => {
+        console.error('[Socket] Error de conexión:', err.message);
+        if (syncIndicator) {
+          syncIndicator.classList.add('desconectado');
+          syncIndicator.querySelector('.sync-text').textContent = 'Falla de conexión';
+        }
+      });
 
       socket.on('connect', () => {
         socket.emit('unirse_mesa', mesaNumero);
