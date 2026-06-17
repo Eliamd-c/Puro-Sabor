@@ -80,10 +80,13 @@ class ProductService {
     const countRow = await dbAsync.get('SELECT COUNT(*) as total FROM productos');
     const total = countRow.total;
     
-    const productos = await dbAsync.all(
-      'SELECT * FROM productos ORDER BY id DESC LIMIT ? OFFSET ?',
-      [limit, offset]
-    );
+    const productos = await dbAsync.all(`
+      SELECT p.*, c.nombre as categoria_nombre 
+      FROM productos p
+      LEFT JOIN categorias c ON p.categoria_id = c.id
+      ORDER BY p.categoria_id ASC, p.nombre ASC
+      LIMIT ? OFFSET ?
+    `, [limit, offset]);
     
     return {
       data: productos,

@@ -316,7 +316,7 @@ document.addEventListener('DOMContentLoaded', () => {
       formData.append('categoria_id', prodCategory.value);
       formData.append('precio', prodPrice.value);
       formData.append('stock', prodStock.value || 0);
-      formData.append('disponible', prodAvailable.checked);
+      formData.append('disponible', prodAvailable.checked ? 1 : 0);
       formData.append('descripcion', prodDesc.value.trim());
       
       if (prodImageFile.files[0]) {
@@ -456,7 +456,7 @@ document.addEventListener('DOMContentLoaded', () => {
           formData.append('categoria_id', prod.categoria_id);
           formData.append('precio', prod.precio);
           formData.append('stock', prod.stock);
-          formData.append('disponible', dispVal);
+          formData.append('disponible', dispVal ? 1 : 0);
           formData.append('imagen_url_existente', prod.imagen_url);
 
           const response = await fetch(`/api/productos/admin/${id}`, {
