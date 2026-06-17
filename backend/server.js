@@ -10,6 +10,20 @@ const { Server } = require('socket.io');
 const swaggerUi = require('swagger-ui-express');
 const swaggerSpecs = require('./config/swagger');
 
+const logger = require('./config/logger');
+
+// Override console to capture logs into winston
+const originalLog = console.log;
+const originalError = console.error;
+console.log = function(...args) {
+  logger.info(args.join(' '));
+  originalLog.apply(console, args);
+};
+console.error = function(...args) {
+  logger.error(args.join(' '));
+  originalError.apply(console, args);
+};
+
 const app = express();
 const server = http.createServer(app);
 const PORT = env.PORT;
