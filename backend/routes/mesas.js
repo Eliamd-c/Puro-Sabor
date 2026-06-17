@@ -48,8 +48,46 @@ router.get('/activas', verificarJWT, async (req, res, next) => {
 // GET /api/mesas — alias raíz para el frontend del panel admin
 router.get('/', verificarJWT, async (req, res, next) => {
   try {
-    const sesiones = await mesaService.getAll();
-    res.json({ success: true, data: sesiones });
+    const dbAsync = require('../config/database-promise');
+    
+    // Obtener todas las mesas activas del catálogo
+    const mesas = await dbAsync.all('SELECT * FROM mesas WHERE activa = 1 ORDER BY numero ASC');
+    
+    // Obtener los datos de socketio
+    const io = req.app.get('io');
+    
+    const data = await Promise.all(mesas.map(async (mesa) => {
+      const sala = `mesa_${mesa.numero}`;
+      const viendo = io ? (io.sockets.adapter.rooms.get(sala)?.size || 0) : 0;
+      
+      const sesion = await dbAsync.get(
+        `SELECT * FROM sesiones_mesa WHERE mesa_numero = ? AND estado = 'activa' ORDER BY creada_en DESC LIMIT 1`,
+        [mesa.numero]
+      );
+      
+      if (!sesion) {
+        return { ...mesa, estado: 'libre', sesion: null, pedidos: [], total: 0, rondas: 0, viendo };
+      }
+      
+      const pedidos = await dbAsync.all(
+        `SELECT * FROM pedidos WHERE sesion_id = ? ORDER BY numero_ronda ASC`,
+        [sesion.id]
+      ) || [];
+      
+      const total = pedidos.reduce((sum, p) => sum + p.total, 0);
+      
+      return {
+        ...mesa,
+        estado: 'activa',
+        sesion,
+        pedidos: pedidos.map(p => ({ ...p, items: JSON.parse(p.items_json) })),
+        total,
+        rondas: pedidos.length,
+        viendo
+      };
+    }));
+    
+    res.json({ success: true, data });
   } catch (error) {
     next(error);
   }
