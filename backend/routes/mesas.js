@@ -46,6 +46,26 @@ router.get('/debug/viendo', async (req, res, next) => {
   }
 });
 
+// POST /api/mesas/debug/incrementar/:numero — Prueba manual de UPDATE viendo (PUBLIC PARA DIAGNOSTICO)
+router.post('/debug/incrementar/:numero', async (req, res, next) => {
+  try {
+    const dbAsync = require('../config/database-promise');
+    const { numero } = req.params;
+    const antes = await dbAsync.get('SELECT viendo FROM mesas WHERE numero = ?', [numero]);
+    await dbAsync.run('UPDATE mesas SET viendo = viendo + 1 WHERE numero = ?', [numero]);
+    const despues = await dbAsync.get('SELECT viendo FROM mesas WHERE numero = ?', [numero]);
+    res.json({
+      success: true,
+      mesa: numero,
+      antes: antes ? antes.viendo : null,
+      despues: despues ? despues.viendo : null,
+      funcionó: despues && antes && despues.viendo > antes.viendo
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET /api/mesas/debug/sockets — Endpoint para diagnosticar sockets (PUBLIC PARA DIAGNOSTICO)
 router.get('/debug/sockets', async (req, res, next) => {
   try {
