@@ -58,7 +58,11 @@ router.get('/', verificarJWT, async (req, res, next) => {
     
     const data = await Promise.all(mesas.map(async (mesa) => {
       const sala = `mesa_${mesa.numero}`;
-      const viendo = io ? (io.sockets.adapter.rooms.get(sala)?.size || 0) : 0;
+      let viendo = 0;
+      if (io) {
+        const sockets = await io.in(sala).fetchSockets();
+        viendo = sockets.length;
+      }
       
       const sesion = await dbAsync.get(
         `SELECT * FROM sesiones_mesa WHERE mesa_numero = ? AND estado = 'activa' ORDER BY creada_en DESC LIMIT 1`,
