@@ -212,22 +212,22 @@ document.addEventListener('DOMContentLoaded', () => {
     
     sheetTitle.textContent = '¡Agregado con éxito! 🍽️';
     
-    const esPlatoFuerte = !categoriaName.toLowerCase().includes('bebida') && 
-                          !categoriaName.toLowerCase().includes('tomar') && 
-                          !categoriaName.toLowerCase().includes('postre');
+    const catNameLower = String(categoriaName || '').toLowerCase();
+    
+    const esPlatoFuerte = !catNameLower.includes('bebida') && 
+                          !catNameLower.includes('tomar') && 
+                          !catNameLower.includes('postre');
                           
-    const tieneBebidas = carrito.some(item => 
-      item.categoria_nombre && (
-        item.categoria_nombre.toLowerCase().includes('bebida') || 
-        item.categoria_nombre.toLowerCase().includes('tomar')
-      )
-    );
+    const tieneBebidas = carrito.some(item => {
+      const itemCat = String(item.categoria_nombre || '').toLowerCase();
+      return itemCat.includes('bebida') || itemCat.includes('tomar');
+    });
 
     if (esPlatoFuerte && !tieneBebidas) {
       sheetMessage.innerHTML = `¡Uff, excelente elección, <strong>${clienteNombre}</strong>! 🍖 Agregamos <strong>${productoName}</strong> al pedido de la mesa. ¿Te provoca acompañarlo con una de nuestras <strong>bebidas frías</strong>? 🍹`;
       btnSheetSuggest.style.display = 'block';
       btnSheetSuggest.textContent = '🍹 Ver Bebidas';
-    } else if (categoriaName.toLowerCase().includes('bebida') || categoriaName.toLowerCase().includes('tomar')) {
+    } else if (catNameLower.includes('bebida') || catNameLower.includes('tomar')) {
       sheetMessage.innerHTML = `Agregamos tu bebida (<strong>${productoName}</strong>) al pedido de la mesa. ¿Quieres elegir un plato fuerte o prefieres revisar lo que lleva la mesa en el carrito? 🛒`;
       btnSheetSuggest.style.display = 'none';
     } else {
