@@ -264,6 +264,15 @@ app.use((req, res, next) => {
   next();
 });
 
+// ── Normalizar URLs con múltiples slashes (ej: //mesa/2 -> /mesa/2) ────
+app.use((req, res, next) => {
+  if (req.url.match(/\/{2,}/)) {
+    const cleanUrl = req.url.replace(/\/{2,}/g, '/');
+    return res.redirect(301, cleanUrl);
+  }
+  next();
+});
+
 // ── Swagger Documentation ──────────────────────────────────────────────────
 app.use('/api-docs', swaggerUi.serve);
 app.get('/api-docs', swaggerUi.setup(swaggerSpecs, {
