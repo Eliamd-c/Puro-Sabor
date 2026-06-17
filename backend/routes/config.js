@@ -3,6 +3,16 @@ const router = express.Router();
 const configService = require('../services/configService');
 const { verificarJWT } = require('../middleware/auth');
 
+// GET /api/config (Público, para traer toda la configuración)
+router.get('/', async (req, res, next) => {
+  try {
+    const data = await configService.getAllConfigs();
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // GET /api/config/:key (Público, para cosas como mesas_activadas)
 router.get('/:key', async (req, res, next) => {
   try {

@@ -60,6 +60,17 @@ document.addEventListener('DOMContentLoaded', () => {
   async function init() {
     mostrarCarga();
 
+    // Cargar config global
+    try {
+      const resp = await fetch('/api/config');
+      const result = await resp.json();
+      if (result.success && result.data) {
+        window.carruselNovedadesActivo = result.data.carrusel_novedades_activo === '1';
+      }
+    } catch (e) {
+      window.carruselNovedadesActivo = true; // Por defecto
+    }
+
     // Cargar categorías y productos iniciales (primera página)
     categorias = await API.getCategorias();
     productos = await API.getProductos({ page: 1, limit: 20 });
@@ -372,25 +383,40 @@ document.addEventListener('DOMContentLoaded', () => {
     const bebidasItems = catBebidas ? productosAgrupados.filter(p => p.categoria_id === catBebidas.id) : [];
     const postresItems = catPostres ? productosAgrupados.filter(p => p.categoria_id === catPostres.id) : [];
     
-    // RENDER MIGA SLIDER 3D
-    if (categoriaActiva === '' || (catMigas && categoriaActiva == catMigas.id)) {
+    // RENDER MIGA SLIDER 3D (Ahora Novedades)
+    if (window.carruselNovedadesActivo) {
       migasCarouselSection.style.display = 'block';
       
+      const noticias = [
+        {
+          titulo: '🔥 Lo más pedido',
+          desc: 'Nuestras famosas Migas con Cerdo están siendo la sensación esta semana.',
+          img: '/assets/images/miga_cerdo.png'
+        },
+        {
+          titulo: '🎉 Evento Especial',
+          desc: 'Ven con tus amigos y disfruta de música en vivo todos los viernes.',
+          img: '/assets/images/default-food.jpg'
+        },
+        {
+          titulo: '🛵 Domicilios Gratis',
+          desc: 'Por compras superiores a $50.000 te llevamos el sabor hasta tu puerta.',
+          img: '/assets/images/miga_mixta.jpg'
+        }
+      ];
+
       let sliderHtml = '';
-      migasItems.forEach(prod => {
-        let precioHtml = getPrecioText(prod);
-        
+      noticias.forEach(n => {
         sliderHtml += `
-          <div class="swiper-slide" data-nombre="${prod.nombre}">
+          <div class="swiper-slide">
             <div class="slide-image">
-              <img src="${prod.imagen_url}?v=2" alt="${prod.nombre}" onerror="this.src='/assets/images/default-food.jpg'">
+              <img src="${n.img}" alt="${n.titulo}" onerror="this.src='/assets/images/default-food.jpg'">
             </div>
             <div class="slide-content">
-              <h4 class="slide-title">${prod.nombre}</h4>
-              <p class="slide-desc">${prod.descripcion || 'Especialidad jugosa preparada a la parrilla.'}</p>
-              <div class="slide-footer">
-                <span class="slide-price">${precioHtml}</span>
-                <button class="btn-slide-action">Ver Opciones</button>
+              <h4 class="slide-title" style="font-size: 1.2rem; color: var(--primary-color);">${n.titulo}</h4>
+              <p class="slide-desc" style="font-size: 0.95rem; margin-top: 8px;">${n.desc}</p>
+              <div class="slide-footer" style="justify-content: flex-end;">
+                <button class="btn-slide-action" onclick="window.scrollTo(0, document.body.scrollHeight)">Saber más</button>
               </div>
             </div>
           </div>
@@ -400,9 +426,6 @@ document.addEventListener('DOMContentLoaded', () => {
       
       // Inicializar Swiper 3D
       initSwiper();
-      
-      // Agregar eventos de clic a las diapositivas
-      agregarEventosClicGrid(migasItems, '.swiper-slide');
     } else {
       migasCarouselSection.style.display = 'none';
     }
@@ -410,6 +433,22 @@ document.addEventListener('DOMContentLoaded', () => {
     // RENDER SECCIONES SECUNDARIAS
     let secHtml = '';
     
+    // Render de Migas al Carbón (ahora en grid)
+    if ((categoriaActiva === '' || (catMigas && categoriaActiva == catMigas.id)) && migasItems.length > 0) {
+      secHtml += `
+        <div class="secondary-category-container">
+          <div class="section-header">
+            <span class="section-tagline">Nuestra Especialidad</span>
+            <h3 class="section-title">Migas al Carbón</h3>
+          </div>
+          <div class="secondary-grid">
+      `;
+      migasItems.forEach(prod => {
+        secHtml += renderCardSecundaria(prod);
+      });
+      secHtml += `</div></div>`;
+    }
+
     // Render de Bebidas
     if ((categoriaActiva === '' || (catBebidas && categoriaActiva == catBebidas.id)) && bebidasItems.length > 0) {
       secHtml += `
@@ -446,7 +485,7 @@ document.addEventListener('DOMContentLoaded', () => {
     secondarySections.style.display = 'block';
     
     // Unificar productos de la sección secundaria para vincular eventos de clic
-    const secProductList = [...bebidasItems, ...postresItems];
+    const secProductList = [...migasItems, ...bebidasItems, ...postresItems];
     agregarEventosClicGrid(secProductList, '.secondary-card');
   }
 

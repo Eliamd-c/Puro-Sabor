@@ -6,6 +6,15 @@ class ConfigService {
     return row ? row.value : null;
   }
 
+  async getAllConfigs() {
+    const rows = await dbAsync.all('SELECT key, value FROM config');
+    const result = {};
+    if (rows) {
+      rows.forEach(r => result[r.key] = r.value);
+    }
+    return result;
+  }
+
   async setConfig(key, value) {
     await dbAsync.run(
       `INSERT INTO config (key, value, updated_at)

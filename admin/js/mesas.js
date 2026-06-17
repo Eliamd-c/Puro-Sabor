@@ -101,9 +101,13 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const resp = await fetch('/api/config');
       const result = await resp.json();
-      if (result.success) {
+      if (result.success && result.data) {
         configWhatsapp.value = result.data.whatsapp_numero || '';
         configDominio.value = result.data.dominio_base || '';
+        const carruselToggle = document.getElementById('config-carrusel');
+        if (carruselToggle) {
+          carruselToggle.checked = result.data.carrusel_novedades_activo === '1';
+        }
       }
     } catch (e) { /* silencioso */ }
   }
@@ -338,6 +342,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const updates = {};
       if (configWhatsapp.value.trim()) updates.whatsapp_numero = configWhatsapp.value.trim();
       if (configDominio.value.trim()) updates.dominio_base = configDominio.value.trim();
+      
+      const carruselToggle = document.getElementById('config-carrusel');
+      if (carruselToggle) {
+        updates.carrusel_novedades_activo = carruselToggle.checked ? '1' : '0';
+      }
 
       try {
         const resp = await fetch('/api/config', {
