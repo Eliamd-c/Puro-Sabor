@@ -11,6 +11,7 @@ const swaggerUi = require('swagger-ui-express');
 const swaggerSpecs = require('./config/swagger');
 
 const logger = require('./config/logger');
+const dbAsync = require('./config/database-promise');
 
 // Override console to capture logs into winston
 const originalLog = console.log;
@@ -86,7 +87,7 @@ io.on('connection', (socket) => {
   console.log(`[Socket] Cliente conectado: ${socket.id}`);
 
   // ── Cliente se une a una sala de mesa ──
-  socket.on('unirse_mesa', (mesaNumero) => {
+  socket.on('unirse_mesa', async (mesaNumero) => {
     socket.mesaNumero = mesaNumero;
     const sala = mesaNumero === 'general' ? 'mesa_general' : `mesa_${mesaNumero}`;
     socket.join(sala);
@@ -96,6 +97,18 @@ io.on('connection', (socket) => {
     socket.emit('carrito_actualizado', carritoActual.items);
     console.log(`[Socket] ${socket.id} se unió a ${sala}`);
     
+    // Incrementar contador de viewers en DB (funciona cross-proceso)
+    if (mesaNumero !== 'general') {
+      try {
+        await dbAsync.run(
+          'UPDATE mesas SET viendo = viendo + 1 WHERE numero = $1',
+          [mesaNumero]
+        );
+      } catch (e) {
+        console.error(`[Socket] Error incrementando viendo para mesa ${mesaNumero}:`, e.message);
+      }
+    }
+
     // Notificar al admin que la mesa tiene actividad (clientes viendo menú)
     io.to('admin').emit('mesa_actualizada', { mesa: mesaNumero });
   });
@@ -136,9 +149,17 @@ io.on('connection', (socket) => {
     io.to(sala).emit('pedido_confirmado', resumen);
   });
 
-  socket.on('disconnect', () => {
+  socket.on('disconnect', async () => {
     console.log(`[Socket] Cliente desconectado: ${socket.id}`);
-    if (socket.mesaNumero) {
+    if (socket.mesaNumero && socket.mesaNumero !== 'general') {
+      try {
+        await dbAsync.run(
+          'UPDATE mesas SET viendo = GREATEST(0, viendo - 1) WHERE numero = $1',
+          [socket.mesaNumero]
+        );
+      } catch (e) {
+        console.error(`[Socket] Error decrementando viendo para mesa ${socket.mesaNumero}:`, e.message);
+      }
       io.to('admin').emit('mesa_actualizada', { mesa: socket.mesaNumero });
     }
   });

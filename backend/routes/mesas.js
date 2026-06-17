@@ -119,21 +119,9 @@ router.get('/', verificarJWT, async (req, res, next) => {
     // Obtener todas las mesas activas del catálogo
     const mesas = await dbAsync.all('SELECT * FROM mesas WHERE activa = 1 ORDER BY numero ASC');
     
-    // Obtener los datos de socketio
-    const io = req.app.get('io');
-    
     const data = await Promise.all(mesas.map(async (mesa) => {
-      const sala = `mesa_${mesa.numero}`;
-      let viendo = 0;
-      if (io) {
-        try {
-          const sockets = await io.in(sala).fetchSockets();
-          const adapterSize = io.sockets.adapter.rooms.get(sala)?.size || 0;
-          viendo = Math.max(sockets.length, adapterSize);
-        } catch (e) {
-          viendo = io.sockets.adapter.rooms.get(sala)?.size || 0;
-        }
-      }
+      // viendo se mantiene actualizado en la DB por los eventos de socket (server.js)
+      const viendo = mesa.viendo || 0;
       
       const sesion = await dbAsync.get(
         `SELECT * FROM sesiones_mesa WHERE mesa_numero = ? AND estado = 'activa' ORDER BY creada_en DESC LIMIT 1`,

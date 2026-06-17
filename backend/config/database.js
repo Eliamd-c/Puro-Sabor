@@ -340,6 +340,12 @@ async function inicializarTablas() {
       )
     `);
 
+    // Agregar columna viendo si no existe (migracion segura)
+    await pool.query(`ALTER TABLE mesas ADD COLUMN IF NOT EXISTS viendo INTEGER DEFAULT 0`);
+
+    // Resetear contadores al arrancar (evita zombis por crash o reinicio)
+    await pool.query(`UPDATE mesas SET viendo = 0`);
+
     console.log('✅ Tablas verificadas/creadas en Postgres.');
     await crearIndices();
     sembrarDatosIniciales();
