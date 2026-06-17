@@ -460,10 +460,12 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
           const formData = new FormData();
           formData.append('nombre', prod.nombre);
+          formData.append('descripcion', prod.descripcion || '');
           formData.append('categoria_id', prod.categoria_id);
           formData.append('precio', prod.precio);
           formData.append('stock', prod.stock);
           formData.append('disponible', dispVal ? 1 : 0);
+          formData.append('activo', prod.activo ? 1 : 0);
           formData.append('imagen_url_existente', prod.imagen_url);
 
           const response = await fetch(`/api/productos/admin/${id}`, {
@@ -503,6 +505,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
           const formData = new FormData();
           formData.append('nombre', prod.nombre);
+          formData.append('descripcion', prod.descripcion || '');
           formData.append('categoria_id', prod.categoria_id);
           formData.append('precio', prod.precio);
           formData.append('stock', prod.stock);
