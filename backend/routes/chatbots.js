@@ -129,17 +129,9 @@ router.post('/config-ai', verificarJWT, async (req, res, next) => {
       await configService.setConfig('bot_system_prompt', bot_system_prompt);
     }
 
-    // Only reload the client bot since this config is for the client bot
-    const clientBot = waAgent.getBot('client', io);
-    if (clientBot) {
-      clientBot.reloadConfig().catch(err => {
-        console.error('[WA Route client] Error al recargar la configuración del agente:', err.message);
-      });
-    }
-
     res.json({
       success: true,
-      message: 'Configuración de IA guardada y agente recargado.'
+      message: 'Configuración de IA guardada con éxito.'
     });
 
   } catch (err) {
