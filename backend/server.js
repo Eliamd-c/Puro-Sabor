@@ -25,18 +25,44 @@ const allowedOrigins = [
   env.isDevelopment() ? 'http://localhost:3000' : null
 ].filter(Boolean);
 
-// ── Socket.io ──────────────────────────────────────────────────────────────
+const { createAdapter } = require('@socket.io/postgres-adapter');
+const { Pool } = require('pg');
+
 const io = new Server(server, {
   cors: { 
     origin: allowedOrigins,
     methods: ['GET', 'POST'],
     credentials: true
   },
-  allowEIO3: true, // Compatibilidad con clientes antiguos
-  transports: ['polling', 'websocket'], // Forzar polling primero por LiteSpeed
+  allowEIO3: true,
+  transports: ['polling', 'websocket'],
   pingTimeout: 60000,
   pingInterval: 25000
 });
+
+// Configurar Postgres Adapter para sincronizar sockets entre múltiples procesos de Node en Hostinger
+if (env.DATABASE_URL) {
+  try {
+    const socketPool = new Pool({
+      connectionString: env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false }
+    });
+    
+    // Crear tabla automáticamente si no existe para el adapter
+    socketPool.query(`
+      CREATE TABLE IF NOT EXISTS socket_io_attachments (
+          id          bigserial UNIQUE,
+          created_at  timestamptz DEFAULT NOW(),
+          payload     bytea
+      );
+    `).catch(err => console.error('[Socket] Error creando tabla del adapter:', err));
+
+    io.adapter(createAdapter(socketPool));
+    console.log('[Socket] Postgres Adapter configurado correctamente.');
+  } catch (err) {
+    console.error('[Socket] Error configurando Postgres Adapter:', err);
+  }
+}
 
 // Estado en memoria del carrito compartido por mesa
 // { 'mesa_5': { items: [...], ultimaActividad: Date } }
