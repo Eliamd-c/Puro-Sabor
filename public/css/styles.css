@@ -237,6 +237,7 @@ body {
   padding: 4px 16px;
   scroll-behavior: smooth;
   scrollbar-width: none; /* Firefox */
+  -webkit-overflow-scrolling: touch; /* Habilitar inercia en iOS */
 }
 
 .categories-scroll::-webkit-scrollbar {
@@ -244,6 +245,7 @@ body {
 }
 
 .category-tab {
+  flex-shrink: 0; /* Evitar que se encojan */
   display: flex;
   align-items: center;
   gap: 6px;
