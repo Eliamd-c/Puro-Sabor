@@ -833,7 +833,7 @@ document.addEventListener('DOMContentLoaded', () => {
         searchInput.value = '';
         ultimoFiltro = { categoria: bebidaId, busqueda: '' };
         categoriaActiva = bebidaId; // MUY IMPORTANTE: Actualizar el estado activo
-        renderizarFiltrosCategorias(bebidaId);
+        renderCategorias();
         paginaActual = 1;
         
         await cargarProductos(bebidaId, '', true);
