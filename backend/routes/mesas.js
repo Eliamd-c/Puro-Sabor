@@ -35,15 +35,22 @@ const configService = require('../services/configService');
  *       401:
  *         description: No autorizado - JWT requerido
  */
-// GET /api/mesas/debug/sockets — Endpoint para diagnosticar sockets
-router.get('/debug/sockets', verificarJWT, async (req, res, next) => {
+// GET /api/mesas/debug/sockets — Endpoint para diagnosticar sockets (PUBLIC PARA DIAGNOSTICO)
+router.get('/debug/sockets', async (req, res, next) => {
   try {
     const io = req.app.get('io');
     if (!io) return res.json({ error: 'Socket.io no inicializado' });
     
     const dbAsync = require('../config/database-promise');
     const mesas = await dbAsync.all('SELECT numero FROM mesas WHERE activa = 1');
-    const resultado = { admin: 0, mesas: {} };
+    const resultado = { admin: 0, mesas: {}, rawAdapter: null };
+    
+    // Obtener información cruda del adapter si está disponible
+    if (io.sockets.adapter && typeof io.sockets.adapter.rooms === 'object') {
+       try {
+           resultado.rawAdapter = Array.from(io.sockets.adapter.rooms.keys());
+       } catch(e) {}
+    }
     
     resultado.admin = io.sockets.adapter.rooms.get('admin')?.size || 0;
     
@@ -61,7 +68,36 @@ router.get('/debug/sockets', verificarJWT, async (req, res, next) => {
     
     res.json({ success: true, timestamp: Date.now(), conexiones: resultado });
   } catch (error) {
-    next(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/mesas/debug/logs — Endpoint para leer los logs remotos
+router.get('/debug/logs', async (req, res) => {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const logsDir = path.join(__dirname, '..', '..', 'logs');
+    const combinedLogPath = path.join(logsDir, 'combined.log');
+    
+    let logs = "No log file found.";
+    if (fs.existsSync(combinedLogPath)) {
+      // Leer los últimos 10000 caracteres (aprox últimas líneas)
+      const stats = fs.statSync(combinedLogPath);
+      const start = Math.max(0, stats.size - 10000);
+      
+      const stream = fs.createReadStream(combinedLogPath, { start, encoding: 'utf8' });
+      logs = await new Promise((resolve, reject) => {
+        let data = '';
+        stream.on('data', chunk => data += chunk);
+        stream.on('end', () => resolve(data));
+        stream.on('error', reject);
+      });
+    }
+    
+    res.send(`<pre>${logs}</pre>`);
+  } catch (error) {
+    res.status(500).send(error.message);
   }
 });
 
