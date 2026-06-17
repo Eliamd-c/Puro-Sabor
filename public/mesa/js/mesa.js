@@ -90,8 +90,24 @@ document.addEventListener('DOMContentLoaded', () => {
   // Contenedor de Toast
   const toastContainer = document.getElementById('toast-container');
 
-  // ── Inicialización ─────────────────────────────────────────────────────
+  // ── Inicialización ────────────────────────────────────────────────────────
   async function init() {
+    mostrarCarga();
+
+    // Cargar config global
+    try {
+      const resp = await fetch('/api/config');
+      const result = await resp.json();
+      if (result.success && result.data) {
+        window.carruselNovedadesActivo = result.data.carrusel_novedades_activo === '1';
+        if (result.data.whatsapp_numero) {
+          whatsappNumero = result.data.whatsapp_numero;
+        }
+      }
+    } catch (e) {
+      window.carruselNovedadesActivo = true; // Por defecto
+    }
+
     // Mostrar nombre de la mesa
     if (esMesaGeneral) {
       mesaLabel.textContent = 'Pedido General (para llevar)';
@@ -457,29 +473,55 @@ document.addEventListener('DOMContentLoaded', () => {
     const bebidasItems = catBebidas ? productosAgrupados.filter(p => p.categoria_id === catBebidas.id) : [];
     const postresItems = catPostres ? productosAgrupados.filter(p => p.categoria_id === catPostres.id) : [];
 
-    if (categoriaActiva === '' || (catMigas && categoriaActiva == catMigas.id)) {
+    if (window.carruselNovedadesActivo) {
       migasCarouselSection.style.display = 'block';
+      
+      const noticias = [
+        {
+          titulo: '🔥 Lo más pedido',
+          desc: 'Nuestras famosas Migas con Cerdo están siendo la sensación esta semana.',
+          img: '/assets/images/miga_cerdo.png'
+        },
+        {
+          titulo: '🎉 Evento Especial',
+          desc: 'Ven con tus amigos y disfruta de música en vivo todos los viernes.',
+          img: '/assets/images/default-food.jpg'
+        },
+        {
+          titulo: '🛵 Domicilios Gratis',
+          desc: 'Por compras superiores a $50.000 te llevamos el sabor hasta tu puerta.',
+          img: '/assets/images/miga_mixta.jpg'
+        }
+      ];
+
       let sliderHtml = '';
-      migasItems.forEach(prod => {
-        sliderHtml += `<div class="swiper-slide" data-nombre="${prod.nombre}">
-          <div class="slide-image"><img src="${prod.imagen_url}" alt="${prod.nombre}" onerror="this.src='/assets/images/default-food.jpg'"></div>
+      noticias.forEach(n => {
+        sliderHtml += `<div class="swiper-slide">
+          <div class="slide-image"><img src="${n.img}" alt="${n.titulo}" onerror="this.src='/assets/images/default-food.jpg'"></div>
           <div class="slide-content">
-            <h4 class="slide-title">${prod.nombre}</h4>
-            <p class="slide-desc">${prod.descripcion || ''}</p>
-            <div class="slide-footer">
-              <span class="slide-price">${getPrecioText(prod)}</span>
-              <button class="btn-slide-action">Agregar 🛒</button>
+            <h4 class="slide-title" style="font-size: 1.2rem; color: var(--primary-color);">${n.titulo}</h4>
+            <p class="slide-desc" style="font-size: 0.95rem; margin-top: 8px;">${n.desc}</p>
+            <div class="slide-footer" style="justify-content: flex-end;">
+              <button class="btn-slide-action" onclick="window.scrollTo(0, document.body.scrollHeight)">Saber más</button>
             </div>
           </div></div>`;
       });
       swiperWrapperMigas.innerHTML = sliderHtml;
       initSwiper();
-      agregarEventosClicGrid(migasItems, '.swiper-slide');
     } else {
       migasCarouselSection.style.display = 'none';
     }
 
     let secHtml = '';
+    
+    // Render de Migas al Carbón (ahora en grid)
+    if ((categoriaActiva === '' || (catMigas && categoriaActiva == catMigas.id)) && migasItems.length > 0) {
+      secHtml += `<div class="secondary-category-container"><div class="section-header">
+        <span class="section-tagline">Nuestra Especialidad</span><h3 class="section-title">Migas al Carbón</h3></div>
+        <div class="secondary-grid">`;
+      migasItems.forEach(prod => { secHtml += renderCardSecundaria(prod); });
+      secHtml += `</div></div>`;
+    }
     if ((categoriaActiva === '' || (catBebidas && categoriaActiva == catBebidas.id)) && bebidasItems.length > 0) {
       secHtml += `<div class="secondary-category-container"><div class="section-header">
         <span class="section-tagline">Para Acompañar</span><h3 class="section-title">Bebidas Refrescantes</h3></div>
@@ -496,7 +538,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     secondarySections.innerHTML = secHtml;
     secondarySections.style.display = 'block';
-    agregarEventosClicGrid([...bebidasItems, ...postresItems], '.secondary-card');
+    agregarEventosClicGrid([...migasItems, ...bebidasItems, ...postresItems], '.secondary-card');
   }
 
   function renderCardSecundaria(prod) {
