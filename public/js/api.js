@@ -93,8 +93,9 @@ const API = {
       params.append('limit', limit);
       if (categoria_id) params.append('categoria_id', categoria_id);
       if (search) params.append('search', search);
+      params.append('_t', Date.now()); // Evitar caché agresivo del navegador
 
-      const response = await fetch(`${API_BASE_URL}/api/productos?${params.toString()}`);
+      const response = await fetch(`${API_BASE_URL}/api/productos?${params.toString()}`, { cache: 'no-store' });
       if (!response.ok) throw new Error('API no disponible');
       const result = await response.json();
       if (!result.success) throw new Error(result.message);

@@ -1,6 +1,6 @@
 // Service Worker para Puro Sabor - Soporte Offline
 
-const CACHE_NAME = 'puro-sabor-v1';
+const CACHE_NAME = 'puro-sabor-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -13,8 +13,8 @@ const STATIC_ASSETS = [
   '/assets/images/default-food.jpg'
 ];
 
-const API_CACHE = 'puro-sabor-api-v1';
-const IMAGE_CACHE = 'puro-sabor-images-v1';
+const API_CACHE = 'puro-sabor-api-v2';
+const IMAGE_CACHE = 'puro-sabor-images-v2';
 
 // Instalar Service Worker
 self.addEventListener('install', (event) => {
