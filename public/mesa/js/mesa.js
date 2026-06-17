@@ -22,6 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let rondaActual = 0;
   let whatsappNumero = '3133288298';
   let socket = null;
+  let clienteNombre = '';
 
   // ── Elementos del DOM ──────────────────────────────────────────────────
   const mesaLabel = document.getElementById('mesa-label');
@@ -70,6 +71,25 @@ document.addEventListener('DOMContentLoaded', () => {
   const cerradaOverlay = document.getElementById('cerrada-overlay');
   const syncIndicator = document.getElementById('sync-indicator');
 
+  // Elementos de Bienvenida
+  const welcomeOverlay = document.getElementById('welcome-overlay');
+  const clienteNombreInput = document.getElementById('cliente-nombre-input');
+  const btnWelcomeEnter = document.getElementById('btn-welcome-enter');
+  const btnWelcomeSkip = document.getElementById('btn-welcome-skip');
+
+  // Elementos del Bottom Sheet
+  const bottomSheetOverlay = document.getElementById('bottom-sheet-overlay');
+  const bottomSheet = document.getElementById('bottom-sheet');
+  const bottomSheetIcon = document.getElementById('bottom-sheet-icon');
+  const sheetTitle = document.getElementById('sheet-title');
+  const sheetMessage = document.getElementById('sheet-message');
+  const btnSheetSuggest = document.getElementById('btn-sheet-suggest');
+  const btnSheetCart = document.getElementById('btn-sheet-cart');
+  const btnSheetClose = document.getElementById('btn-sheet-close');
+
+  // Contenedor de Toast
+  const toastContainer = document.getElementById('toast-container');
+
   // ── Inicialización ─────────────────────────────────────────────────────
   async function init() {
     // Mostrar nombre de la mesa
@@ -100,9 +120,150 @@ document.addEventListener('DOMContentLoaded', () => {
     renderCategorias();
     renderMenu();
     configurarEventos();
+    configurarEventosColaborativos();
+
+    // Gestionar el nombre del cliente (cargar o preguntar)
+    gestionarNombreUsuario();
 
     // Conectar Socket.io
     conectarSocket();
+  }
+
+  // ── Solicitar o Cargar Nombre del Cliente ──────────────────────────────
+  function gestionarNombreUsuario() {
+    const guardado = localStorage.getItem('puro_sabor_cliente_nombre');
+    if (guardado && guardado.trim().length > 0) {
+      clienteNombre = guardado.trim();
+      if (nombrePedido) nombrePedido.value = clienteNombre;
+    } else {
+      if (welcomeOverlay) {
+        welcomeOverlay.style.display = 'flex';
+      }
+    }
+  }
+
+  // ── Configurar Eventos del Sistema Colaborativo ────────────────────────
+  function configurarEventosColaborativos() {
+    if (btnWelcomeEnter) {
+      btnWelcomeEnter.addEventListener('click', () => {
+        const value = clienteNombreInput.value.trim();
+        if (value.length === 0) {
+          clienteNombreInput.style.borderColor = '#e74c3c';
+          setTimeout(() => clienteNombreInput.style.borderColor = '', 1500);
+          return;
+        }
+        clienteNombre = value;
+        localStorage.setItem('puro_sabor_cliente_nombre', clienteNombre);
+        if (nombrePedido) nombrePedido.value = clienteNombre;
+        if (welcomeOverlay) welcomeOverlay.style.display = 'none';
+        
+        mostrarToast('👋', `Bienvenido, <strong>${clienteNombre}</strong>`);
+      });
+    }
+
+    if (btnWelcomeSkip) {
+      btnWelcomeSkip.addEventListener('click', () => {
+        const rnd = Math.floor(Math.random() * 100) + 1;
+        clienteNombre = `Comensal ${rnd}`;
+        if (nombrePedido) nombrePedido.value = clienteNombre;
+        if (welcomeOverlay) welcomeOverlay.style.display = 'none';
+        
+        mostrarToast('👋', `Bienvenido, <strong>${clienteNombre}</strong>`);
+      });
+    }
+
+    if (btnSheetClose) {
+      btnSheetClose.addEventListener('click', cerrarBottomSheet);
+    }
+    if (bottomSheetOverlay) {
+      bottomSheetOverlay.addEventListener('click', cerrarBottomSheet);
+    }
+    if (btnSheetCart) {
+      btnSheetCart.addEventListener('click', () => {
+        cerrarBottomSheet();
+        if (cartPanelOverlay) cartPanelOverlay.classList.add('open');
+      });
+    }
+    if (btnSheetSuggest) {
+      btnSheetSuggest.addEventListener('click', () => {
+        cerrarBottomSheet();
+        const categoriaBebidas = categorias.find(c => c.nombre.toLowerCase().includes('bebida') || c.nombre.toLowerCase().includes('tomar'));
+        if (categoriaBebidas) {
+          const catBtn = document.querySelector(`.category-btn[data-id="${categoriaBebidas.id}"]`);
+          if (catBtn) {
+            catBtn.click();
+          } else {
+            const allBtns = document.querySelectorAll('.category-btn');
+            for (const btn of allBtns) {
+              if (btn.textContent.toLowerCase().includes('bebida') || btn.textContent.toLowerCase().includes('tomar')) {
+                btn.click();
+                break;
+              }
+            }
+          }
+        }
+      });
+    }
+  }
+
+  // ── Mostrar Hoja Deslizable (Mesero Sugestivo) ─────────────────────────
+  function mostrarBottomSheet(productoName, categoriaName) {
+    if (!bottomSheet) return;
+    
+    sheetTitle.textContent = '¡Agregado con éxito! 🍽️';
+    
+    const esPlatoFuerte = !categoriaName.toLowerCase().includes('bebida') && 
+                          !categoriaName.toLowerCase().includes('tomar') && 
+                          !categoriaName.toLowerCase().includes('postre');
+                          
+    const tieneBebidas = carrito.some(item => 
+      item.categoria_nombre && (
+        item.categoria_nombre.toLowerCase().includes('bebida') || 
+        item.categoria_nombre.toLowerCase().includes('tomar')
+      )
+    );
+
+    if (esPlatoFuerte && !tieneBebidas) {
+      sheetMessage.innerHTML = `¡Uff, excelente elección, <strong>${clienteNombre}</strong>! 🍖 Agregamos <strong>${productoName}</strong> al pedido de la mesa. ¿Te provoca acompañarlo con una de nuestras <strong>bebidas frías</strong>? 🍹`;
+      btnSheetSuggest.style.display = 'block';
+      btnSheetSuggest.textContent = '🍹 Ver Bebidas';
+    } else if (categoriaName.toLowerCase().includes('bebida') || categoriaName.toLowerCase().includes('tomar')) {
+      sheetMessage.innerHTML = `Agregamos tu bebida (<strong>${productoName}</strong>) al pedido de la mesa. ¿Quieres elegir un plato fuerte o prefieres revisar lo que lleva la mesa en el carrito? 🛒`;
+      btnSheetSuggest.style.display = 'none';
+    } else {
+      sheetMessage.innerHTML = `Agregamos <strong>${productoName}</strong> al pedido compartido de la mesa. ¿Deseas ver el carrito o seguir explorando el menú?`;
+      btnSheetSuggest.style.display = 'none';
+    }
+
+    bottomSheetOverlay.style.display = 'block';
+    setTimeout(() => {
+      bottomSheet.classList.add('open');
+    }, 50);
+  }
+
+  function cerrarBottomSheet() {
+    if (bottomSheet) {
+      bottomSheet.classList.remove('open');
+    }
+    setTimeout(() => {
+      if (bottomSheetOverlay) bottomSheetOverlay.style.display = 'none';
+    }, 350);
+  }
+
+  // ── Mostrar Toast de Notificación Flotante ─────────────────────────────
+  function mostrarToast(icon, text) {
+    if (!toastContainer) return;
+    const toast = document.createElement('div');
+    toast.className = 'toast-notificacion';
+    toast.innerHTML = `
+      <div class="toast-icon">${icon}</div>
+      <div class="toast-content">${text}</div>
+    `;
+    toastContainer.appendChild(toast);
+    
+    setTimeout(() => {
+      toast.remove();
+    }, 4500);
   }
 
   // ── Socket.io: Sincronización en tiempo real ──────────────────────────
@@ -155,6 +316,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (cerradaOverlay) cerradaOverlay.style.display = 'flex';
         if (successOverlay) successOverlay.style.display = 'none';
         if (cartPanelOverlay) cartPanelOverlay.classList.remove('open');
+      });
+
+      // Recibir alerta de que otro comensal agregó un producto
+      socket.on('notificar_item_agregado', ({ cliente, producto }) => {
+        mostrarToast('🔥', `<strong>${cliente}</strong> agregó <strong>${producto}</strong> al carrito de la mesa.`);
       });
     } catch (e) {
       console.warn('Error al iniciar WebSockets:', e);
@@ -426,8 +592,12 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    // Buscar si ya existe en el carrito
-    const existente = carrito.find(item => item.id === idItem);
+    const prodName = productoSeleccionado.nombre;
+    const catName = productoSeleccionado.categoria_nombre || '';
+    const nombreDueno = clienteNombre || 'Anónimo';
+
+    // Buscar si ya existe en el carrito el mismo producto agregado por la misma persona
+    const existente = carrito.find(item => item.id === idItem && item.agregadoPor === nombreDueno);
     if (existente) {
       existente.cantidad += cantidadModal;
     } else {
@@ -437,13 +607,26 @@ document.addEventListener('DOMContentLoaded', () => {
         imagen_url: productoSeleccionado.imagen_url,
         precio: precioItem,
         cantidad: cantidadModal,
-        categoria_nombre: productoSeleccionado.categoria_nombre
+        categoria_nombre: catName,
+        agregadoPor: nombreDueno
       });
     }
 
     cerrarModalDetalle();
     actualizarUICarrito();
     emitirCambioCarrito();
+
+    // Notificar a los demás comensales de la mesa
+    if (socket && socket.connected) {
+      socket.emit('item_agregado_grupo', {
+        mesaNumero,
+        cliente: nombreDueno,
+        producto: nombreItem
+      });
+    }
+
+    // Mostrar el panel deslizable (Mesero Sugestivo)
+    mostrarBottomSheet(prodName, catName);
   }
 
   // ── UI del Carrito ─────────────────────────────────────────────────────
@@ -477,11 +660,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let html = '';
     carrito.forEach((item, idx) => {
+      const ownerHtml = item.agregadoPor ? `<div class="cart-item-owner">👤 ${item.agregadoPor}</div>` : '';
       html += `<div class="cart-item" data-index="${idx}">
         <img class="cart-item-img" src="${item.imagen_url}" alt="${item.nombre}" onerror="this.src='/assets/images/default-food.jpg'">
         <div class="cart-item-info">
           <div class="cart-item-name">${item.nombre}</div>
           <div class="cart-item-price">$${(item.precio * item.cantidad).toLocaleString('es-CO', { minimumFractionDigits: 0 })} COP</div>
+          ${ownerHtml}
         </div>
         <div class="cart-item-controls">
           <button class="cart-qty-btn" data-action="restar" data-index="${idx}">−</button>
@@ -525,10 +710,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
     msg += `\n\n📋 *Mi pedido:*\n`;
 
+    // Agrupar items por persona
+    const grupos = {};
     carrito.forEach(item => {
-      const subtotal = item.precio * item.cantidad;
-      msg += `• ${item.cantidad}x ${item.nombre} — $${subtotal.toLocaleString('es-CO', { minimumFractionDigits: 0 })}\n`;
+      const persona = item.agregadoPor || 'General';
+      if (!grupos[persona]) grupos[persona] = [];
+      grupos[persona].push(item);
     });
+
+    const keys = Object.keys(grupos);
+    if (keys.length === 1 && (keys[0] === 'General' || keys[0] === nombre)) {
+      // Formato normal simple
+      carrito.forEach(item => {
+        const subtotal = item.precio * item.cantidad;
+        msg += `• ${item.cantidad}x ${item.nombre} — $${subtotal.toLocaleString('es-CO', { minimumFractionDigits: 0 })}\n`;
+      });
+    } else {
+      // Estructurado por comensal
+      keys.forEach(persona => {
+        msg += `\n👤 *Para ${persona}:*\n`;
+        grupos[persona].forEach(item => {
+          const subtotal = item.precio * item.cantidad;
+          msg += `  ▪ ${item.cantidad}x ${item.nombre} — $${subtotal.toLocaleString('es-CO', { minimumFractionDigits: 0 })}\n`;
+        });
+      });
+    }
 
     msg += `\n💰 *Total: $${totalPrecio.toLocaleString('es-CO', { minimumFractionDigits: 0 })} COP*`;
 

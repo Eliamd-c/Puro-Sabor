@@ -206,6 +206,41 @@
     </div>
   </div>
 
+  <!-- ══ COMPONENTES COLABORATIVOS Y MESERO VIRTUAL ══════════════════════ -->
+  
+  <!-- Contenedor de Toasts Flotantes -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Modal de Bienvenida (Ingreso de nombre) -->
+  <div class="welcome-overlay" id="welcome-overlay" style="display:none;">
+    <div class="welcome-modal">
+      <div class="welcome-icon">🪑</div>
+      <h3 id="welcome-title">¡Bienvenido a Puro Sabor!</h3>
+      <p class="welcome-sub">Para coordinar tu pedido en grupo y ver quién agrega cada plato, por favor ingresa tu nombre:</p>
+      <div class="welcome-input-container">
+        <input type="text" id="cliente-nombre-input" placeholder="Ej: Juan, María..." maxlength="25">
+      </div>
+      <button class="btn-welcome-enter" id="btn-welcome-enter">Entrar al Menú 🍽️</button>
+      <button class="btn-welcome-skip" id="btn-welcome-skip">Omitir (entrar como Anónimo)</button>
+    </div>
+  </div>
+
+  <!-- Bottom Sheet (Mesero Sugestivo) -->
+  <div class="bottom-sheet-overlay" id="bottom-sheet-overlay" style="display:none;"></div>
+  <div class="bottom-sheet" id="bottom-sheet">
+    <div class="bottom-sheet-handle"></div>
+    <div class="bottom-sheet-content">
+      <div class="bottom-sheet-icon" id="bottom-sheet-icon">💁‍♂️</div>
+      <h4 id="sheet-title">¡Excelente elección!</h4>
+      <p id="sheet-message">¿Te gustaría acompañar tu plato con una de nuestras bebidas heladas o prefieres seguir viendo el menú?</p>
+      <div class="bottom-sheet-actions">
+        <button class="btn-sheet-primary" id="btn-sheet-suggest">🍹 Ver Bebidas</button>
+        <button class="btn-sheet-secondary" id="btn-sheet-cart">🛒 Ver mi Carrito</button>
+        <button class="btn-sheet-text" id="btn-sheet-close">Seguir explorando</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Scripts -->
   <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
   <script src="/socket.io/socket.io.js"></script>

@@ -72,6 +72,13 @@ io.on('connection', (socket) => {
     socket.to(sala).emit('carrito_actualizado', items);
   });
 
+  // ── Notificar producto agregado por un comensal específico ──
+  socket.on('item_agregado_grupo', ({ mesaNumero, cliente, producto }) => {
+    const sala = mesaNumero === 'general' ? 'mesa_general' : `mesa_${mesaNumero}`;
+    // Reenviar a todos en la sala excepto al que lo agregó
+    socket.to(sala).emit('notificar_item_agregado', { cliente, producto });
+  });
+
   // ── Pedido confirmado: limpiar carrito de la sala ──
   socket.on('pedido_enviado', ({ mesaNumero, resumen }) => {
     const sala = mesaNumero === 'general' ? 'mesa_general' : `mesa_${mesaNumero}`;
