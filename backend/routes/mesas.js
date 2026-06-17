@@ -35,6 +35,17 @@ const configService = require('../services/configService');
  *       401:
  *         description: No autorizado - JWT requerido
  */
+// GET /api/mesas/debug/viendo — Estado real de viendo en la DB (PUBLIC PARA DIAGNOSTICO)
+router.get('/debug/viendo', async (req, res, next) => {
+  try {
+    const dbAsync = require('../config/database-promise');
+    const mesas = await dbAsync.all('SELECT numero, nombre, viendo FROM mesas WHERE activa = 1 ORDER BY numero ASC');
+    res.json({ success: true, timestamp: new Date().toISOString(), mesas });
+  } catch (error) {
+    res.status(500).json({ error: error.message, stack: error.stack });
+  }
+});
+
 // GET /api/mesas/debug/sockets — Endpoint para diagnosticar sockets (PUBLIC PARA DIAGNOSTICO)
 router.get('/debug/sockets', async (req, res, next) => {
   try {

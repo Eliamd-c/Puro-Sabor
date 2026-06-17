@@ -101,15 +101,20 @@ io.on('connection', (socket) => {
     if (mesaNumero !== 'general') {
       try {
         await dbAsync.run(
-          'UPDATE mesas SET viendo = viendo + 1 WHERE numero = $1',
+          'UPDATE mesas SET viendo = viendo + 1 WHERE numero = ?',
           [mesaNumero]
         );
+        // Verificar el valor real después del UPDATE
+        const row = await dbAsync.get('SELECT viendo FROM mesas WHERE numero = ?', [mesaNumero]);
+        console.log(`[Socket] Mesa ${mesaNumero} — viendo actualizado a: ${row ? row.viendo : 'ERROR: mesa no encontrada'}`);
       } catch (e) {
         console.error(`[Socket] Error incrementando viendo para mesa ${mesaNumero}:`, e.message);
       }
     }
 
     // Notificar al admin que la mesa tiene actividad (clientes viendo menú)
+    const adminRoom = io.sockets.adapter.rooms.get('admin');
+    console.log(`[Socket] Emitiendo mesa_actualizada al admin. Admin sockets en este proceso: ${adminRoom ? adminRoom.size : 0}`);
     io.to('admin').emit('mesa_actualizada', { mesa: mesaNumero });
   });
 
@@ -154,7 +159,7 @@ io.on('connection', (socket) => {
     if (socket.mesaNumero && socket.mesaNumero !== 'general') {
       try {
         await dbAsync.run(
-          'UPDATE mesas SET viendo = GREATEST(0, viendo - 1) WHERE numero = $1',
+          'UPDATE mesas SET viendo = GREATEST(0, viendo - 1) WHERE numero = ?',
           [socket.mesaNumero]
         );
       } catch (e) {

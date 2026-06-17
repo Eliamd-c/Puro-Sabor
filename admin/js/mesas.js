@@ -61,15 +61,18 @@ document.addEventListener('DOMContentLoaded', () => {
     await cargarConfig();
     renderQRs();
     conectarSocket();
+    iniciarPolling();
     configurarEventos();
   }
 
   // ── Socket.io ──────────────────────────────────────────────────────────
   function conectarSocket() {
-    socket = io({
+    const serverUrl = window.location.origin;
+    socket = io(serverUrl, {
       transports: ['polling', 'websocket'],
       reconnectionAttempts: 10,
-      reconnectionDelay: 2000
+      reconnectionDelay: 2000,
+      path: '/socket.io/'
     });
 
     socket.on('connect_error', (err) => {
@@ -77,18 +80,27 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     socket.on('connect', () => {
+      console.log('[Socket Admin] Conectado, ID:', socket.id);
       socket.emit('unirse_admin');
     });
 
     socket.on('nuevo_pedido', (data) => {
       console.log('[Admin] Nuevo pedido:', data);
-      cargarMesas(); // Refrescar
+      cargarMesas();
     });
 
     socket.on('mesa_actualizada', (data) => {
-      console.log('[Admin] Mesa actualizada:', data);
-      cargarMesas(); // Refrescar
+      console.log('[Admin] Mesa actualizada via socket:', data);
+      cargarMesas();
     });
+  }
+
+  // ── Polling de respaldo cada 8 segundos ───────────────────────────────
+  // Garantiza actualización aunque el socket falle o haya problemas multi-proceso
+  function iniciarPolling() {
+    setInterval(() => {
+      cargarMesas();
+    }, 8000);
   }
 
   // ── Cargar datos ───────────────────────────────────────────────────────
