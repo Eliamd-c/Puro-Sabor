@@ -5,6 +5,8 @@ const { verificarJWT } = require('../middleware/auth');
 const waAgent = require('../services/whatsappAgent');
 const Joi = require('joi');
 const validate = require('../middleware/validate');
+const QRCode = require('qrcode');
+const configService = require('../services/configService');
 
 /**
  * @swagger
@@ -172,6 +174,51 @@ router.post('/:numero/pedido', validate(pedidoSchema), async (req, res, next) =>
     }
     
     res.json({ success: true, message: 'Pedido enviado a cocina.' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/mesas/general/qr — QR general del restaurante
+router.get('/general/qr', async (req, res, next) => {
+  try {
+    const configDominio = await configService.get('dominio_base');
+    const dominio = configDominio ? configDominio.valor : 'http://localhost:3000';
+    const url = `${dominio}/mesa/general`;
+    
+    const qrBuffer = await QRCode.toBuffer(url, {
+      type: 'png',
+      width: 400,
+      margin: 2,
+      color: { dark: '#1a0a00', light: '#fff8f0' }
+    });
+    
+    res.set('Content-Type', 'image/png');
+    res.set('Content-Disposition', 'attachment; filename="QR-General-Puro-Sabor.png"');
+    res.send(qrBuffer);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/mesas/:numero/qr — Generar QR de una mesa
+router.get('/:numero/qr', async (req, res, next) => {
+  try {
+    const { numero } = req.params;
+    const configDominio = await configService.get('dominio_base');
+    const dominio = configDominio ? configDominio.valor : 'http://localhost:3000';
+    const url = `${dominio}/mesa/${numero}`;
+    
+    const qrBuffer = await QRCode.toBuffer(url, {
+      type: 'png',
+      width: 400,
+      margin: 2,
+      color: { dark: '#1a0a00', light: '#fff8f0' }
+    });
+    
+    res.set('Content-Type', 'image/png');
+    res.set('Content-Disposition', `attachment; filename="QR-Mesa-${numero}-Puro-Sabor.png"`);
+    res.send(qrBuffer);
   } catch (error) {
     next(error);
   }
