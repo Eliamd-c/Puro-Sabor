@@ -107,6 +107,16 @@ function obtenerHistorial(numero, botType, limite = 15) {
   });
 }
 
+// --- Helper de Zona Horaria ---
+function getColombiaTimeString() {
+  const now = new Date();
+  const colombiaTime = new Date(now.getTime() - (5 * 60 * 60 * 1000));
+  const hours = String(colombiaTime.getUTCHours()).padStart(2, '0');
+  const minutes = String(colombiaTime.getUTCMinutes()).padStart(2, '0');
+  const seconds = String(colombiaTime.getUTCSeconds()).padStart(2, '0');
+  return `${hours}:${minutes}:${seconds}`;
+}
+
 // --- Nuevos helpers para Fase 2 ---
 function isChatPaused(telefono) {
   return new Promise((resolve) => {
@@ -492,7 +502,7 @@ class WhatsAppBot {
         mediaPart = { inlineData: { data: buffer.toString('base64'), mimeType } };
       } catch (err) {
         console.error(`[WA Agent ${this.botType}] Error descargando media:`, err.message);
-        this.emitMessage({ type: 'error', sender: 'Sistema', text: 'Error procesando imagen o audio.', time: new Date().toLocaleTimeString() });
+        this.emitMessage({ type: 'error', sender: 'Sistema', text: 'Error procesando imagen o audio.', time: getColombiaTimeString() });
       }
     }
 
@@ -513,7 +523,7 @@ class WhatsAppBot {
       }
     }
 
-    this.emitMessage({ type: 'in', sender: senderNumber, text: body || '[Imagen/Audio]', time: new Date().toLocaleTimeString() });
+    this.emitMessage({ type: 'in', sender: senderNumber, text: body || '[Imagen/Audio]', time: getColombiaTimeString() });
 
     if (this.botType === 'client') {
       const paused = await isChatPaused(senderNumber);
@@ -535,7 +545,7 @@ class WhatsAppBot {
         console.log(`[WA Agent client] Bot cerrado. Enviando mensaje de ausencia.`);
         await this.client.sendMessage(remoteJid, { text: mensajeAusencia }, { quoted: message });
         await guardarMensajeHistorial(senderNumber, 'model', mensajeAusencia, this.botType);
-        this.emitMessage({ type: 'out', sender: 'Bot IA (Ausencia)', text: mensajeAusencia, time: new Date().toLocaleTimeString() });
+        this.emitMessage({ type: 'out', sender: 'Bot IA (Ausencia)', text: mensajeAusencia, time: getColombiaTimeString() });
         
         // Registrar analítica
         await logChatbotInteraction(senderNumber, message.pushName || 'Cliente', 'cierre_automatico', body, mensajeAusencia);
@@ -761,7 +771,7 @@ class WhatsAppBot {
       if (mediaPart) contentParts.push(mediaPart);
       if (body) contentParts.push(body);
 
-      this.emitMessage({ type: 'system', sender: 'Sistema', text: '🤖 Procesando...', time: new Date().toLocaleTimeString() });
+      this.emitMessage({ type: 'system', sender: 'Sistema', text: '🤖 Procesando...', time: getColombiaTimeString() });
 
       let result = await chat.sendMessage(contentParts);
       let iteraciones = 0;
@@ -779,7 +789,7 @@ class WhatsAppBot {
             const handoffMsg = 'Un momento por favor, te estoy transfiriendo con un asesor humano. 🧑‍💼';
             await this.client.sendMessage(remoteJid, { text: handoffMsg }, { quoted: message });
             await guardarMensajeHistorial(senderNumber, 'model', handoffMsg, this.botType);
-            this.emitMessage({ type: 'out', sender: 'Bot IA (Handoff)', text: handoffMsg, time: new Date().toLocaleTimeString() });
+            this.emitMessage({ type: 'out', sender: 'Bot IA (Handoff)', text: handoffMsg, time: getColombiaTimeString() });
             
             // Guardar analítica
             await logChatbotInteraction(senderNumber, message.pushName || 'Cliente', 'handoff', body, handoffMsg);
@@ -822,7 +832,7 @@ class WhatsAppBot {
                 
                 await this.client.sendMessage(remoteJid, mediaPayload, { quoted: message });
                 await guardarMensajeHistorial(senderNumber, 'model', cleanText || '(Promoción enviada)', this.botType);
-                this.emitMessage({ type: 'out', sender: 'Bot IA', text: cleanText || '(Promoción enviada)', time: new Date().toLocaleTimeString() });
+                this.emitMessage({ type: 'out', sender: 'Bot IA', text: cleanText || '(Promoción enviada)', time: getColombiaTimeString() });
                 
                 // Guardar analítica
                 await logChatbotInteraction(senderNumber, message.pushName || 'Cliente', 'promo_enviada', body, cleanText, { promo_id: promoId });
@@ -855,7 +865,7 @@ class WhatsAppBot {
                   await this.client.sendMessage(remoteJid, { text: cleanText });
                 }
                 await guardarMensajeHistorial(senderNumber, 'model', cleanText || '(Multimedia enviado)', this.botType);
-                this.emitMessage({ type: 'out', sender: 'Bot IA', text: cleanText || '(Multimedia enviado)', time: new Date().toLocaleTimeString() });
+                this.emitMessage({ type: 'out', sender: 'Bot IA', text: cleanText || '(Multimedia enviado)', time: getColombiaTimeString() });
                 
                 // Guardar analítica
                 await logChatbotInteraction(senderNumber, message.pushName || 'Cliente', 'respuesta_kb', body, cleanText, { kb_id: kbId });
@@ -867,7 +877,7 @@ class WhatsAppBot {
           // C. Enviar respuesta de texto estándar
           await this.client.sendMessage(remoteJid, { text: cleanText }, { quoted: message });
           await guardarMensajeHistorial(senderNumber, 'model', cleanText, this.botType);
-          this.emitMessage({ type: 'out', sender: 'Bot IA', text: cleanText, time: new Date().toLocaleTimeString() });
+          this.emitMessage({ type: 'out', sender: 'Bot IA', text: cleanText, time: getColombiaTimeString() });
 
           // Guardar analítica
           const isFreq = await new Promise(resolve => {

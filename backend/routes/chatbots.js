@@ -1,4 +1,14 @@
 const express = require('express');
+// Helper de Zona Horaria para el Monitor
+function getColombiaTimeString() {
+  const now = new Date();
+  const colombiaTime = new Date(now.getTime() - (5 * 60 * 60 * 1000));
+  const hours = String(colombiaTime.getUTCHours()).padStart(2, '0');
+  const minutes = String(colombiaTime.getUTCMinutes()).padStart(2, '0');
+  const seconds = String(colombiaTime.getUTCSeconds()).padStart(2, '0');
+  return `${hours}:${minutes}:${seconds}`;
+}
+
 const router = express.Router();
 const waAgent = require('../services/whatsappAgent');
 const configService = require('../services/configService');
@@ -164,7 +174,7 @@ router.post('/reply', verificarJWT, async (req, res, next) => {
       // Guardar historial manualmente
       await waAgent.guardarMensajeHistorial(telefono, 'model', respuesta, 'client');
       // Emitir al monitor
-      clientBot.emitMessage({ type: 'out', sender: 'Asesor Humano', text: respuesta, time: new Date().toLocaleTimeString() });
+      clientBot.emitMessage({ type: 'out', sender: 'Asesor Humano', text: respuesta, time: getColombiaTimeString() });
     }
 
     // 2. Insertar en Base de Conocimientos si hay pregunta
