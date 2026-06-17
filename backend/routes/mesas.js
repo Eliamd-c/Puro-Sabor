@@ -220,8 +220,8 @@ router.post('/:numero/pedido', validate(pedidoSchema), async (req, res, next) =>
 // GET /api/mesas/general/qr — QR general del restaurante
 router.get('/general/qr', async (req, res, next) => {
   try {
-    const configDominio = await configService.get('dominio_base');
-    const dominio = configDominio ? configDominio.valor : 'http://localhost:3000';
+    const configDominio = await configService.getConfig('dominio_base');
+    const dominio = configDominio || 'http://localhost:3000';
     const url = `${dominio}/mesa/general`;
     
     const qrBuffer = await QRCode.toBuffer(url, {
@@ -243,8 +243,8 @@ router.get('/general/qr', async (req, res, next) => {
 router.get('/:numero/qr', async (req, res, next) => {
   try {
     const { numero } = req.params;
-    const configDominio = await configService.get('dominio_base');
-    const dominio = configDominio ? configDominio.valor : 'http://localhost:3000';
+    const configDominio = await configService.getConfig('dominio_base');
+    const dominio = configDominio || 'http://localhost:3000';
     const url = `${dominio}/mesa/${numero}`;
     
     const qrBuffer = await QRCode.toBuffer(url, {
