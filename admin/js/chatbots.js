@@ -478,7 +478,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       try {
-        const token = localStorage.getItem('ps_token');
         const res = await fetch('/api/chatbots/kb', {
           method: 'POST',
           headers: { 'Authorization': 'Bearer ' + token }, // No setear Content-Type, fetch lo pone con el boundary

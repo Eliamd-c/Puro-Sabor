@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Puro Sabor | Entrenador Bot</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/animations.css">
+  <link rel="stylesheet" href="/admin/css/admin.css">
+  <link rel="stylesheet" href="/admin/css/entrenador.css">
+  <link rel="stylesheet" href="/admin/css/mesas.css">
+</head>
+<body>
+  <div class="dashboard-wrapper">
+
+    <!-- ═══ SIDEBAR ═══════════════════════════════════════════════════════ -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <span class="sidebar-logo">🔥</span>
+        <h2>Puro Sabor</h2>
+      </div>
+      <div class="sidebar-user">
+        <p class="user-info-role">ADMINISTRADOR</p>
+        <p class="user-info-name" id="admin-display-name">Admin</p>
+      </div>
+      <nav class="sidebar-menu">
+        <a href="/admin/dashboard.html" class="menu-item">
+          <span>📦</span> Productos
+        </a>
+        <a href="/admin/inventario.html" class="menu-item">
+          <span>📈</span> Inventario
+        </a>
+        <a href="/admin/mesas.html" class="menu-item">
+          <span>🪑</span> Mesas y Pedidos
+        </a>
+        <a href="/admin/chatbots.html" class="menu-item">
+          <span>🤖</span> Chatbots IA
+        </a>
+        <a href="/admin/entrenador-bot.html" class="menu-item active">
+          <span>🧠</span> Entrenador Bot
+        </a>
+        <a href="/" class="menu-item" target="_blank">
+          <span>🍽️</span> Ver Menú Público
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        <button class="btn-logout" id="btn-logout">Cerrar Sesión</button>
+      </div>
+    </aside>
+
+    <!-- ═══ CONTENIDO PRINCIPAL ═══════════════════════════════════════════ -->
+    <main class="main-content">
+
+      <!-- Header -->
+      <div class="dashboard-header animate-fade-in-up">
+        <div class="dashboard-title">
+          <h2>🧠 Entrenador y Configuración del Bot</h2>
+          <p>Configura las respuestas, horarios y reglas de la Inteligencia Artificial</p>
+        </div>
+      </div>
+
+      <!-- Entrenador Grid Layout -->
+      <div class="entrenador-layout animate-fade-in-up" style="animation-delay: 0.1s;">
+        
+        <!-- Sidebar de Navegación del Entrenador -->
+        <div class="entrenador-sidebar">
+          <ul class="entrenador-menu">
+            <li><a class="entrenador-link active" onclick="switchTab('config')">⚙️ Configuración IA</a></li>
+            <li><a class="entrenador-link" onclick="switchTab('horarios')">🕐 Horarios</a></li>
+            <li><a class="entrenador-link" onclick="switchTab('conocimiento')">📚 Base de Conocimiento</a></li>
+            <li><a class="entrenador-link" onclick="switchTab('contexto')">💬 Contexto</a></li>
+            <li><a class="entrenador-link" onclick="switchTab('tester')">🧪 Tester del Bot</a></li>
+            <li><a class="entrenador-link" onclick="switchTab('analytics')">📊 Analytics</a></li>
+          </ul>
+        </div>
+
+        <!-- Contenedor de Secciones -->
+        <div class="entrenador-sections">
+
+          <!-- 1. CONFIGURACIÓN IA -->
+          <section id="tab-config" class="entrenador-section active">
+            <div class="entrenador-card">
+              <h3>⚙️ Configuración Personalizada de la IA</h3>
+              <form id="form-bot-base">
+                <!-- Nombre y Descripción -->
+                <div class="form-group">
+                  <label for="bot-config-nombre">Nombre de la IA</label>
+                  <input type="text" id="bot-config-nombre" class="form-control" placeholder="Ej: Recepcionista Puro Sabor" required>
+                </div>
+                <div class="form-group">
+                  <label for="bot-config-prompt">Personalidad (Instrucción Base)</label>
+                  <textarea id="bot-config-prompt" class="form-control" style="min-height: 120px; resize: vertical;" placeholder="Ej: Eres amable, usas emojis de comida, respondes de manera cálida..."></textarea>
+                  <small style="color: var(--text-muted); font-size: 11px;">Define el rol general y la personalidad de tu bot.</small>
+                </div>
+
+                <!-- Tono de voz -->
+                <div class="form-group">
+                  <label for="bot-config-tono">Tono de Respuestas</label>
+                  <select id="bot-config-tono" class="form-control">
+                    <option value="amable">😊 Amable y Familiar (Cálido, usa emojis)</option>
+                    <option value="formal">🎩 Formal y Profesional (Respetuoso, de usted)</option>
+                    <option value="casual">😄 Casual y Divertido (Juvenil, cercano)</option>
+                  </select>
+                </div>
+
+                <!-- Mensaje de Ausencia (Cerrado) -->
+                <div class="form-group">
+                  <label for="bot-config-ausencia">Respuesta cuando está Cerrado</label>
+                  <textarea id="bot-config-ausencia" class="form-control" style="min-height: 80px; resize: vertical;" placeholder="Mensaje de ausencia cuando el restaurante está cerrado..."></textarea>
+                </div>
+
+                <div id="alert-config-base" class="alert-box" style="display:none; padding:10px; margin-bottom:16px;"></div>
+                <button type="submit" class="btn-primary" id="btn-save-bot-base" style="width:100%; justify-content:center;">
+                  <span>💾 Guardar Configuración Base</span>
+                </button>
+              </form>
+            </div>
+          </section>
+
+          <!-- 2. HORARIOS -->
+          <section id="tab-horarios" class="entrenador-section">
+            <div class="entrenador-card">
+              <h3>🕐 Horarios Semanales de Atención</h3>
+              <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 20px;">
+                Cuando el cliente te escriba fuera de estas horas, recibirá el mensaje de ausencia configurado de forma automática sin gastar tokens de IA.
+              </p>
+              
+              <div class="table-container">
+                <table class="horarios-table">
+                  <thead>
+                    <tr>
+                      <th>Día de la Semana</th>
+                      <th>Estado</th>
+                      <th>Apertura</th>
+                      <th>Cierre</th>
+                      <th>Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody id="horarios-table-body">
+                    <!-- Se llenará con JS -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- 3. BASE DE CONOCIMIENTO (KB) -->
+          <section id="tab-conocimiento" class="entrenador-section">
+            <div class="entrenador-card">
+              <h3>📚 Base de Conocimiento (Entrenamiento)</h3>
+              <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 20px;">
+                Enriquece lo que el bot sabe. Agrega respuestas personalizadas y opcionalmente adjunta archivos multimedia (fotos, audios de voz o videos) para enviar en el chat.
+              </p>
+              
+              <!-- Formulario Agregar KB -->
+              <form id="form-entrenador-add-kb" style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; margin-bottom: 24px;">
+                <h4 style="margin-top:0; margin-bottom: 12px; font-size: 14px;">➕ Agregar Nueva Respuesta</h4>
+                
+                <div class="form-group" style="margin-bottom:12px;">
+                  <label style="font-weight:700; font-size:12px;">Categoría</label>
+                  <select id="entrenador-kb-categoria" class="form-control">
+                    <option value="general">❓ General / FAQ</option>
+                    <option value="ubicacion">📍 Ubicación e Instalaciones</option>
+                    <option value="menu">🍖 Menú e Ingredientes</option>
+                    <option value="politicas">📋 Políticas / Domicilios</option>
+                  </select>
+                </div>
+                
+                <div class="form-group" style="margin-bottom:12px;">
+                  <label style="font-weight:700; font-size:12px;">Pregunta / Idea Clave</label>
+                  <input type="text" id="entrenador-kb-pregunta" class="form-control" placeholder="Ej: ¿Tienen parqueadero?" required>
+                </div>
+                
+                <div class="form-group" style="margin-bottom:12px;">
+                  <label style="font-weight:700; font-size:12px;">Respuesta de la IA</label>
+                  <textarea id="entrenador-kb-respuesta" class="form-control" style="min-height: 60px; resize: vertical;" placeholder="Ej: No contamos con parqueadero privado, pero hay una zona segura al frente." required></textarea>
+                </div>
+                
+                <div class="form-group" style="margin-bottom:12px;">
+                  <label style="font-weight:700; font-size:12px;">Palabras clave o Sinónimos (separados por comas)</label>
+                  <input type="text" id="entrenador-kb-sinonimos" class="form-control" placeholder="Ej: carros, estacionamiento, donde guardo el carro">
+                </div>
+                
+                <div class="form-group" style="margin-bottom:12px;">
+                  <label style="font-weight:700; font-size:12px;">Prioridad de Respuesta</label>
+                  <input type="number" id="entrenador-kb-prioridad" class="form-control" value="0" min="0" max="10">
+                  <small style="color:var(--text-muted); font-size:10px;">Mayor prioridad hace que el bot use preferentemente esta respuesta.</small>
+                </div>
+
+                <div class="form-group" style="margin-bottom:12px;">
+                  <label style="font-weight:700; font-size:12px;">Adjuntar Multimedia (Opcional)</label>
+                  <input type="file" id="entrenador-kb-media" class="form-control" accept="image/*,video/*,audio/*" style="padding: 8px;">
+                </div>
+                
+                <button type="submit" class="btn-primary" id="btn-save-entrenador-kb" style="width: 100%; justify-content: center;">Guardar en el Cerebro 🧠</button>
+              </form>
+
+              <!-- Lista KB -->
+              <h4 style="margin-bottom: 12px; font-size: 14px;">📚 Reglas Aprendidas</h4>
+              <div id="entrenador-kb-list-container" class="kb-list">
+                <!-- JS inserta -->
+              </div>
+            </div>
+          </section>
+
+          <!-- 4. CONTEXTO -->
+          <section id="tab-contexto" class="entrenador-section">
+            <div class="entrenador-card">
+              <h3>💬 Reglas de Contexto y Comportamiento</h3>
+              <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 20px;">
+                Define directrices estrictas y restricciones de diálogo que la IA debe acatar siempre (ej: prohibiciones de responder sobre ciertos temas).
+              </p>
+              
+              <!-- Formulario Contexto -->
+              <form id="form-add-contexto" style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; margin-bottom: 24px;">
+                <h4 style="margin-top:0; margin-bottom: 12px; font-size: 14px;">➕ Agregar Instrucción de Contexto</h4>
+                
+                <div class="form-group" style="margin-bottom:12px;">
+                  <label style="font-weight:700; font-size:12px;">Tipo de Regla</label>
+                  <select id="contexto-tipo" class="form-control">
+                    <option value="restriccion">🚫 Restricción / Límite (Ej: Nunca inventes precios)</option>
+                    <option value="instruccion">📌 Instrucción General (Ej: Sé súper breve)</option>
+                    <option value="ejemplo">📝 Ejemplo de Diálogo (Ej: Si saludan di Hola)</option>
+                  </select>
+                </div>
+                
+                <div class="form-group" style="margin-bottom:12px;">
+                  <label style="font-weight:700; font-size:12px;">Contenido de la Directriz</label>
+                  <textarea id="contexto-contenido" class="form-control" style="min-height: 60px; resize: vertical;" placeholder="Ej: NUNCA ofrezcas domicilios fuera del perímetro urbano..." required></textarea>
+                </div>
+                
+                <button type="submit" class="btn-primary" style="width: 100%; justify-content: center;">Agregar al Contexto 📌</button>
+              </form>
+
+              <!-- Lista Contexto -->
+              <h4 style="margin-bottom: 12px; font-size: 14px;">📌 Directrices Activas</h4>
+              <div id="entrenador-context-list-container" class="ctx-list">
+                <!-- JS inserta -->
+              </div>
+            </div>
+          </section>
+
+          <!-- 5. TESTER -->
+          <section id="tab-tester" class="entrenador-section">
+            <div class="entrenador-card">
+              <h3>🧪 Tester del Bot (Simulador en Vivo)</h3>
+              <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 20px;">
+                Conversa con el bot en un ambiente simulado. Esto utiliza la misma API de Gemini pero sin enviar mensajes reales a WhatsApp. Útil para verificar que las reglas se sigan de forma correcta.
+              </p>
+              
+              <div class="tester-box">
+                <div class="tester-messages" id="tester-chat-messages">
+                  <div class="tester-msg bot">
+                    ¡Hola! Soy el simulador del bot de Puro Sabor. Puedes hacerme preguntas para verificar mi entrenamiento. 🧑‍💻
+                  </div>
+                </div>
+                <div class="tester-input-area">
+                  <input type="text" id="tester-user-input" class="tester-input" placeholder="Pregúntame algo..." autocomplete="off">
+                  <button id="btn-tester-send" class="btn-primary" style="border-radius:20px; padding:0 16px;">Enviar</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- 6. ANALYTICS -->
+          <section id="tab-analytics" class="entrenador-section">
+            <div class="entrenador-card">
+              <h3>📊 Analíticas y Reporte de Conversación</h3>
+              <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 20px;">
+                Visualiza el rendimiento de la Inteligencia Artificial y el número de transferencias a soporte humano.
+              </p>
+
+              <!-- Grid Metricas -->
+              <div class="stats-cards-grid">
+                <div class="stat-metric-card">
+                  <h4>Conversaciones Únicas</h4>
+                  <p class="stat-metric-value" id="stat-conv-total">0</p>
+                </div>
+                <div class="stat-metric-card">
+                  <h4>Mensajes Procesados</h4>
+                  <p class="stat-metric-value" id="stat-msg-total">0</p>
+                </div>
+                <div class="stat-metric-card">
+                  <h4>Handoffs a Asesor</h4>
+                  <p class="stat-metric-value" id="stat-handoff-total">0</p>
+                </div>
+                <div class="stat-metric-card">
+                  <h4>Promos Despachadas</h4>
+                  <p class="stat-metric-value" id="stat-promos-total">0</p>
+                </div>
+              </div>
+
+              <!-- Listado de Preguntas Frecuentes -->
+              <div class="entrenador-card" style="background:rgba(0,0,0,0.1); padding:16px; border:none; margin:0;">
+                <h4 style="margin-top:0; margin-bottom:12px; font-size:14px;">💬 Mensajes más Comunes de los Clientes</h4>
+                <div class="lista-preguntas" id="analytics-preguntas-comunes">
+                  <!-- JS inserta -->
+                </div>
+              </div>
+            </div>
+          </section>
+
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/admin/js/entrenador-bot.js"></script>
+</body>
+</html>

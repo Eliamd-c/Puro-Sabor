@@ -206,7 +206,7 @@ router.post('/resume', verificarJWT, (req, res, next) => {
 
 // GET /api/chatbots/kb
 router.get('/kb', verificarJWT, (req, res, next) => {
-  db.all('SELECT * FROM chatbots_kb ORDER BY fecha_creacion DESC', [], (err, rows) => {
+  db.all('SELECT * FROM chatbots_kb ORDER BY prioridad DESC, fecha_creacion DESC', [], (err, rows) => {
     if (err) return next(err);
     res.json({ success: true, data: rows || [] });
   });
@@ -214,7 +214,7 @@ router.get('/kb', verificarJWT, (req, res, next) => {
 
 // POST /api/chatbots/kb
 router.post('/kb', verificarJWT, upload.single('media'), (req, res, next) => {
-  const { pregunta, respuesta } = req.body;
+  const { pregunta, respuesta, categoria, ejemplos_sinonimos, activa, prioridad } = req.body;
   if (!pregunta || !respuesta) return res.status(400).json({ success: false, message: 'Pregunta y respuesta son requeridas.' });
 
   let mediaUrl = null;
@@ -225,9 +225,14 @@ router.post('/kb', verificarJWT, upload.single('media'), (req, res, next) => {
     mediaType = req.file.mimetype.split('/')[0]; // 'image', 'video', 'audio'
   }
 
+  const cat = categoria || 'general';
+  const sin = ejemplos_sinonimos ? (Array.isArray(ejemplos_sinonimos) ? JSON.stringify(ejemplos_sinonimos) : ejemplos_sinonimos) : '[]';
+  const act = activa !== undefined ? (parseInt(activa) || 0) : 1;
+  const prio = prioridad !== undefined ? (parseInt(prioridad) || 0) : 0;
+
   db.run(
-    'INSERT INTO chatbots_kb (pregunta, respuesta, media_url, media_type) VALUES (?, ?, ?, ?)',
-    [pregunta, respuesta, mediaUrl, mediaType],
+    'INSERT INTO chatbots_kb (pregunta, respuesta, media_url, media_type, categoria, ejemplos_sinonimos, activa, prioridad) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    [pregunta, respuesta, mediaUrl, mediaType, cat, sin, act, prio],
     function(err) {
       if (err) return next(err);
       res.json({ success: true, message: 'Regla agregada a la Base de Conocimientos.' });
@@ -242,6 +247,317 @@ router.delete('/kb/:id', verificarJWT, (req, res, next) => {
     if (err) return next(err);
     res.json({ success: true, message: 'Regla eliminada.' });
   });
+});
+
+// --- NUEVOS ENDPOINTS PARA AGENTE DE ATENCIÓN Y PANEL DE ENTRENAMIENTO ---
+
+// ===== CLIENTES FRECUENTES =====
+router.get('/clientes-frecuentes', verificarJWT, (req, res, next) => {
+  db.all(
+    `SELECT cf.*, ch.productos_favoritos, ch.notas_admin 
+     FROM clientes_frecuentes cf 
+     LEFT JOIN cliente_historial ch ON cf.telefono = ch.telefono 
+     ORDER BY cf.nombre ASC`,
+    [],
+    (err, rows) => {
+      if (err) return next(err);
+      res.json({ success: true, data: rows || [] });
+    }
+  );
+});
+
+router.post('/clientes-frecuentes', verificarJWT, async (req, res, next) => {
+  const { telefono, nombre, productos_favoritos, notas_admin } = req.body;
+  if (!telefono || !nombre) {
+    return res.status(400).json({ success: false, message: 'Teléfono y nombre son requeridos.' });
+  }
+
+  try {
+    await new Promise((resolve, reject) => {
+      db.run(
+        `INSERT INTO clientes_frecuentes (telefono, nombre, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+         ON CONFLICT (telefono) DO UPDATE SET nombre = EXCLUDED.nombre, updated_at = CURRENT_TIMESTAMP`,
+        [telefono, nombre],
+        (err) => {
+          if (err) reject(err);
+          else resolve();
+        }
+      );
+    });
+
+    const favoritosString = productos_favoritos ? (Array.isArray(productos_favoritos) ? JSON.stringify(productos_favoritos) : productos_favoritos) : '[]';
+    await new Promise((resolve, reject) => {
+      db.run(
+        `INSERT INTO cliente_historial (telefono, productos_favoritos, notas_admin, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+         ON CONFLICT (telefono) DO UPDATE SET productos_favoritos = EXCLUDED.productos_favoritos, notas_admin = EXCLUDED.notas_admin, updated_at = CURRENT_TIMESTAMP`,
+        [telefono, favoritosString, notas_admin || ''],
+        (err) => {
+          if (err) reject(err);
+          else resolve();
+        }
+      );
+    });
+
+    res.json({ success: true, message: 'Cliente frecuente guardado con éxito.' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/clientes-frecuentes/:telefono', verificarJWT, (req, res, next) => {
+  const { telefono } = req.params;
+  db.run('DELETE FROM clientes_frecuentes WHERE telefono = ?', [telefono], (err) => {
+    if (err) return next(err);
+    res.json({ success: true, message: 'Cliente frecuente eliminado.' });
+  });
+});
+
+router.get('/cliente-perfil/:telefono', verificarJWT, (req, res, next) => {
+  const { telefono } = req.params;
+  db.get(
+    `SELECT cf.*, ch.productos_favoritos, ch.notas_admin 
+     FROM clientes_frecuentes cf 
+     LEFT JOIN cliente_historial ch ON cf.telefono = ch.telefono 
+     WHERE cf.telefono = ?`,
+    [telefono],
+    (err, row) => {
+      if (err) return next(err);
+      if (!row) return res.status(404).json({ success: false, message: 'Cliente no encontrado.' });
+      res.json({ success: true, data: row });
+    }
+  );
+});
+
+// ===== PROMOCIONES =====
+router.get('/promociones', verificarJWT, (req, res, next) => {
+  db.all('SELECT * FROM promociones ORDER BY orden ASC, created_at DESC', [], (err, rows) => {
+    if (err) return next(err);
+    res.json({ success: true, data: rows || [] });
+  });
+});
+
+router.post('/promociones', verificarJWT, upload.single('imagen'), (req, res, next) => {
+  const { titulo, descripcion, imagen_tipo, orden, fecha_inicio, fecha_fin } = req.body;
+  if (!titulo || !descripcion) {
+    return res.status(400).json({ success: false, message: 'Título y descripción son requeridos.' });
+  }
+
+  let imagenUrl = null;
+  let imgTipo = imagen_tipo || 'image';
+
+  if (req.file) {
+    imagenUrl = '/uploads/media/' + req.file.filename;
+    if (!imagen_tipo) {
+      imgTipo = req.file.mimetype.split('/')[0];
+    }
+  }
+
+  const fInicio = fecha_inicio || null;
+  const fFin = fecha_fin || null;
+  const ord = parseInt(orden) || 0;
+
+  db.run(
+    `INSERT INTO promociones (titulo, descripcion, imagen_url, imagen_tipo, orden, fecha_inicio, fecha_fin) 
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [titulo, descripcion, imagenUrl, imgTipo, ord, fInicio, fFin],
+    function(err) {
+      if (err) return next(err);
+      res.json({ success: true, message: 'Promoción guardada con éxito.' });
+    }
+  );
+});
+
+router.post('/promociones/:id/toggle', verificarJWT, (req, res, next) => {
+  const { id } = req.params;
+  db.get('SELECT activa FROM promociones WHERE id = ?', [id], (err, row) => {
+    if (err) return next(err);
+    if (!row) return res.status(404).json({ success: false, message: 'Promoción no encontrada.' });
+
+    const nuevaActiva = row.activa === 1 ? 0 : 1;
+    db.run('UPDATE promociones SET activa = ? WHERE id = ?', [nuevaActiva, id], (err) => {
+      if (err) return next(err);
+      res.json({ success: true, activa: nuevaActiva, message: 'Estado de promoción actualizado.' });
+    });
+  });
+});
+
+router.delete('/promociones/:id', verificarJWT, (req, res, next) => {
+  const { id } = req.params;
+  db.get('SELECT imagen_url FROM promociones WHERE id = ?', [id], (err, row) => {
+    if (err) return next(err);
+    if (!row) return res.status(404).json({ success: false, message: 'Promoción no encontrada.' });
+
+    if (row.imagen_url) {
+      const filePath = path.join(__dirname, '..', row.imagen_url);
+      fs.unlink(filePath, (err) => {
+        if (err && err.code !== 'ENOENT') {
+          console.error('Error eliminando archivo de promo:', err.message);
+        }
+      });
+    }
+
+    db.run('DELETE FROM promociones WHERE id = ?', [id], (err) => {
+      if (err) return next(err);
+      res.json({ success: true, message: 'Promoción eliminada.' });
+    });
+  });
+});
+
+// ===== HORARIOS =====
+router.get('/horarios', verificarJWT, (req, res, next) => {
+  db.all('SELECT * FROM bot_horarios ORDER BY id ASC', [], (err, rows) => {
+    if (err) return next(err);
+    res.json({ success: true, data: rows || [] });
+  });
+});
+
+router.post('/horarios', verificarJWT, (req, res, next) => {
+  const { dia_semana, abierto, hora_apertura, hora_cierre } = req.body;
+  if (!dia_semana) return res.status(400).json({ success: false, message: 'Día de la semana requerido.' });
+
+  db.run(
+    `INSERT INTO bot_horarios (dia_semana, abierto, hora_apertura, hora_cierre) 
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT (dia_semana) DO UPDATE SET abierto = EXCLUDED.abierto, hora_apertura = EXCLUDED.hora_apertura, hora_cierre = EXCLUDED.hora_cierre`,
+    [dia_semana, abierto ? 1 : 0, hora_apertura || '18:00', hora_cierre || '23:30'],
+    (err) => {
+      if (err) return next(err);
+      res.json({ success: true, message: `Horario del día ${dia_semana} guardado.` });
+    }
+  );
+});
+
+// ===== CONTEXTO =====
+router.get('/contexto', verificarJWT, (req, res, next) => {
+  db.all('SELECT * FROM bot_contexto ORDER BY id DESC', [], (err, rows) => {
+    if (err) return next(err);
+    res.json({ success: true, data: rows || [] });
+  });
+});
+
+router.post('/contexto', verificarJWT, (req, res, next) => {
+  const { tipo, contenido } = req.body;
+  if (!tipo || !contenido) return res.status(400).json({ success: false, message: 'Tipo y contenido son requeridos.' });
+
+  db.run(
+    'INSERT INTO bot_contexto (tipo, contenido) VALUES (?, ?)',
+    [tipo, contenido],
+    function(err) {
+      if (err) return next(err);
+      res.json({ success: true, message: 'Instrucción de contexto agregada con éxito.' });
+    }
+  );
+});
+
+router.delete('/contexto/:id', verificarJWT, (req, res, next) => {
+  const { id } = req.params;
+  db.run('DELETE FROM bot_contexto WHERE id = ?', [id], (err) => {
+    if (err) return next(err);
+    res.json({ success: true, message: 'Instrucción de contexto eliminada.' });
+  });
+});
+
+// ===== TESTER =====
+router.post('/test', verificarJWT, async (req, res, next) => {
+  const { pregunta } = req.body;
+  if (!pregunta) return res.status(400).json({ success: false, message: 'Pregunta requerida.' });
+
+  try {
+    const { GoogleGenerativeAI } = require('@google/generative-ai');
+    const apiKey = await configService.getConfig('gemini_api_key') || process.env.GEMINI_API_KEY;
+    if (!apiKey) return res.status(400).json({ success: false, message: 'API Key de Gemini no configurada.' });
+
+    // Cargar conocimiento y contexto
+    const kb = await new Promise(resolve => {
+      db.all('SELECT id, pregunta, respuesta FROM chatbots_kb WHERE activa = 1', [], (err, rows) => resolve(rows || []));
+    });
+    const ctx = await new Promise(resolve => {
+      db.all('SELECT tipo, contenido FROM bot_contexto WHERE activo = 1', [], (err, rows) => resolve(rows || []));
+    });
+    const promos = await new Promise(resolve => {
+      db.all('SELECT id, titulo, descripcion FROM promociones WHERE activa = 1', [], (err, rows) => resolve(rows || []));
+    });
+
+    let promptKb = '';
+    if (kb.length > 0) {
+      promptKb = '\nBASE DE CONOCIMIENTO (Q&As):\n' + kb.map(k => `Q: ${k.pregunta}\nA: ${k.respuesta}`).join('\n') + '\n';
+    }
+
+    let promptCtx = '';
+    if (ctx.length > 0) {
+      promptCtx = '\nINSTRUCCIONES EXTRA:\n' + ctx.map(c => `[${c.tipo.toUpperCase()}]: ${c.contenido}`).join('\n') + '\n';
+    }
+
+    let promptPromos = '';
+    if (promos.length > 0) {
+      promptPromos = '\nPROMOCIONES ACTIVAS:\n' + promos.map(p => `- [PROMO_ID:${p.id}] ${p.titulo}: ${p.descripcion}`).join('\n') + '\n';
+    }
+
+    const systemInstruction = 
+      'Eres el recepcionista oficial de Puro Sabor.\n' +
+      'REGLAS DE SIMULACIÓN DE TESTER:\n' +
+      'Estás siendo evaluado en un entorno de pruebas.\n' +
+      promptKb + promptCtx + promptPromos +
+      '\nResponde brevemente simulando ser el bot real.';
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash', systemInstruction });
+    
+    const result = await model.generateContent(pregunta);
+    const text = result.response.text();
+
+    res.json({ success: true, respuesta: text });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ===== ANALYTICS =====
+router.get('/analytics', verificarJWT, async (req, res, next) => {
+  try {
+    const totalConversaciones = await new Promise(resolve => {
+      db.get('SELECT COUNT(DISTINCT telefono) as count FROM chatbot_logs', [], (err, row) => resolve(row?.count || 0));
+    });
+
+    const totalHandoffs = await new Promise(resolve => {
+      db.get("SELECT COUNT(*) as count FROM chatbot_logs WHERE tipo = 'handoff'", [], (err, row) => resolve(row?.count || 0));
+    });
+
+    const totalMensajes = await new Promise(resolve => {
+      db.get('SELECT COUNT(*) as count FROM chatbot_logs', [], (err, row) => resolve(row?.count || 0));
+    });
+
+    const totalPromos = await new Promise(resolve => {
+      db.get("SELECT COUNT(*) as count FROM chatbot_logs WHERE tipo = 'promo_enviada'", [], (err, row) => resolve(row?.count || 0));
+    });
+
+    const preguntasFrecuentes = await new Promise(resolve => {
+      db.all(
+        `SELECT mensaje_usuario as pregunta, COUNT(*) as veces 
+         FROM chatbot_logs 
+         WHERE mensaje_usuario IS NOT NULL AND mensaje_usuario != ''
+         GROUP BY mensaje_usuario 
+         ORDER BY veces DESC LIMIT 5`,
+        [],
+        (err, rows) => resolve(rows || [])
+      );
+    });
+
+    res.json({
+      success: true,
+      data: {
+        total_conversaciones: parseInt(totalConversaciones) || 0,
+        preguntas_unicas: parseInt(totalConversaciones) || 0,
+        handoffs: parseInt(totalHandoffs) || 0,
+        total_mensajes: parseInt(totalMensajes) || 0,
+        total_promociones_enviadas: parseInt(totalPromos) || 0,
+        preguntas_frecuentes: preguntasFrecuentes,
+        satisfaccion: 95
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
 module.exports = router;

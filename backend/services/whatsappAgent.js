@@ -134,6 +134,55 @@ function getKnowledgeBase() {
     });
   });
 }
+
+function isWithinBusinessHours() {
+  return new Promise((resolve) => {
+    const dias = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
+    const now = new Date();
+    const hoy = dias[now.getDay()];
+    
+    db.get('SELECT abierto, hora_apertura, hora_cierre FROM bot_horarios WHERE dia_semana = ?', [hoy], (err, row) => {
+      if (err || !row) {
+        resolve(true); // Abierto por defecto
+        return;
+      }
+      
+      if (row.abierto === 0) {
+        resolve(false);
+        return;
+      }
+      
+      const currentHours = now.getHours().toString().padStart(2, '0');
+      const currentMinutes = now.getMinutes().toString().padStart(2, '0');
+      const currentTimeStr = `${currentHours}:${currentMinutes}`;
+      
+      const start = row.hora_apertura;
+      const end = row.hora_cierre;
+      
+      if (start <= end) {
+        resolve(currentTimeStr >= start && currentTimeStr <= end);
+      } else {
+        // Horario nocturno que cruza la medianoche (ej: 18:00 a 02:00)
+        resolve(currentTimeStr >= start || currentTimeStr <= end);
+      }
+    });
+  });
+}
+
+function logChatbotInteraction(telefono, nombreCliente, tipo, mensajeUsuario, respuestaBot, detalles = {}) {
+  return new Promise((resolve) => {
+    const detStr = JSON.stringify(detalles);
+    db.run(
+      `INSERT INTO chatbot_logs (telefono, nombre_cliente, tipo, mensaje_usuario, respuesta_bot, detalles)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [telefono, nombreCliente || 'Anónimo', tipo, mensajeUsuario || '', respuestaBot || '', detStr],
+      (err) => {
+        if (err) console.error('[WA Agent] Error guardando log analítico:', err.message);
+        resolve();
+      }
+    );
+  });
+}
 // ----------------------------------
 
 class WhatsAppBot {
@@ -326,7 +375,7 @@ class WhatsAppBot {
         if (connection === 'close') {
           const statusCode = lastDisconnect?.error?.output?.statusCode;
           const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-          console.log(`[WA Agent ${this.botType}] Conexión cerrada. Reconectar:`, shouldReconnect);
+          console.log(`[WA Agent ${this.botType}] Conexión cerrada. Reconectar:`, shouldReconnect, 'Razón:', lastDisconnect?.error?.message, 'Code:', statusCode);
           
           if (statusCode === DisconnectReason.loggedOut) {
             try {
@@ -446,6 +495,28 @@ class WhatsAppBot {
         console.log(`[WA Agent client] Chat en pausa para ${senderNumber}. Ignorando IA.`);
         return;
       }
+
+      // --- VALIDACIÓN AUTOMÁTICA DE HORARIOS ---
+      const horarioActivo = await getConfig('bot_horario_activo') === '1';
+      const mensajeAusencia = await getConfig('bot_mensaje_ausencia') || '¡Hola! Gracias por contactarte con Puro Sabor. 🍖 Te informamos que iniciaremos atención este próximo Sábado a partir de las 6:00 de la tarde.';
+      
+      let estaAbierto = true;
+      if (!horarioActivo) {
+        estaAbierto = false;
+      } else {
+        estaAbierto = await isWithinBusinessHours();
+      }
+
+      if (!estaAbierto) {
+        console.log(`[WA Agent client] Bot cerrado. Enviando mensaje de ausencia.`);
+        await this.client.sendMessage(remoteJid, { text: mensajeAusencia }, { quoted: message });
+        await guardarMensajeHistorial(senderNumber, 'model', mensajeAusencia, this.botType);
+        this.emitMessage({ type: 'out', sender: 'Bot IA (Ausencia)', text: mensajeAusencia, time: new Date().toLocaleTimeString() });
+        
+        // Registrar analítica
+        await logChatbotInteraction(senderNumber, message.pushName || 'Cliente', 'cierre_automatico', body, mensajeAusencia);
+        return;
+      }
     }
 
     let systemInstruction = '';
@@ -492,11 +563,69 @@ class WhatsAppBot {
         'REGLA: Confirma nombre y nuevo stock exacto al actualizar.';
     } else {
       const dominio = await getConfig('dominio_base') || 'https://restaurantepurosabor.com';
-      const horarioActivo = await getConfig('bot_horario_activo') === '1';
-      const mensajeAusencia = await getConfig('bot_mensaje_ausencia') || 'Iniciamos atención el sábado desde las 6 pm.';
       const menuUrl = await getConfig('bot_menu_url') || dominio;
       const customPrompt = await getConfig('bot_system_prompt') || '';
       
+      // A. Consultar Cliente Frecuente
+      const clienteFrecuente = await new Promise(resolve => {
+        db.get(
+          `SELECT cf.nombre, cf.visitas_count, ch.productos_favoritos, ch.notas_admin 
+           FROM clientes_frecuentes cf 
+           LEFT JOIN cliente_historial ch ON cf.telefono = ch.telefono 
+           WHERE cf.telefono = ? OR ? LIKE '%' || cf.telefono`, 
+          [senderNumber, senderNumber], 
+          (err, row) => resolve(row)
+        );
+      });
+
+      let ruleSaludo = '';
+      if (clienteFrecuente) {
+        // Incrementar visitas
+        db.run('UPDATE clientes_frecuentes SET visitas_count = visitas_count + 1, ultima_visita = CURRENT_TIMESTAMP WHERE telefono = ?', [senderNumber]);
+        
+        const favs = clienteFrecuente.productos_favoritos ? JSON.parse(clienteFrecuente.productos_favoritos) : [];
+        const favsText = favs.length > 0 ? ` Sus platos favoritos son: ${favs.join(', ')}.` : '';
+        const notasText = clienteFrecuente.notas_admin ? ` Notas y preferencias del cliente: ${clienteFrecuente.notas_admin}.` : '';
+        
+        ruleSaludo = `REGLA CLIENTE FRECUENTE: El cliente actual es un CLIENTE FRECUENTE llamado "${clienteFrecuente.nombre}" (tiene ${clienteFrecuente.visitas_count} visitas previas). Salúdalo afectuosamente por su nombre de manera familiar y cálida al inicio del chat.${favsText}${notasText}\n`;
+      } else {
+        ruleSaludo = `REGLA CLIENTE NUEVO: Este es un cliente nuevo. Salúdalo amablemente de forma general sin asumir su nombre.\n`;
+      }
+
+      // B. Cargar Promociones Activas
+      const promos = await new Promise(resolve => {
+        db.all(
+          `SELECT id, titulo, descripcion, imagen_url 
+           FROM promociones 
+           WHERE activa = 1 
+             AND (fecha_inicio IS NULL OR fecha_inicio <= CURRENT_TIMESTAMP)
+             AND (fecha_fin IS NULL OR fecha_fin >= CURRENT_TIMESTAMP)
+           ORDER BY orden ASC`,
+          [],
+          (err, rows) => resolve(rows || [])
+        );
+      });
+      
+      let promosText = '';
+      if (promos.length > 0) {
+        promosText = '\nPROMOCIONES ACTIVAS DEL RESTAURANTE:\n' + promos.map(p => {
+          let line = `- [PROMO_ID:${p.id}] ${p.titulo}: ${p.descripcion}`;
+          if (p.imagen_url) {
+            line += ` (Tiene imagen publicitaria asociada)`;
+          }
+          return line;
+        }).join('\n') + '\n';
+      }
+
+      // C. Cargar Instrucciones Adicionales de Contexto
+      const ctxRules = await new Promise(resolve => {
+        db.all('SELECT tipo, contenido FROM bot_contexto WHERE activo = 1', [], (err, rows) => resolve(rows || []));
+      });
+      let ctxText = '';
+      if (ctxRules.length > 0) {
+        ctxText = '\nREGLAS DE CONTEXTO ADICIONALES:\n' + ctxRules.map(r => `[${r.tipo.toUpperCase()}]: ${r.contenido}`).join('\n') + '\n';
+      }
+
       const kb = await getKnowledgeBase();
       let kbText = '';
       if (kb.length > 0) {
@@ -506,11 +635,14 @@ class WhatsAppBot {
       systemInstruction = 
         'Eres el recepcionista oficial de Puro Sabor.\n' +
         (customPrompt ? `${customPrompt}\n` : '') +
-        `ESTADO: ${horarioActivo ? 'ABIERTO' : 'CERRADO'}.\n` +
-        (!horarioActivo ? `REGLA 1: Debes mencionar: "${mensajeAusencia}".\n` : '') +
-        'REGLA 2: Si piden menú, precios o hacer pedido, entrega siempre este link: 👉 ' + menuUrl + '\n' +
-        'REGLA 3 (HANDOFF): Si el cliente pide hablar con un humano, asesor, o pregunta algo que no sabes, RESPONDE ÚNICAMENTE CON LA PALABRA EXACTA: [HUMAN_HANDOFF]. No añadas ningún otro texto.\n' +
-        'REGLA 4 (MULTIMEDIA): Si respondes basándote en una entrada de la BASE DE CONOCIMIENTO que tiene un [ID:x], DEBES incluir al final de tu respuesta la etiqueta exacta [SEND_MEDIA:x].\n' +
+        ruleSaludo +
+        'ESTADO: ABIERTO.\n' +
+        'REGLA 2: Para realizar pedidos, ver el menú completo o consultar precios, entrega siempre el enlace de nuestro menú digital: 👉 ' + menuUrl + '. Explica al cliente que toda la plataforma de pedidos está allí para que ordene de forma rápida y segura. No intentes tomar el pedido directamente en este chat.\n' +
+        'REGLA 3 (HANDOFF): Si el cliente pide hablar con un humano, asesor, o pregunta algo que no sabes (no está en la Base de Conocimiento ni en las Promociones), responde ÚNICAMENTE con la palabra exacta: [HUMAN_HANDOFF]. No añadas ningún otro texto.\n' +
+        'REGLA 4 (PROMOCIONES): Si respondes sobre una promoción que tiene imagen publicitaria asociada, DEBES incluir al final exacto de tu respuesta la etiqueta: [SEND_PROMO:id] (por ejemplo, [SEND_PROMO:1]) para que el sistema le envíe la imagen.\n' +
+        'REGLA 5 (MULTIMEDIA): Si respondes basándote en una entrada de la BASE DE CONOCIMIENTO que tiene un [ID:x], DEBES incluir al final de tu respuesta la etiqueta exacta [SEND_MEDIA:x].\n' +
+        promosText +
+        ctxText +
         kbText;
     }
 
@@ -560,8 +692,11 @@ class WhatsAppBot {
             const handoffMsg = 'Un momento por favor, te estoy transfiriendo con un asesor humano. 🧑‍💼';
             await this.client.sendMessage(remoteJid, { text: handoffMsg }, { quoted: message });
             await guardarMensajeHistorial(senderNumber, 'model', handoffMsg, this.botType);
-            this.emitMessage({ type: 'system', sender: 'Sistema', text: `Usuario transferido a Asistencia Humana.`, time: new Date().toLocaleTimeString() });
+            this.emitMessage({ type: 'out', sender: 'Bot IA (Handoff)', text: handoffMsg, time: new Date().toLocaleTimeString() });
             
+            // Guardar analítica
+            await logChatbotInteraction(senderNumber, message.pushName || 'Cliente', 'handoff', body, handoffMsg);
+
             // Notify admin via Admin Bot
             const adminNumbersStr = await getConfig('admin_whatsapp_numbers') || '';
             const authorizedNumbers = adminNumbersStr.split(',').map(n => n.trim().replace('+', '')).filter(Boolean);
@@ -579,8 +714,38 @@ class WhatsAppBot {
           }
 
           let cleanText = finalText;
-          let mediaIdMatch = finalText.match(/\[SEND_MEDIA:(\d+)\]/);
+
+          // A. Evaluar si tiene etiqueta de Promoción
+          let promoIdMatch = finalText.match(/\[SEND_PROMO:(\d+)\]/);
+          if (promoIdMatch) {
+            cleanText = finalText.replace(/\[SEND_PROMO:\d+\]/g, '').trim();
+            const promoId = promoIdMatch[1];
+            
+            const promoEntry = await new Promise(resolve => {
+              db.get('SELECT imagen_url, imagen_tipo FROM promociones WHERE id = ?', [promoId], (err, row) => resolve(row));
+            });
+
+            if (promoEntry && promoEntry.imagen_url) {
+              const absolutePath = require('path').join(__dirname, '..', promoEntry.imagen_url);
+              if (require('fs').existsSync(absolutePath)) {
+                let mediaPayload = {};
+                if (promoEntry.imagen_tipo === 'video') mediaPayload = { video: { url: absolutePath }, caption: cleanText };
+                else if (promoEntry.imagen_tipo === 'pdf') mediaPayload = { document: { url: absolutePath }, caption: cleanText };
+                else mediaPayload = { image: { url: absolutePath }, caption: cleanText };
+                
+                await this.client.sendMessage(remoteJid, mediaPayload, { quoted: message });
+                await guardarMensajeHistorial(senderNumber, 'model', cleanText || '(Promoción enviada)', this.botType);
+                this.emitMessage({ type: 'out', sender: 'Bot IA', text: cleanText || '(Promoción enviada)', time: new Date().toLocaleTimeString() });
+                
+                // Guardar analítica
+                await logChatbotInteraction(senderNumber, message.pushName || 'Cliente', 'promo_enviada', body, cleanText, { promo_id: promoId });
+                break;
+              }
+            }
+          }
           
+          // B. Evaluar si tiene etiqueta de Base de Conocimientos (Fase 3)
+          let mediaIdMatch = finalText.match(/\[SEND_MEDIA:(\d+)\]/);
           if (mediaIdMatch) {
             cleanText = finalText.replace(/\[SEND_MEDIA:\d+\]/g, '').trim();
             const kbId = mediaIdMatch[1];
@@ -600,19 +765,29 @@ class WhatsAppBot {
                 
                 await this.client.sendMessage(remoteJid, mediaPayload, { quoted: message });
                 if (kbEntry.media_type === 'audio' && cleanText) {
-                  // Si es audio de voz, mandar el texto por separado
                   await this.client.sendMessage(remoteJid, { text: cleanText });
                 }
                 await guardarMensajeHistorial(senderNumber, 'model', cleanText || '(Multimedia enviado)', this.botType);
                 this.emitMessage({ type: 'out', sender: 'Bot IA', text: cleanText || '(Multimedia enviado)', time: new Date().toLocaleTimeString() });
+                
+                // Guardar analítica
+                await logChatbotInteraction(senderNumber, message.pushName || 'Cliente', 'respuesta_kb', body, cleanText, { kb_id: kbId });
                 break;
               }
             }
           }
 
+          // C. Enviar respuesta de texto estándar
           await this.client.sendMessage(remoteJid, { text: cleanText }, { quoted: message });
           await guardarMensajeHistorial(senderNumber, 'model', cleanText, this.botType);
           this.emitMessage({ type: 'out', sender: 'Bot IA', text: cleanText, time: new Date().toLocaleTimeString() });
+
+          // Guardar analítica
+          const isFreq = await new Promise(resolve => {
+            db.get('SELECT telefono FROM clientes_frecuentes WHERE telefono = ?', [senderNumber], (err, row) => resolve(!!row));
+          });
+          const logType = isFreq ? 'saludo_frecuente' : 'saludo_nuevo';
+          await logChatbotInteraction(senderNumber, message.pushName || 'Cliente', logType, body, cleanText);
           break;
         }
 

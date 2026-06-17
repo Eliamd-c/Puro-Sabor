@@ -1,0 +1,300 @@
+/* ==========================================================================
+   🤖 ESTILOS DEL ENTRENADOR DEL BOT - PURO SABOR
+   ========================================================================== */
+
+.entrenador-layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: calc(100vh - 80px);
+  gap: 20px;
+}
+
+/* --- 📋 NAVIGATION MENU --- */
+.entrenador-sidebar {
+  background: var(--bg-card, #1c1c1e);
+  border: 1px solid var(--border-color, rgba(255,255,255,0.1));
+  border-radius: var(--radius-lg, 16px);
+  padding: 16px 0;
+  height: fit-content;
+}
+
+.entrenador-menu {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.entrenador-menu li {
+  margin: 4px 12px;
+}
+
+.entrenador-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  color: var(--text-secondary, #a1a1a6);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 14px;
+  border-radius: var(--radius-md, 8px);
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.entrenador-link:hover {
+  background: rgba(255,255,255,0.05);
+  color: var(--text-primary, #ffffff);
+}
+
+.entrenador-link.active {
+  background: var(--primary-light, rgba(212, 83, 31, 0.15));
+  color: var(--primary, #d4531f);
+}
+
+/* --- 📝 SECTIONS --- */
+.entrenador-section {
+  display: none;
+}
+
+.entrenador-section.active {
+  display: block;
+  animation: fadeInUp 0.4s ease-out;
+}
+
+.entrenador-card {
+  background: var(--bg-card, #1c1c1e);
+  border: 1px solid var(--border-color, rgba(255,255,255,0.1));
+  border-radius: var(--radius-lg, 16px);
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow-md);
+}
+
+.entrenador-card h3 {
+  font-size: 18px;
+  margin-top: 0;
+  margin-bottom: 16px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 8px;
+}
+
+/* --- 🕐 HORARIOS TABLE --- */
+.horarios-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+}
+
+.horarios-table th,
+.horarios-table td {
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.05));
+}
+
+.horarios-table th {
+  color: var(--text-secondary);
+  font-weight: 700;
+  font-size: 13px;
+  text-transform: uppercase;
+}
+
+.horarios-table td {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.horarios-table input[type="time"] {
+  background: var(--bg-primary, #0f0f10);
+  border: 1px solid var(--border-color, rgba(255,255,255,0.1));
+  color: var(--text-primary);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm, 4px);
+  font-family: inherit;
+}
+
+/* --- 📚 LISTS (KB, CONTEXT) --- */
+.kb-list, .ctx-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.kb-item, .ctx-item {
+  background: var(--bg-primary, #0f0f10);
+  border: 1px solid var(--border-color, rgba(255,255,255,0.05));
+  border-radius: var(--radius-md, 8px);
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.kb-content, .ctx-content {
+  flex: 1;
+}
+
+.kb-q {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--primary, #d4531f);
+  margin-bottom: 4px;
+}
+
+.kb-a, .ctx-body {
+  font-size: 13px;
+  color: var(--text-secondary, #a1a1a6);
+  line-height: 1.5;
+}
+
+.kb-meta {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.kb-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  background: rgba(255,255,255,0.05);
+  color: var(--text-secondary);
+}
+
+.kb-badge.category {
+  background: rgba(52, 152, 219, 0.15);
+  color: #3498db;
+}
+
+.kb-badge.media {
+  background: rgba(46, 204, 113, 0.15);
+  color: #2ecc71;
+}
+
+/* --- 🧪 TESTER INTERFACE --- */
+.tester-box {
+  display: flex;
+  flex-direction: column;
+  height: 400px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-primary, #0f0f10);
+  overflow: hidden;
+}
+
+.tester-messages {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tester-msg {
+  max-width: 80%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.tester-msg.user {
+  align-self: flex-end;
+  background: var(--primary, #d4531f);
+  color: white;
+  border-bottom-right-radius: 2px;
+}
+
+.tester-msg.bot {
+  align-self: flex-start;
+  background: var(--bg-card, #1c1c1e);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-bottom-left-radius: 2px;
+}
+
+.tester-input-area {
+  display: flex;
+  padding: 12px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-card, #1c1c1e);
+  gap: 10px;
+}
+
+.tester-input {
+  flex: 1;
+  background: var(--bg-primary, #0f0f10);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  padding: 8px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  outline: none;
+}
+
+.tester-input:focus {
+  border-color: var(--primary);
+}
+
+/* --- 📊 STATS CARDS --- */
+.stats-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stat-metric-card {
+  background: var(--bg-card, #1c1c1e);
+  border: 1px solid var(--border-color, rgba(255,255,255,0.1));
+  border-radius: var(--radius-md, 8px);
+  padding: 20px;
+  text-align: center;
+}
+
+.stat-metric-card h4 {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stat-metric-value {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--primary, #d4531f);
+}
+
+/* --- 📱 RESPONSIVE ADAPTATIONS --- */
+@media (max-width: 768px) {
+  .entrenador-layout {
+    grid-template-columns: 1fr;
+  }
+  
+  .entrenador-sidebar {
+    height: auto;
+  }
+  
+  .entrenador-menu {
+    display: flex;
+    overflow-x: auto;
+    padding: 0 12px;
+  }
+  
+  .entrenador-menu li {
+    margin: 4px 6px;
+  }
+  
+  .entrenador-link {
+    white-space: nowrap;
+    padding: 8px 12px;
+  }
+}

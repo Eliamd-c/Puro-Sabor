@@ -243,7 +243,100 @@ async function inicializarTablas() {
         id SERIAL PRIMARY KEY,
         pregunta TEXT NOT NULL,
         respuesta TEXT NOT NULL,
+        media_url TEXT,
+        media_type TEXT,
+        categoria VARCHAR(100) DEFAULT 'general',
+        ejemplos_sinonimos TEXT,
+        activa INTEGER DEFAULT 1,
+        prioridad INTEGER DEFAULT 0,
         fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Alteraciones seguras por si la tabla chatbots_kb ya existía sin estas columnas
+    await pool.query(`ALTER TABLE chatbots_kb ADD COLUMN IF NOT EXISTS media_url TEXT`);
+    await pool.query(`ALTER TABLE chatbots_kb ADD COLUMN IF NOT EXISTS media_type TEXT`);
+    await pool.query(`ALTER TABLE chatbots_kb ADD COLUMN IF NOT EXISTS categoria VARCHAR(100) DEFAULT 'general'`);
+    await pool.query(`ALTER TABLE chatbots_kb ADD COLUMN IF NOT EXISTS ejemplos_sinonimos TEXT`);
+    await pool.query(`ALTER TABLE chatbots_kb ADD COLUMN IF NOT EXISTS activa INTEGER DEFAULT 1`);
+    await pool.query(`ALTER TABLE chatbots_kb ADD COLUMN IF NOT EXISTS prioridad INTEGER DEFAULT 0`);
+
+    // 11. Tabla Clientes Frecuentes
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS clientes_frecuentes (
+        telefono VARCHAR(50) PRIMARY KEY,
+        nombre VARCHAR(255) NOT NULL,
+        visitas_count INTEGER DEFAULT 1,
+        ultima_visita TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // 12. Tabla Cliente Historial
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS cliente_historial (
+        id SERIAL PRIMARY KEY,
+        telefono VARCHAR(50) UNIQUE NOT NULL,
+        ultima_compra TIMESTAMP,
+        productos_favoritos TEXT,
+        notas_admin TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (telefono) REFERENCES clientes_frecuentes(telefono) ON DELETE CASCADE
+      )
+    `);
+
+    // 13. Tabla Promociones
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS promociones (
+        id SERIAL PRIMARY KEY,
+        titulo VARCHAR(255) NOT NULL,
+        descripcion TEXT NOT NULL,
+        imagen_url TEXT,
+        imagen_tipo VARCHAR(50) DEFAULT 'image',
+        activa INTEGER DEFAULT 1,
+        orden INTEGER DEFAULT 0,
+        fecha_inicio TIMESTAMP,
+        fecha_fin TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // 14. Tabla Bot Contexto
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS bot_contexto (
+        id SERIAL PRIMARY KEY,
+        tipo VARCHAR(50),
+        contenido TEXT,
+        activo INTEGER DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // 15. Tabla Bot Horarios
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS bot_horarios (
+        id SERIAL PRIMARY KEY,
+        dia_semana VARCHAR(20) UNIQUE NOT NULL,
+        hora_apertura VARCHAR(5) DEFAULT '18:00',
+        hora_cierre VARCHAR(5) DEFAULT '23:30',
+        abierto INTEGER DEFAULT 1
+      )
+    `);
+
+    // 16. Tabla Chatbot Logs (Para Analytics)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS chatbot_logs (
+        id SERIAL PRIMARY KEY,
+        telefono VARCHAR(50),
+        nombre_cliente VARCHAR(255),
+        tipo VARCHAR(50),
+        mensaje_usuario TEXT,
+        respuesta_bot TEXT,
+        detalles JSONB,
+        fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
@@ -310,6 +403,35 @@ async function crearIndices() {
       ON config(key)
     `);
 
+    // 9. Índices para clientes frecuentes
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_clientes_frecuentes_telefono
+      ON clientes_frecuentes(telefono)
+    `);
+    
+    // 10. Índices para cliente historial
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_cliente_historial_telefono
+      ON cliente_historial(telefono)
+    `);
+
+    // 11. Índices para promociones
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_promociones_activa
+      ON promociones(activa)
+      WHERE activa = 1
+    `);
+
+    // 12. Índices para chatbot logs
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_chatbot_logs_telefono
+      ON chatbot_logs(telefono)
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_chatbot_logs_fecha
+      ON chatbot_logs(fecha DESC)
+    `);
+
     console.log('✅ Índices verificados/creados en Postgres.');
   } catch (e) {
     console.error('Error al crear índices en Postgres:', e);
@@ -341,6 +463,21 @@ function sembrarDatosIniciales() {
       for (let i = 1; i <= 6; i++) {
         db.run('INSERT INTO mesas (numero, nombre) VALUES (?, ?) ON CONFLICT (numero) DO NOTHING', [i, `Mesa ${i}`]);
       }
+    }
+  });
+
+  // Sembrar horarios por defecto
+  db.get("SELECT COUNT(*) as count FROM bot_horarios", (err, row) => {
+    if (!err && row && parseInt(row.count) === 0) {
+      console.log('Sembrando horarios por defecto...');
+      const dias = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
+      dias.forEach(dia => {
+        db.run(
+          `INSERT INTO bot_horarios (dia_semana, hora_apertura, hora_cierre, abierto)
+           VALUES (?, ?, ?, ?) ON CONFLICT (dia_semana) DO NOTHING`,
+          [dia, '18:00', '23:30', 1]
+        );
+      });
     }
   });
 }
