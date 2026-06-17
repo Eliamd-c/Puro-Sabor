@@ -85,7 +85,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // ── Cargar datos ───────────────────────────────────────────────────────
   async function cargarMesas() {
     try {
-      const resp = await fetch('/api/mesas', { headers: authHeaders });
+      const resp = await fetch(`/api/mesas?_t=${Date.now()}`, { 
+        headers: authHeaders,
+        cache: 'no-store'
+      });
       const result = await resp.json();
       if (result.success) {
         mesas = result.data;
