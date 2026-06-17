@@ -744,7 +744,26 @@ document.addEventListener('DOMContentLoaded', () => {
   function enviarPedidoWhatsApp() {
     if (carrito.length === 0) return;
     
-    let texto = '¡Hola! Quiero hacer un pedido en *Puro Sabor*:%0A%0A';
+    const nameInput = document.getElementById('customer-name-input');
+    const customerName = nameInput ? nameInput.value.trim() : '';
+
+    if (!customerName) {
+      if (nameInput) {
+        nameInput.classList.add('error');
+        nameInput.style.borderColor = '#e74c3c'; // Rojo
+        nameInput.focus();
+        
+        // Remover el error cuando el usuario empiece a escribir
+        nameInput.addEventListener('input', function onInput() {
+          nameInput.classList.remove('error');
+          nameInput.style.borderColor = 'var(--primary-color)';
+          nameInput.removeEventListener('input', onInput);
+        });
+      }
+      return;
+    }
+    
+    let texto = `¡Hola! Quiero hacer un pedido en *Puro Sabor* a nombre de *${customerName}*:%0A%0A`;
     let total = 0;
     
     carrito.forEach(item => {

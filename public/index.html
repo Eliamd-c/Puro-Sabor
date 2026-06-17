@@ -178,8 +178,12 @@
           <span>Total:</span>
           <span id="cart-total-price">$0</span>
         </div>
+        <div class="cart-customer-name" style="margin-bottom: 15px;">
+          <label for="customer-name-input" style="display: block; font-size: 0.9rem; font-weight: 600; color: var(--text-dark); margin-bottom: 5px;">¿A nombre de quién hacemos el pedido?</label>
+          <input type="text" id="customer-name-input" placeholder="Escribe tu nombre..." style="width: 100%; padding: 12px; border: 2px solid #eaeaea; border-radius: 12px; font-family: 'Outfit', sans-serif; font-size: 1rem; outline: none; transition: border-color 0.3s;" onfocus="this.style.borderColor='var(--primary-color)'" onblur="if(!this.classList.contains('error')) this.style.borderColor='#eaeaea'">
+        </div>
         <button class="btn-checkout" id="btn-checkout" disabled>
-          <span class="checkout-icon">📱</span> Enviar Pedido por WhatsApp
+          <span class="checkout-icon">✅</span> Realizar Pedido
         </button>
       </div>
     </div>
@@ -215,7 +219,7 @@
   <!-- JS Files -->
   <script src="/js/dark-mode.js"></script>
   <script src="/js/api.js?v=1.1"></script>
-  <script src="/js/main.js?v=1.3"></script>
+  <script src="/js/main.js?v=1.4"></script>
 
   <!-- Service Worker Registration -->
   <script>
