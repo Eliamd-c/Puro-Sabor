@@ -824,15 +824,20 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnSuggestionYes) {
       btnSuggestionYes.addEventListener('click', () => {
         cerrarSugerenciaBebidas();
+        
+        // Buscar el ID real de la categoría "Bebidas"
+        const catBebidas = categorias.find(c => c.nombre.toLowerCase().includes('bebida'));
+        const bebidaId = catBebidas ? catBebidas.id : '';
+
         // Filtrar y hacer scroll a bebidas
         searchInput.value = '';
-        ultimoFiltro = { categoria: 'bebidas', busqueda: '' };
-        renderizarFiltrosCategorias('bebidas');
+        ultimoFiltro = { categoria: bebidaId, busqueda: '' };
+        renderizarFiltrosCategorias(bebidaId);
         paginaActual = 1;
-        cargarProductos('bebidas', '', true);
+        cargarProductos(bebidaId, '', true);
         
         // Desplazarse a la cuadrícula de productos para ver las bebidas
-        const grid = document.getElementById('products-grid');
+        const grid = document.getElementById('secondary-sections');
         if (grid) {
           grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
