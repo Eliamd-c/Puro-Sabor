@@ -185,6 +185,12 @@ document.addEventListener('DOMContentLoaded', () => {
             </label>
           </td>
           <td>
+            <label class="switch">
+              <input type="checkbox" class="toggle-active" data-id="${prod.id}" ${prod.activo ? 'checked' : ''}>
+              <span class="slider-toggle"></span>
+            </label>
+          </td>
+          <td>
             <div class="btn-action-group">
               <button class="btn-icon btn-edit" data-id="${prod.id}" title="Editar producto">
                 <svg viewBox="0 0 24 24">
@@ -480,6 +486,49 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         } catch (error) {
           toggle.checked = !dispVal; // Revertir
+          console.error(error);
+        }
+      });
+    });
+
+    // 2.5 Toggle de Visibilidad (Activo)
+    document.querySelectorAll('.toggle-active').forEach(toggle => {
+      toggle.addEventListener('change', async () => {
+        const id = parseInt(toggle.getAttribute('data-id'));
+        const prod = productos.find(p => p.id === id);
+        if (!prod) return;
+
+        const activeVal = toggle.checked;
+
+        try {
+          const formData = new FormData();
+          formData.append('nombre', prod.nombre);
+          formData.append('categoria_id', prod.categoria_id);
+          formData.append('precio', prod.precio);
+          formData.append('stock', prod.stock);
+          formData.append('disponible', prod.disponible ? 1 : 0);
+          formData.append('activo', activeVal ? 1 : 0);
+          formData.append('imagen_url_existente', prod.imagen_url);
+
+          const response = await fetch(`/api/productos/admin/${id}`, {
+            method: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            },
+            body: formData
+          });
+
+          const result = await response.json();
+
+          if (result.success) {
+            prod.activo = activeVal ? 1 : 0;
+          } else {
+            toggle.checked = !activeVal; // Revertir cambio
+            alert(result.message);
+            if (response.status === 401) manejarSesionExpirada();
+          }
+        } catch (error) {
+          toggle.checked = !activeVal; // Revertir
           console.error(error);
         }
       });
