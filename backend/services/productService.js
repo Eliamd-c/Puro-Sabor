@@ -86,7 +86,7 @@ class ProductService {
     );
     
     return {
-      productos,
+      data: productos,
       pagination: {
         total,
         page,
