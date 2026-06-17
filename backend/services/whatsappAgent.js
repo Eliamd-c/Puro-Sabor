@@ -129,7 +129,7 @@ function pauseChat(telefono, nombre, ultimoMensaje) {
 
 function getKnowledgeBase() {
   return new Promise((resolve) => {
-    db.all('SELECT pregunta, respuesta FROM chatbots_kb ORDER BY fecha_creacion DESC LIMIT 50', [], (err, rows) => {
+    db.all('SELECT id, pregunta, respuesta, media_url, media_type FROM chatbots_kb ORDER BY fecha_creacion DESC LIMIT 50', [], (err, rows) => {
       resolve(rows || []);
     });
   });
@@ -500,7 +500,7 @@ class WhatsAppBot {
       const kb = await getKnowledgeBase();
       let kbText = '';
       if (kb.length > 0) {
-        kbText = '\nBASE DE CONOCIMIENTO (Aprende de aquí):\n' + kb.map(k => `Q: ${k.pregunta}\nA: ${k.respuesta}`).join('\n') + '\n';
+        kbText = '\nBASE DE CONOCIMIENTO (Aprende de aquí):\n' + kb.map(k => `[ID:${k.id}] Q: ${k.pregunta}\nA: ${k.respuesta}`).join('\n') + '\n';
       }
 
       systemInstruction = 
@@ -510,6 +510,7 @@ class WhatsAppBot {
         (!horarioActivo ? `REGLA 1: Debes mencionar: "${mensajeAusencia}".\n` : '') +
         'REGLA 2: Si piden menú, precios o hacer pedido, entrega siempre este link: 👉 ' + menuUrl + '\n' +
         'REGLA 3 (HANDOFF): Si el cliente pide hablar con un humano, asesor, o pregunta algo que no sabes, RESPONDE ÚNICAMENTE CON LA PALABRA EXACTA: [HUMAN_HANDOFF]. No añadas ningún otro texto.\n' +
+        'REGLA 4 (MULTIMEDIA): Si respondes basándote en una entrada de la BASE DE CONOCIMIENTO que tiene un [ID:x], DEBES incluir al final de tu respuesta la etiqueta exacta [SEND_MEDIA:x].\n' +
         kbText;
     }
 
@@ -577,9 +578,41 @@ class WhatsAppBot {
             break;
           }
 
-          await this.client.sendMessage(remoteJid, { text: finalText }, { quoted: message });
-          await guardarMensajeHistorial(senderNumber, 'model', finalText, this.botType);
-          this.emitMessage({ type: 'out', sender: 'Bot IA', text: finalText, time: new Date().toLocaleTimeString() });
+          let cleanText = finalText;
+          let mediaIdMatch = finalText.match(/\[SEND_MEDIA:(\d+)\]/);
+          
+          if (mediaIdMatch) {
+            cleanText = finalText.replace(/\[SEND_MEDIA:\d+\]/g, '').trim();
+            const kbId = mediaIdMatch[1];
+            
+            // Buscar media_url en DB
+            const kbEntry = await new Promise(resolve => {
+              db.get('SELECT media_url, media_type FROM chatbots_kb WHERE id = ?', [kbId], (err, row) => resolve(row));
+            });
+
+            if (kbEntry && kbEntry.media_url) {
+              const absolutePath = require('path').join(__dirname, '..', kbEntry.media_url);
+              if (require('fs').existsSync(absolutePath)) {
+                let mediaPayload = {};
+                if (kbEntry.media_type === 'video') mediaPayload = { video: { url: absolutePath }, caption: cleanText };
+                else if (kbEntry.media_type === 'audio') mediaPayload = { audio: { url: absolutePath }, ptt: true };
+                else mediaPayload = { image: { url: absolutePath }, caption: cleanText };
+                
+                await this.client.sendMessage(remoteJid, mediaPayload, { quoted: message });
+                if (kbEntry.media_type === 'audio' && cleanText) {
+                  // Si es audio de voz, mandar el texto por separado
+                  await this.client.sendMessage(remoteJid, { text: cleanText });
+                }
+                await guardarMensajeHistorial(senderNumber, 'model', cleanText || '(Multimedia enviado)', this.botType);
+                this.emitMessage({ type: 'out', sender: 'Bot IA', text: cleanText || '(Multimedia enviado)', time: new Date().toLocaleTimeString() });
+                break;
+              }
+            }
+          }
+
+          await this.client.sendMessage(remoteJid, { text: cleanText }, { quoted: message });
+          await guardarMensajeHistorial(senderNumber, 'model', cleanText, this.botType);
+          this.emitMessage({ type: 'out', sender: 'Bot IA', text: cleanText, time: new Date().toLocaleTimeString() });
           break;
         }
 

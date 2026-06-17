@@ -4,6 +4,21 @@ const waAgent = require('../services/whatsappAgent');
 const configService = require('../services/configService');
 const { verificarJWT } = require('../middleware/auth');
 const db = require('../config/database');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join(__dirname, '../uploads/media');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + '-' + file.originalname.replace(/\s+/g, '_'));
+  }
+});
+const upload = multer({ storage });
 
 // GET /api/chatbots/:type/status
 router.get('/:type/status', verificarJWT, (req, res) => {
@@ -184,6 +199,48 @@ router.post('/resume', verificarJWT, (req, res, next) => {
   db.run('DELETE FROM chatbots_paused WHERE telefono = ?', [telefono], (err) => {
     if (err) return next(err);
     res.json({ success: true, message: 'Chat reactivado sin enviar respuesta.' });
+  });
+});
+
+// --- FASE 3: GESTOR DE CONOCIMIENTO (KB) ---
+
+// GET /api/chatbots/kb
+router.get('/kb', verificarJWT, (req, res, next) => {
+  db.all('SELECT * FROM chatbots_kb ORDER BY fecha_creacion DESC', [], (err, rows) => {
+    if (err) return next(err);
+    res.json({ success: true, data: rows || [] });
+  });
+});
+
+// POST /api/chatbots/kb
+router.post('/kb', verificarJWT, upload.single('media'), (req, res, next) => {
+  const { pregunta, respuesta } = req.body;
+  if (!pregunta || !respuesta) return res.status(400).json({ success: false, message: 'Pregunta y respuesta son requeridas.' });
+
+  let mediaUrl = null;
+  let mediaType = null;
+
+  if (req.file) {
+    mediaUrl = '/uploads/media/' + req.file.filename;
+    mediaType = req.file.mimetype.split('/')[0]; // 'image', 'video', 'audio'
+  }
+
+  db.run(
+    'INSERT INTO chatbots_kb (pregunta, respuesta, media_url, media_type) VALUES (?, ?, ?, ?)',
+    [pregunta, respuesta, mediaUrl, mediaType],
+    function(err) {
+      if (err) return next(err);
+      res.json({ success: true, message: 'Regla agregada a la Base de Conocimientos.' });
+    }
+  );
+});
+
+// DELETE /api/chatbots/kb/:id
+router.delete('/kb/:id', verificarJWT, (req, res, next) => {
+  const { id } = req.params;
+  db.run('DELETE FROM chatbots_kb WHERE id = ?', [id], (err) => {
+    if (err) return next(err);
+    res.json({ success: true, message: 'Regla eliminada.' });
   });
 });
 

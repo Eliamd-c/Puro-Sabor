@@ -234,6 +234,49 @@
           </form>
         </div>
 
+        <!-- GESTOR DE CONOCIMIENTO (KB) -->
+        <div class="bot-card" style="grid-column: 1 / -1; max-width: 800px; margin: 0 auto; width: 100%;">
+          <div class="bot-header">
+            <div class="bot-icon" style="background: rgba(52, 152, 219, 0.1); color: #3498db;">🧠</div>
+            <div class="bot-title">
+              <h3 style="color: #3498db;">Gestor de Conocimiento (Entrenamiento)</h3>
+              <p>Agrega reglas o respuestas con fotos/audios para que el bot las aprenda.</p>
+            </div>
+          </div>
+          
+          <div style="padding: 20px;">
+            <!-- Formulario Nueva Regla -->
+            <form id="form-add-kb" style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; margin-bottom: 20px;">
+              <h4 style="margin-bottom: 12px; font-size: 14px;">➕ Agregar Nueva Respuesta</h4>
+              
+              <div class="form-group" style="margin-bottom: 12px;">
+                <label style="font-weight: 700; font-size: 12px;">Pregunta / Idea Clave</label>
+                <input type="text" id="kb-pregunta" class="form-control" placeholder="Ej: ¿Están ubicados en el parque?" required>
+              </div>
+              
+              <div class="form-group" style="margin-bottom: 12px;">
+                <label style="font-weight: 700; font-size: 12px;">Respuesta del Bot</label>
+                <textarea id="kb-respuesta" class="form-control" style="min-height: 60px; resize: vertical;" placeholder="Ej: Sí, nos trasladamos pero somos los mismos." required></textarea>
+              </div>
+              
+              <div class="form-group" style="margin-bottom: 12px;">
+                <label style="font-weight: 700; font-size: 12px;">Adjuntar Multimedia (Opcional)</label>
+                <input type="file" id="kb-media" class="form-control" accept="image/*,video/*,audio/*" style="padding: 8px;">
+                <small style="color: var(--text-muted); font-size: 11px;">Sube una imagen, audio o video corto que se enviará junto con la respuesta.</small>
+              </div>
+              
+              <button type="submit" class="btn-primary" id="btn-save-kb" style="width: 100%; justify-content: center;">Guardar en el Cerebro 🧠</button>
+            </form>
+
+            <!-- Lista de Conocimientos -->
+            <h4 style="margin-bottom: 12px; font-size: 14px;">📚 Lo que el bot ya sabe:</h4>
+            <div id="kb-list" style="display: flex; flex-direction: column; gap: 10px; max-height: 300px; overflow-y: auto;">
+              <!-- Cards insertadas por JS -->
+              <div style="text-align: center; color: var(--text-muted); padding: 20px;">Cargando base de conocimiento...</div>
+            </div>
+          </div>
+        </div>
+
         <!-- BANDEJA DE PENDIENTES (HANDOFF) -->
         <div class="bot-card" style="grid-column: 1 / -1; max-width: 800px; margin: 0 auto; width: 100%; border: 1px solid var(--primary-light);">
           <div class="bot-header">

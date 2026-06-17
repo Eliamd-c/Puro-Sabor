@@ -394,8 +394,116 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // --- GESTOR DE CONOCIMIENTO (KB) ---
+  const formAddKb = document.getElementById('form-add-kb');
+  const kbList = document.getElementById('kb-list');
+
+  async function cargarGestorConocimiento() {
+    if (!kbList) return;
+    try {
+      const response = await fetch('/api/chatbots/kb', { headers: authHeaders });
+      const result = await response.json();
+      
+      if (result.success) {
+        if (result.data.length === 0) {
+          kbList.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 20px;">No hay reglas aprendidas.</div>';
+          return;
+        }
+
+        kbList.innerHTML = '';
+        result.data.forEach(kb => {
+          const card = document.createElement('div');
+          card.style.padding = '12px';
+          card.style.background = 'var(--bg-secondary)';
+          card.style.borderRadius = '8px';
+          card.style.borderLeft = '4px solid #3498db';
+          card.style.display = 'flex';
+          card.style.justifyContent = 'space-between';
+          card.style.alignItems = 'flex-start';
+          card.style.gap = '10px';
+          
+          let mediaBadge = '';
+          if (kb.media_url) {
+            let icon = '📁';
+            if (kb.media_type === 'image') icon = '📸';
+            if (kb.media_type === 'video') icon = '🎥';
+            if (kb.media_type === 'audio') icon = '🎙️';
+            mediaBadge = `<span style="font-size: 11px; background: rgba(52, 152, 219, 0.2); color: #3498db; padding: 2px 6px; border-radius: 4px; margin-left: 8px;">${icon} Multimedia</span>`;
+          }
+
+          card.innerHTML = `
+            <div style="flex: 1; overflow: hidden;">
+              <strong style="font-size: 13px; display: block; margin-bottom: 4px;">Q: ${kb.pregunta} ${mediaBadge}</strong>
+              <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.4;">A: ${kb.respuesta}</div>
+            </div>
+            <button class="btn-secondary" onclick="eliminarConocimiento(${kb.id})" style="padding: 4px 8px; font-size: 11px; border-color: var(--danger); color: var(--danger);">🗑️</button>
+          `;
+          kbList.appendChild(card);
+        });
+      }
+    } catch (error) {
+      console.error('Error cargando KB:', error);
+    }
+  }
+
+  window.eliminarConocimiento = async function(id) {
+    if (!confirm('¿Seguro que quieres borrar esta regla?')) return;
+    try {
+      const res = await fetch('/api/chatbots/kb/' + id, { method: 'DELETE', headers: authHeaders });
+      const result = await res.json();
+      if (result.success) {
+        cargarGestorConocimiento();
+      } else {
+        alert(result.message);
+      }
+    } catch (e) {
+      alert('Error eliminando regla.');
+    }
+  };
+
+  if (formAddKb) {
+    formAddKb.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('btn-save-kb');
+      btn.disabled = true;
+      btn.textContent = 'Guardando...';
+
+      const formData = new FormData();
+      formData.append('pregunta', document.getElementById('kb-pregunta').value);
+      formData.append('respuesta', document.getElementById('kb-respuesta').value);
+      
+      const fileInput = document.getElementById('kb-media');
+      if (fileInput.files.length > 0) {
+        formData.append('media', fileInput.files[0]);
+      }
+
+      try {
+        const token = localStorage.getItem('ps_token');
+        const res = await fetch('/api/chatbots/kb', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + token }, // No setear Content-Type, fetch lo pone con el boundary
+          body: formData
+        });
+        const result = await res.json();
+        
+        if (result.success) {
+          formAddKb.reset();
+          cargarGestorConocimiento();
+        } else {
+          alert('Error: ' + result.message);
+        }
+      } catch (error) {
+        alert('Error al guardar la regla.');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Guardar en el Cerebro 🧠';
+      }
+    });
+  }
+
   // Init
   loadStatus('client');
   cargarConfiguracionIA();
   cargarHandoff();
+  cargarGestorConocimiento();
 });
