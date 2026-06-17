@@ -9,8 +9,8 @@ const API = {
       const response = await fetch(`${API_BASE_URL}/api/categorias`);
       if (!response.ok) throw new Error('API no disponible');
       const result = await response.json();
-      if (!result.success) throw new Error(result.message);
-      return result.data;
+      // Compatibilidad con formato array crudo o envuelto en data
+      return Array.isArray(result) ? result : (result.data || []);
     } catch (error) {
       console.error('⚠️ Error obteniendo categorías:', error.message);
       return [];
