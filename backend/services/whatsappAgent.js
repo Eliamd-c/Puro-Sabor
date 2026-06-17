@@ -137,33 +137,46 @@ function getKnowledgeBase() {
 
 function isWithinBusinessHours() {
   return new Promise((resolve) => {
-    const dias = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
+    // Colombia está en la zona horaria UTC-5 permanentemente (sin horario de verano)
     const now = new Date();
-    const hoy = dias[now.getDay()];
+    const colombiaTime = new Date(now.getTime() - (5 * 60 * 60 * 1000));
     
+    const dias = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
+    const hoy = dias[colombiaTime.getUTCDay()];
+    
+    const currentHours = colombiaTime.getUTCHours().toString().padStart(2, '0');
+    const currentMinutes = colombiaTime.getUTCMinutes().toString().padStart(2, '0');
+    const currentTimeStr = `${currentHours}:${currentMinutes}`;
+
+    console.log(`[WA Agent] Validando horario. Hora local calculada (Colombia UTC-5): ${currentTimeStr} del día ${hoy}`);
+
     db.get('SELECT abierto, hora_apertura, hora_cierre FROM bot_horarios WHERE dia_semana = ?', [hoy], (err, row) => {
       if (err || !row) {
+        console.log(`[WA Agent] No se encontró horario en la base de datos para el día ${hoy}. Por defecto: ABIERTO.`);
         resolve(true); // Abierto por defecto
         return;
       }
       
       if (row.abierto === 0) {
+        console.log(`[WA Agent] El restaurante está cerrado todo el día ${hoy} según la configuración.`);
         resolve(false);
         return;
       }
       
-      const currentHours = now.getHours().toString().padStart(2, '0');
-      const currentMinutes = now.getMinutes().toString().padStart(2, '0');
-      const currentTimeStr = `${currentHours}:${currentMinutes}`;
-      
       const start = row.hora_apertura;
       const end = row.hora_cierre;
       
+      console.log(`[WA Agent] Horario programado para ${hoy}: ${start} a ${end}. Hora actual: ${currentTimeStr}`);
+      
       if (start <= end) {
-        resolve(currentTimeStr >= start && currentTimeStr <= end);
+        const check = currentTimeStr >= start && currentTimeStr <= end;
+        console.log(`[WA Agent] Rango de horario normal. ¿Está abierto?: ${check}`);
+        resolve(check);
       } else {
         // Horario nocturno que cruza la medianoche (ej: 18:00 a 02:00)
-        resolve(currentTimeStr >= start || currentTimeStr <= end);
+        const check = currentTimeStr >= start || currentTimeStr <= end;
+        console.log(`[WA Agent] Rango de horario nocturno. ¿Está abierto?: ${check}`);
+        resolve(check);
       }
     });
   });
