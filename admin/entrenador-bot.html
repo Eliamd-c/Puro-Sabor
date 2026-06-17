@@ -103,6 +103,29 @@
                   </select>
                 </div>
 
+                <!-- Toggles Activar Bot y Horarios -->
+                <div class="form-group" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 10px 0; border-bottom: 1px solid var(--border-color);">
+                  <div>
+                    <label style="margin-bottom: 2px; font-weight: 700;">Activar Agente IA</label>
+                    <p style="font-size: 11px; color: var(--text-secondary); margin: 0;">Si se apaga, el bot ignorará todos los mensajes.</p>
+                  </div>
+                  <label class="switch">
+                    <input type="checkbox" id="bot-config-activo">
+                    <span class="slider-toggle"></span>
+                  </label>
+                </div>
+
+                <div class="form-group" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid var(--border-color);">
+                  <div>
+                    <label style="margin-bottom: 2px; font-weight: 700;">Validar Horarios de Atención</label>
+                    <p style="font-size: 11px; color: var(--text-secondary); margin: 0;">Si está activo, el bot enviará el Mensaje de Ausencia fuera de horas.</p>
+                  </div>
+                  <label class="switch">
+                    <input type="checkbox" id="bot-config-horario">
+                    <span class="slider-toggle"></span>
+                  </label>
+                </div>
+
                 <!-- Mensaje de Ausencia (Cerrado) -->
                 <div class="form-group">
                   <label for="bot-config-ausencia">Respuesta cuando está Cerrado</label>

@@ -110,7 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Socket listeners
   socket.on('whatsapp_client_status', (data) => updateUI('client', data.status, data.qr, data.error));
 
-  socket.on('whatsapp_message', (data) => {
+  socket.on('whatsapp_client_message', (data) => {
     console.log('[Socket] Mensaje WhatsApp:', data);
     agregarMensajeAlMonitor(data);
   });

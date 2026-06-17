@@ -501,9 +501,7 @@ class WhatsAppBot {
       const mensajeAusencia = await getConfig('bot_mensaje_ausencia') || '¡Hola! Gracias por contactarte con Puro Sabor. 🍖 Te informamos que iniciaremos atención este próximo Sábado a partir de las 6:00 de la tarde.';
       
       let estaAbierto = true;
-      if (!horarioActivo) {
-        estaAbierto = false;
-      } else {
+      if (horarioActivo) {
         estaAbierto = await isWithinBusinessHours();
       }
 

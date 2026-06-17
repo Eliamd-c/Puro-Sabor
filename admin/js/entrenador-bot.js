@@ -72,6 +72,11 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('bot-config-prompt').value = result.data.bot_system_prompt || '';
         document.getElementById('bot-config-ausencia').value = result.data.bot_mensaje_ausencia || '';
         
+        const configActivo = document.getElementById('bot-config-activo');
+        const configHorario = document.getElementById('bot-config-horario');
+        if (configActivo) configActivo.checked = result.data.whatsapp_bot_active;
+        if (configHorario) configHorario.checked = (result.data.bot_horario_activo === '1');
+        
         // Cargar variables generales como el tono (o un valor fijo si no está en config)
         try {
           const tonoRes = await fetch('/api/config', { headers: authHeaders });
@@ -93,6 +98,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const prompt = document.getElementById('bot-config-prompt').value.trim();
       const ausencia = document.getElementById('bot-config-ausencia').value.trim();
       const tono = document.getElementById('bot-config-tono').value;
+      const activo = document.getElementById('bot-config-activo').checked;
+      const horario = document.getElementById('bot-config-horario').checked ? '1' : '0';
 
       const btnSave = document.getElementById('btn-save-bot-base');
       btnSave.disabled = true;
@@ -100,13 +107,15 @@ document.addEventListener('DOMContentLoaded', () => {
       alertConfigBase.style.display = 'none';
 
       try {
-        // 1. Guardar prompt y mensaje de ausencia en config-ai
+        // 1. Guardar prompt, mensaje de ausencia, y toggles en config-ai
         const resAi = await fetch('/api/chatbots/config-ai', {
           method: 'POST',
           headers: authHeaders,
           body: JSON.stringify({
             bot_system_prompt: prompt,
-            bot_mensaje_ausencia: ausencia
+            bot_mensaje_ausencia: ausencia,
+            whatsapp_bot_active: activo,
+            bot_horario_activo: horario
           })
         });
         const rAi = await resAi.json();
