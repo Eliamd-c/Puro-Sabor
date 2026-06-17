@@ -1107,3 +1107,92 @@ body {
 .btn-checkout:not(:disabled):hover {
   background: #128C7E;
 }
+
+/* 💡 MODAL DE SUGERENCIA */
+.suggestion-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.suggestion-overlay.open {
+  opacity: 1;
+  visibility: visible;
+}
+
+.suggestion-content {
+  background: var(--bg-card);
+  width: 90%;
+  max-width: 350px;
+  border-radius: var(--radius-lg);
+  padding: 30px 20px;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+  transform: translateY(20px) scale(0.95);
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.suggestion-overlay.open .suggestion-content {
+  transform: translateY(0) scale(1);
+}
+
+.suggestion-icon {
+  font-size: 40px;
+  margin-bottom: 15px;
+}
+
+.suggestion-title {
+  font-size: 20px;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+}
+
+.suggestion-desc {
+  font-size: 15px;
+  color: var(--text-secondary);
+  margin-bottom: 25px;
+  line-height: 1.4;
+}
+
+.suggestion-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.btn-suggestion-primary, .btn-suggestion-secondary {
+  padding: 12px;
+  border-radius: var(--radius-md);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s ease;
+}
+
+.btn-suggestion-primary {
+  background: var(--primary);
+  color: white;
+}
+
+.btn-suggestion-primary:hover {
+  background: var(--primary-dark, #c0392b);
+}
+
+.btn-suggestion-secondary {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid rgba(0,0,0,0.1);
+}
+
+.btn-suggestion-secondary:hover {
+  background: rgba(0,0,0,0.05);
+  color: var(--text-primary);
+}

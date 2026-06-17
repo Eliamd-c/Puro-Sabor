@@ -51,6 +51,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const modalPrice = document.getElementById('modal-price');
   const modalDesc = document.getElementById('modal-desc');
 
+  // Elementos del Modal de Sugerencia
+  const suggestionOverlay = document.getElementById('suggestion-overlay');
+  const btnSuggestionYes = document.getElementById('btn-suggestion-yes');
+  const btnSuggestionNo = document.getElementById('btn-suggestion-no');
+
   // --- INICIALIZACIÓN ---
   async function init() {
     mostrarCarga();
@@ -600,17 +605,44 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.style.overflow = '';
   }
 
-  function agregarAlCarrito(productoId) {
-    const producto = productos.find(p => p.id === productoId);
-    if (!producto) return;
+  function agregarAlCarrito(idSeleccionado) {
+    let productoAgregado = null;
+    
+    // 1. Buscar si el id corresponde al producto padre directamente
+    let prodPadre = productos.find(p => p.id === idSeleccionado);
+    if (prodPadre) {
+      productoAgregado = { ...prodPadre };
+    } else {
+      // 2. Si no, buscar si corresponde al id de una variante
+      for (const p of productos) {
+        if (p.variantes && p.variantes.length > 0) {
+          const varEncontrada = p.variantes.find(v => v.id === idSeleccionado);
+          if (varEncontrada) {
+            productoAgregado = {
+              ...p,
+              id: varEncontrada.id, // Guardamos en el carrito con el ID de la variante
+              producto_id: p.id,
+              nombre: p.nombre + ' (' + varEncontrada.tamano + ')',
+              precio: varEncontrada.precio
+            };
+            break;
+          }
+        }
+      }
+    }
 
-    const itemExistente = carrito.find(item => item.id === productoId);
+    if (!productoAgregado) {
+      console.error("Producto o variante no encontrada:", idSeleccionado);
+      return;
+    }
+
+    const itemExistente = carrito.find(item => item.id === productoAgregado.id);
     
     if (itemExistente) {
       itemExistente.cantidad += 1;
     } else {
       carrito.push({
-        ...producto,
+        ...productoAgregado,
         cantidad: 1
       });
     }
@@ -621,6 +653,22 @@ document.addEventListener('DOMContentLoaded', () => {
     // Animación de feedback en el FAB
     fabCart.style.transform = 'scale(1.2)';
     setTimeout(() => fabCart.style.transform = '', 200);
+
+    // Sugerencia de Bebidas (Opción 1)
+    // Mostrar sugerencia solo si el producto agregado NO es de categoría bebidas o postres
+    const catName = productoAgregado.categoria_nombre || productoAgregado.categoria || '';
+    const cat = catName.toLowerCase();
+    if (!cat.includes('bebida') && !cat.includes('postre') && cat !== '') {
+      setTimeout(() => mostrarSugerenciaBebidas(), 300); // Pequeño retraso para que se vea natural
+    }
+  }
+
+  function mostrarSugerenciaBebidas() {
+    suggestionOverlay.classList.add('open');
+  }
+
+  function cerrarSugerenciaBebidas() {
+    suggestionOverlay.classList.remove('open');
   }
 
   function eliminarDelCarrito(productoId) {
@@ -769,6 +817,35 @@ document.addEventListener('DOMContentLoaded', () => {
         if (varianteActivaId) {
           agregarAlCarrito(varianteActivaId);
         }
+      });
+    }
+
+    // Eventos del Modal de Sugerencia
+    if (btnSuggestionYes) {
+      btnSuggestionYes.addEventListener('click', () => {
+        cerrarSugerenciaBebidas();
+        // Filtrar y hacer scroll a bebidas
+        searchInput.value = '';
+        ultimoFiltro = { categoria: 'bebidas', busqueda: '' };
+        renderizarFiltrosCategorias('bebidas');
+        paginaActual = 1;
+        cargarProductos('bebidas', '', true);
+        
+        // Desplazarse a la cuadrícula de productos para ver las bebidas
+        const grid = document.getElementById('products-grid');
+        if (grid) {
+          grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    }
+
+    if (btnSuggestionNo) {
+      btnSuggestionNo.addEventListener('click', cerrarSugerenciaBebidas);
+    }
+    
+    if (suggestionOverlay) {
+      suggestionOverlay.addEventListener('click', (e) => {
+        if (e.target === suggestionOverlay) cerrarSugerenciaBebidas();
       });
     }
   }
