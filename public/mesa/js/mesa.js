@@ -271,12 +271,18 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       if (typeof io === 'undefined') {
         console.warn('Socket.io no está disponible. El modo offline está activo.');
+        alert('ADVERTENCIA: Socket.io no está cargado. El tiempo real no funcionará.');
         return;
       }
-      socket = io({
+      
+      const serverUrl = window.location.origin; // Forzar URL explícita
+      console.log('Intentando conectar socket a:', serverUrl);
+      
+      socket = io(serverUrl, {
         transports: ['polling', 'websocket'],
         reconnectionAttempts: 10,
-        reconnectionDelay: 2000
+        reconnectionDelay: 2000,
+        path: '/socket.io/'
       });
 
       socket.on('connect_error', (err) => {
@@ -883,5 +889,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ── Iniciar ────────────────────────────────────────────────────────────
-  init();
+  init().catch(err => {
+    console.error('[Mesa] Error crítico en init():', err);
+    alert('Ocurrió un error al cargar la mesa: ' + err.message);
+  });
 });
