@@ -236,6 +236,7 @@ document.addEventListener('DOMContentLoaded', () => {
             imagen_url: prod.imagen_url,
             disponible: 0,
             stock: 0,
+            tiene_variantes: true,
             variantes: []
           };
         }
@@ -262,7 +263,7 @@ document.addEventListener('DOMContentLoaded', () => {
         agp[nombreBase].stock += prod.stock;
         
       } else {
-        // Producto normal sin variantes (ej. Bebidas o Postres)
+        // Producto normal o con variantes desde DB
         agp[prod.nombre] = {
           id: prod.id,
           nombre: prod.nombre,
@@ -273,7 +274,8 @@ document.addEventListener('DOMContentLoaded', () => {
           precio: prod.precio,
           disponible: prod.disponible,
           stock: prod.stock,
-          variantes: []
+          tiene_variantes: prod.tiene_variantes === 1,
+          variantes: prod.variantes || []
         };
       }
     });
