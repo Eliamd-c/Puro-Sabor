@@ -10,19 +10,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let insumos = [];
 
+  // Handle logout
+  document.getElementById('btn-logout')?.addEventListener('click', () => {
+    localStorage.removeItem('adminToken');
+    window.location.href = '/admin/';
+  });
+
   // API Calls
   async function fetchInsumos() {
     try {
       const token = localStorage.getItem('adminToken');
+      if (!token) {
+        window.location.href = '/admin/';
+        return;
+      }
       const res = await fetch('/api/insumos', { headers: { 'Authorization': `Bearer ${token}` } });
       const data = await res.json();
       if (data.success) {
         insumos = data.data;
         renderTable();
+      } else {
+        tableBody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: red;">Error: ${data.message}</td></tr>`;
       }
     } catch (e) {
       console.error(e);
-      alert('Error cargando insumos');
+      tableBody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: red;">Error de red al cargar insumos</td></tr>`;
     }
   }
 
