@@ -574,48 +574,54 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const sizeContainer = document.getElementById('modal-size-container');
     
-    if (prodGrouped.variantes && prodGrouped.variantes.length > 0) {
+    if (prodGrouped.tiene_variantes && prodGrouped.variantes && prodGrouped.variantes.length > 0) {
       sizeContainer.style.display = 'block';
       
-      // Ordenar por precio ascendente de forma natural
-      const varOrdenadas = [...prodGrouped.variantes].sort((a, b) => a.precio - b.precio);
+      // Mostrar solo variantes con stock > 0
+      const varDisponibles = prodGrouped.variantes.filter(v => v.stock > 0);
 
-      let sizeHtml = `
-        <span class="modal-size-label">Selecciona el Tamaño:</span>
-        <div class="size-options">
-      `;
-      
-      varOrdenadas.forEach((v, idx) => {
-        const activeClass = idx === 0 ? 'active' : '';
-        
-        sizeHtml += `
-          <button class="size-option-btn ${activeClass}" data-id="${v.id}" data-price="${v.precio}" data-disponible="${v.disponible ? 1 : 0}">
-            <span>${v.tamano}</span>
-            <span class="size-price">$${v.precio.toLocaleString('es-CO', { minimumFractionDigits: 0 })} COP</span>
-          </button>
+      if (varDisponibles.length > 0) {
+        let sizeHtml = `
+          <span class="modal-size-label">Selecciona el Sabor / Variante:</span>
+          <div class="size-options">
         `;
-      });
-      
-      sizeHtml += `</div>`;
-      sizeContainer.innerHTML = sizeHtml;
-
-      const primerActiva = varOrdenadas.find(v => v.stock > 0 && v.disponible);
-      const seleccionada = primerActiva || varOrdenadas[0];
-      
-      actualizarPrecioModal(seleccionada.id, seleccionada.precio);
-
-      document.querySelectorAll('.size-option-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation(); // Evitar propagación
-          document.querySelectorAll('.size-option-btn').forEach(b => b.classList.remove('active'));
-          btn.classList.add('active');
+        
+        varDisponibles.forEach((v, idx) => {
+          const activeClass = idx === 0 ? 'active' : '';
+          // Hereda el precio del producto padre
+          const precioVar = prodGrouped.precio; 
           
-          const id = parseInt(btn.getAttribute('data-id'));
-          const price = parseFloat(btn.getAttribute('data-price'));
-          
-          actualizarPrecioModal(id, price);
+          sizeHtml += `
+            <button class="size-option-btn ${activeClass}" data-id="${v.id}" data-price="${precioVar}" data-disponible="1" data-name="${v.nombre}">
+              <span>${v.nombre}</span>
+              <span class="size-price">$${precioVar.toLocaleString('es-CO', { minimumFractionDigits: 0 })} COP</span>
+            </button>
+          `;
         });
-      });
+        
+        sizeHtml += `</div>`;
+        sizeContainer.innerHTML = sizeHtml;
+      } else {
+        sizeContainer.innerHTML = `<span class="modal-size-label" style="color:var(--danger)">Agotado en todas sus variantes</span>`;
+      }
+
+      if (varDisponibles && varDisponibles.length > 0) {
+        const seleccionada = varDisponibles[0];
+        actualizarPrecioModal(seleccionada.id, prodGrouped.precio);
+
+        document.querySelectorAll('.size-option-btn').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation(); // Evitar propagación
+            document.querySelectorAll('.size-option-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            
+            const id = parseInt(btn.getAttribute('data-id'));
+            const price = parseFloat(btn.getAttribute('data-price'));
+            
+            actualizarPrecioModal(id, price);
+          });
+        });
+      }
 
     } else {
       sizeContainer.style.display = 'none';
