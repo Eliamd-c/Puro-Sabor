@@ -513,7 +513,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // Obtener texto formateado del precio
   function getPrecioText(prod) {
     if (prod.variantes && prod.variantes.length > 0) {
-      const precios = prod.variantes.map(v => v.precio).sort((a, b) => a - b);
+      // Legacy variants had .precio, DB variants inherit from parent
+      const precios = prod.variantes.map(v => v.precio !== undefined ? v.precio : prod.precio).sort((a, b) => a - b);
       return `Desde $${precios[0].toLocaleString('es-CO', { minimumFractionDigits: 0 })} COP`;
     }
     return `$${prod.precio.toLocaleString('es-CO', { minimumFractionDigits: 0 })} COP`;
