@@ -115,11 +115,18 @@ class ProductService {
   async update(id, data) {
     const { nombre, descripcion, precio, categoria_id, stock, disponible, activo, imagen_url } = data;
     
+    // PostgreSQL (pg driver) crashes if any parameter is undefined. We must use null or defaults.
+    const _desc = descripcion !== undefined ? descripcion : null;
+    const _stock = stock !== undefined ? stock : 0;
+    const _disp = disponible !== undefined ? disponible : 1;
+    const _activo = activo !== undefined ? activo : 1;
+
     let query = `UPDATE productos SET 
         nombre = ?, descripcion = ?, precio = ?, 
         categoria_id = ?, stock = ?, disponible = ?, 
         activo = ?, updated_at = CURRENT_TIMESTAMP`;
-    let params = [nombre, descripcion, precio, categoria_id, stock, disponible, activo];
+    
+    let params = [nombre, _desc, precio, categoria_id, _stock, _disp, _activo];
 
     if (imagen_url !== undefined) {
       query += `, imagen_url = ?`;
