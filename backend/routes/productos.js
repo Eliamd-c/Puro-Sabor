@@ -4,7 +4,7 @@ const productService = require('../services/productService');
 const validate = require('../middleware/validate');
 const schemas = require('../schemas');
 const { verificarJWT } = require('../middleware/auth');
-const { upload, optimizeImage, handleImageUpload } = require('../middleware/imageUpload');
+const { upload, handleMulterError, optimizeImage, handleImageUpload } = require('../middleware/imageUpload');
 const { cacheMiddleware, invalidateCachePattern } = require('../middleware/cache');
 
 /**
@@ -87,6 +87,7 @@ router.post(
   '/admin',
   verificarJWT,
   upload.single('imagen'),
+  handleMulterError,
   optimizeImage,
   handleImageUpload,
   validate(schemas.productoSchema),
@@ -113,6 +114,7 @@ router.put(
   '/admin/:id',
   verificarJWT,
   upload.single('imagen'),
+  handleMulterError,
   optimizeImage,
   handleImageUpload,
   validate(schemas.productoSchema),

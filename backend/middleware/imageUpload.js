@@ -59,9 +59,28 @@ const upload = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB máximo
+    fileSize: 15 * 1024 * 1024 // 15MB máximo (fotos de celular modernas pesan más)
   }
 });
+
+/**
+ * Manejador de errores de Multer — convierte errores crípticos en mensajes claros
+ * con status 400 en lugar de 500. Debe usarse justo después de upload.single().
+ */
+const handleMulterError = (err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    let mensaje = 'Error al subir el archivo.';
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      mensaje = 'La imagen es demasiado grande. El máximo permitido es 15MB.';
+    }
+    return res.status(400).json({ success: false, message: mensaje });
+  }
+  if (err) {
+    // Errores del fileFilter (tipo no permitido, etc.)
+    return res.status(err.statusCode || 400).json({ success: false, message: err.message });
+  }
+  next();
+};
 
 /**
  * Middleware que optimiza y convierte imágenes a WebP
@@ -166,6 +185,7 @@ const handleImageUpload = (req, res, next) => {
 
 module.exports = {
   upload,
+  handleMulterError,
   optimizeImage,
   handleImageUpload
 };
