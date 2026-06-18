@@ -119,6 +119,8 @@ const optimizeImage = async (req, res, next) => {
           })
           .toBuffer();
   
+        if (!supabase) throw new Error("Supabase client is not initialized. Check environment variables.");
+
         // Subir a Supabase Storage
         const { data, error } = await supabase
           .storage
@@ -152,6 +154,8 @@ const optimizeImage = async (req, res, next) => {
           const ext = path.extname(file.originalname).toLowerCase() || '.jpg';
           const fallbackFilename = `${Date.now()}-orig-${Math.floor(Math.random()*1000)}${ext}`;
           
+          if (!supabase) throw new Error("Supabase client is not initialized. Check environment variables.");
+
           const fileBuffer = fs.readFileSync(file.path);
           
           const { error: fallbackError } = await supabase
