@@ -159,7 +159,8 @@ document.addEventListener('DOMContentLoaded', () => {
           <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">ID: ${prod.id}</div>
         </td>
         <td class="cell-category">${prod.categoria_nombre || 'Sin Categoría'}</td>
-        <td>
+        <td class="stock-col">
+          ${prod.tiene_variantes ? '<span style="font-size:12px; color:var(--text-muted);">Stock por variante</span>' : `
           <div class="stock-adjust-group">
             <button class="btn-stock-adjust btn-decrement-five" data-id="${prod.id}">-5</button>
             <button class="btn-stock-adjust btn-decrement-one" data-id="${prod.id}">-1</button>
@@ -167,13 +168,56 @@ document.addEventListener('DOMContentLoaded', () => {
             <button class="btn-stock-adjust btn-increment-one" data-id="${prod.id}">+1</button>
             <button class="btn-stock-adjust btn-increment-five" data-id="${prod.id}">+5</button>
           </div>
+          `}
         </td>
         <td style="text-align: right;">
+          ${prod.tiene_variantes ? '<span style="font-size:12px; color:var(--text-muted);">-</span>' : `
           <span class="status-pill ${stockClass}" id="pill-${prod.id}">${stockLabel}</span>
+          `}
         </td>
       `;
 
       inventarioTableBody.appendChild(tr);
+
+      // Render variants if applicable
+      if (prod.tiene_variantes && prod.variantes && prod.variantes.length > 0) {
+        prod.variantes.forEach(v => {
+          const vTr = document.createElement('tr');
+          vTr.style.backgroundColor = 'var(--bg-body)';
+          
+          let vStockClass = 'success';
+          let vStockLabel = 'Disponible';
+          if (v.stock === 0) {
+            vStockClass = 'danger';
+            vStockLabel = 'Agotado';
+          } else if (v.stock < 5) {
+            vStockClass = 'warning';
+            vStockLabel = 'Bajo Stock';
+          }
+
+          vTr.innerHTML = `
+            <td class="cell-image" style="padding-left: 30px;">
+              <img src="${v.imagen_url || prod.imagen_url || '/assets/images/placeholder.png'}" style="width: 36px; height: 36px; border-radius: 6px;">
+            </td>
+            <td colspan="2">
+              <div style="font-weight: 500; font-size: 13px; color: var(--text-primary);">↳ Variante: ${v.nombre}</div>
+            </td>
+            <td>
+              <div class="stock-adjust-group">
+                <button class="btn-stock-adjust btn-decrement-five variant-adjust" data-prod-id="${prod.id}" data-var-id="${v.id}">-5</button>
+                <button class="btn-stock-adjust btn-decrement-one variant-adjust" data-prod-id="${prod.id}" data-var-id="${v.id}">-1</button>
+                <input type="number" class="stock-display-input variant-input" data-prod-id="${prod.id}" data-var-id="${v.id}" value="${v.stock}" min="0">
+                <button class="btn-stock-adjust btn-increment-one variant-adjust" data-prod-id="${prod.id}" data-var-id="${v.id}">+1</button>
+                <button class="btn-stock-adjust btn-increment-five variant-adjust" data-prod-id="${prod.id}" data-var-id="${v.id}">+5</button>
+              </div>
+            </td>
+            <td style="text-align: right;">
+              <span class="status-pill ${vStockClass}" id="pill-v-${v.id}">${vStockLabel}</span>
+            </td>
+          `;
+          inventarioTableBody.appendChild(vTr);
+        });
+      }
     });
 
     setupTablaEventos();
@@ -184,8 +228,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Eventos de botones rápido (+ y -)
     inventarioTableBody.querySelectorAll('.btn-stock-adjust').forEach(btn => {
       btn.addEventListener('click', (e) => {
-        const id = parseInt(btn.getAttribute('data-id'));
-        const input = inventarioTableBody.querySelector(`.stock-display-input[data-id="${id}"]`);
+        const isVariant = btn.classList.contains('variant-adjust');
+        const id = parseInt(isVariant ? btn.getAttribute('data-var-id') : btn.getAttribute('data-id'));
+        const input = isVariant ? 
+          inventarioTableBody.querySelector(`.stock-display-input.variant-input[data-var-id="${id}"]`) :
+          inventarioTableBody.querySelector(`.stock-display-input:not(.variant-input)[data-id="${id}"]`);
+        
         if (!input) return;
 
         let delta = 0;
@@ -197,18 +245,29 @@ document.addEventListener('DOMContentLoaded', () => {
         let nuevoStock = Math.max(0, parseInt(input.value) + delta);
         input.value = nuevoStock;
         
-        guardarStockServidor(id, nuevoStock);
+        if (isVariant) {
+          const prodId = parseInt(btn.getAttribute('data-prod-id'));
+          guardarStockVarianteServidor(prodId, id, nuevoStock);
+        } else {
+          guardarStockServidor(id, nuevoStock);
+        }
       });
     });
 
     // Eventos al cambiar el input a mano
     inventarioTableBody.querySelectorAll('.stock-display-input').forEach(input => {
       input.addEventListener('change', () => {
-        const id = parseInt(input.getAttribute('data-id'));
+        const isVariant = input.classList.contains('variant-input');
+        const id = parseInt(isVariant ? input.getAttribute('data-var-id') : input.getAttribute('data-id'));
         let nuevoStock = Math.max(0, parseInt(input.value) || 0);
         input.value = nuevoStock;
         
-        guardarStockServidor(id, nuevoStock);
+        if (isVariant) {
+          const prodId = parseInt(input.getAttribute('data-prod-id'));
+          guardarStockVarianteServidor(prodId, id, nuevoStock);
+        } else {
+          guardarStockServidor(id, nuevoStock);
+        }
       });
 
       input.addEventListener('keydown', (e) => {
@@ -248,11 +307,59 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  async function guardarStockVarianteServidor(prodId, varId, stock) {
+    try {
+      const response = await fetch(`/api/productos/admin/variante/${varId}/stock`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ stock })
+      });
+      const result = await response.json();
+
+      if (result.success) {
+        // Actualizar localmente
+        const prod = productos.find(p => p.id === prodId);
+        if (prod && prod.variantes) {
+          const variant = prod.variantes.find(v => v.id === varId);
+          if (variant) {
+            variant.stock = stock;
+            actualizarPildoraStockVariante(varId, stock);
+            actualizarKPIs();
+          }
+        }
+      } else {
+        console.error('Error al guardar stock variante:', result.message);
+      }
+    } catch (error) {
+      console.error('Error en fetch al guardar stock variante:', error);
+    }
+  }
+
   // --- ACTUALIZAR LA PÍLDORA DE STOCK DINÁMICAMENTE ---
   function actualizarPildoraStock(id, stock) {
     const pill = document.getElementById(`pill-${id}`);
     if (!pill) return;
 
+    pill.className = 'status-pill';
+    if (stock === 0) {
+      pill.classList.add('danger');
+      pill.textContent = 'Agotado';
+    } else if (stock < 5) {
+      pill.classList.add('warning');
+      pill.textContent = 'Bajo Stock';
+    } else {
+      pill.classList.add('success');
+      pill.textContent = 'Disponible';
+    }
+  }
+
+  function actualizarPildoraStockVariante(id, stock) {
+    const pill = document.getElementById(`pill-v-${id}`);
+    if (!pill) return;
+    
     pill.className = 'status-pill';
     if (stock === 0) {
       pill.classList.add('danger');

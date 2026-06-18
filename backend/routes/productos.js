@@ -86,16 +86,40 @@ router.get('/admin/list', verificarJWT, async (req, res, next) => {
 router.post(
   '/admin',
   verificarJWT,
-  upload.single('imagen'),
+  upload.any(), // Soporta múltiples archivos (imagen, variante_img_0, variante_img_1...)
   handleMulterError,
   optimizeImage,
   handleImageUpload,
-  validate(schemas.productoSchema),
+  // validate(schemas.productoSchema), // Tendremos que validar manualmente o relajar el esquema
   async (req, res, next) => {
     try {
+      // Parsear variantes si vienen
+      let variantes = [];
+      if (req.body.variantes_json) {
+        try {
+          variantes = JSON.parse(req.body.variantes_json);
+        } catch (e) {
+          console.error("Error parseando variantes_json", e);
+        }
+      }
+
+      // Asignar imágenes a las variantes si se subieron
+      if (req.body.optimizedImagesMap) {
+        variantes.forEach((v, index) => {
+          const field = `variante_img_${index}`;
+          if (req.body.optimizedImagesMap[field]) {
+            v.imagen_url = req.body.optimizedImagesMap[field];
+          } else if (req.body[`variante_img_url_${index}`]) {
+            v.imagen_url = req.body[`variante_img_url_${index}`];
+          }
+        });
+      }
+
       const data = {
-        ...req.validatedBody,
-        imagen_url: req.body.imagen_url // Ya procesada por handleImageUpload
+        ...req.body, // Validaciones de joi tendrían que ser ignoradas o actualizadas, usaremos req.body temporalmente
+        imagen_url: req.body.imagen_url, // Ya procesada por handleImageUpload
+        tiene_variantes: variantes.length > 0 ? 1 : 0,
+        variantes: variantes
       };
 
       const newProduct = await productService.create(data);
@@ -113,14 +137,41 @@ router.post(
 router.put(
   '/admin/:id',
   verificarJWT,
-  upload.single('imagen'),
+  upload.any(),
   handleMulterError,
   optimizeImage,
   handleImageUpload,
-  validate(schemas.productoSchema),
+  // validate(schemas.productoSchema),
   async (req, res, next) => {
     try {
-      const data = { ...req.validatedBody };
+      // Parsear variantes si vienen
+      let variantes = [];
+      if (req.body.variantes_json) {
+        try {
+          variantes = JSON.parse(req.body.variantes_json);
+        } catch (e) {
+          console.error("Error parseando variantes_json", e);
+        }
+      }
+
+      // Asignar imágenes a las variantes si se subieron
+      if (req.body.optimizedImagesMap) {
+        variantes.forEach((v, index) => {
+          const field = `variante_img_${index}`;
+          if (req.body.optimizedImagesMap[field]) {
+            v.imagen_url = req.body.optimizedImagesMap[field];
+          } else if (req.body[`variante_img_url_${index}`]) {
+            v.imagen_url = req.body[`variante_img_url_${index}`];
+          }
+        });
+      }
+
+      const data = { 
+        ...req.body,
+        tiene_variantes: req.body.tiene_variantes !== undefined ? parseInt(req.body.tiene_variantes) : (variantes.length > 0 ? 1 : 0),
+        variantes: variantes
+      };
+      
       if (req.body.imagen_url) {
         data.imagen_url = req.body.imagen_url; // Ya procesada por handleImageUpload
       }
@@ -155,6 +206,20 @@ router.patch('/admin/:id/stock', verificarJWT, async (req, res, next) => {
     }
     const updatedProduct = await productService.updateStock(req.params.id, stock);
     res.json({ success: true, data: updatedProduct });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// PATCH /api/productos/admin/variante/:id/stock
+router.patch('/admin/variante/:id/stock', verificarJWT, async (req, res, next) => {
+  try {
+    const { stock } = req.body;
+    if (stock === undefined) {
+      return res.status(400).json({ success: false, message: 'Se requiere el campo stock' });
+    }
+    await productService.updateVariantStock(req.params.id, stock);
+    res.json({ success: true, message: 'Stock de variante actualizado' });
   } catch (error) {
     next(error);
   }

@@ -27,35 +27,41 @@ function getConfig(key) {
 }
 
 function getInventarioDb() {
-  return new Promise((resolve, reject) => {
-    db.all(
-      `SELECT p.id, p.nombre, c.nombre as categoria, p.precio, p.stock 
-       FROM productos p 
-       JOIN categorias c ON p.categoria_id = c.id 
-       WHERE p.activo = 1`,
-      [],
-      (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows);
-      }
-    );
+  return new Promise(async (resolve, reject) => {
+    try {
+      const res = await pgPool.query(
+        `SELECT p.id, p.nombre, c.nombre as categoria, p.precio, p.stock, p.tiene_variantes,
+          (SELECT json_agg(json_build_object('id', v.id, 'nombre', v.nombre, 'stock', v.stock))
+           FROM producto_variantes v WHERE v.producto_id = p.id) as variantes
+         FROM productos p 
+         JOIN categorias c ON p.categoria_id = c.id 
+         WHERE p.activo = 1`
+      );
+      resolve(res.rows);
+    } catch (err) {
+      reject(err);
+    }
   });
 }
 
-function updateStockDb(id, nombre, nuevoStock) {
+function updateStockDb(id, nombre, nuevoStock, es_variante = false) {
   return new Promise((resolve, reject) => {
     const stockLimpio = Math.max(0, parseInt(nuevoStock) || 0);
     let query = '';
     let params = [];
+    
+    const tabla = es_variante ? 'producto_variantes' : 'productos';
+
     if (id) {
-      query = `UPDATE productos SET stock = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
+      query = `UPDATE ${tabla} SET stock = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
       params = [stockLimpio, id];
     } else if (nombre) {
-      query = `UPDATE productos SET stock = ?, updated_at = CURRENT_TIMESTAMP WHERE nombre ILIKE ?`;
+      query = `UPDATE ${tabla} SET stock = ?, updated_at = CURRENT_TIMESTAMP WHERE nombre ILIKE ?`;
       params = [stockLimpio, `%${nombre}%`];
     } else {
       return reject(new Error('Se requiere id o nombre'));
     }
+    
     db.run(query, params, function(err) {
       if (err) reject(err);
       else resolve({ changes: this.changes });
@@ -63,15 +69,17 @@ function updateStockDb(id, nombre, nuevoStock) {
   });
 }
 
-function adjustStockDb(id, nombre, delta) {
+function adjustStockDb(id, nombre, delta, es_variante = false) {
   return new Promise((resolve, reject) => {
     let selectQuery = '';
     let selectParams = [];
+    const tabla = es_variante ? 'producto_variantes' : 'productos';
+
     if (id) {
-      selectQuery = `SELECT id, stock, nombre FROM productos WHERE id = ?`;
+      selectQuery = `SELECT id, stock, nombre FROM ${tabla} WHERE id = ?`;
       selectParams = [id];
     } else if (nombre) {
-      selectQuery = `SELECT id, stock, nombre FROM productos WHERE nombre ILIKE ? LIMIT 1`;
+      selectQuery = `SELECT id, stock, nombre FROM ${tabla} WHERE nombre ILIKE ? LIMIT 1`;
       selectParams = [`%${nombre}%`];
     } else {
       return reject(new Error('Se requiere id o nombre'));
@@ -79,15 +87,15 @@ function adjustStockDb(id, nombre, delta) {
 
     db.get(selectQuery, selectParams, (err, row) => {
       if (err) return reject(err);
-      if (!row) return resolve({ changes: 0, error: 'Producto no encontrado' });
+      if (!row) return resolve({ changes: 0, error: 'Producto o variante no encontrado' });
       
       const nuevoStock = Math.max(0, row.stock + (parseInt(delta) || 0));
       db.run(
-        `UPDATE productos SET stock = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        `UPDATE ${tabla} SET stock = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
         [nuevoStock, row.id],
         function(err) {
           if (err) reject(err);
-          else resolve({ changes: this.changes, id: row.id, nuevoStock, nombre: row.nombre });
+          else resolve({ changes: this.changes, id: row.id, nuevoStock, nombre: row.nombre, es_variante });
         }
       );
     });
@@ -472,18 +480,18 @@ class WhatsAppBot {
       return { inventario: data };
     }
     if (name === 'actualizarStock') {
-      const res = await updateStockDb(args.id, args.nombre, args.nuevoStock);
+      const res = await updateStockDb(args.id, args.nombre, args.nuevoStock, args.es_variante);
       if (res.changes > 0) {
-        this.io.to('admin').emit('producto_actualizado', { id: args.id, stock: Math.max(0, parseInt(args.nuevoStock)) });
+        this.io.to('admin').emit('producto_actualizado', { id: args.id, stock: Math.max(0, parseInt(args.nuevoStock)), es_variante: args.es_variante });
       }
-      return { success: res.changes > 0, id: args.id, nuevoStock: args.nuevoStock };
+      return { success: true, cambios: res.changes, notas: 'Se avisó al dashboard por web sockets' };
     }
     if (name === 'ajustarStock') {
-      const res = await adjustStockDb(args.id, args.nombre, args.cantidad);
+      const res = await adjustStockDb(args.id, args.nombre, args.cantidad, args.es_variante);
       if (res.changes > 0) {
-        this.io.to('admin').emit('producto_actualizado', { id: res.id, stock: res.nuevoStock });
+        this.io.to('admin').emit('producto_actualizado', { id: res.id, stock: res.nuevoStock, es_variante: res.es_variante });
       }
-      return { success: res.changes > 0, id: res.id, nuevoStock: res.nuevoStock, nombre: res.nombre, error: res.error };
+      return { success: true, ...res };
     }
     // NUEVAS FUNCIONES PARA IA ADMIN
     if (name === 'crearProducto') {
@@ -772,26 +780,28 @@ class WhatsAppBot {
           },
           {
             name: 'actualizarStock',
-            description: 'Actualiza el stock exacto de un producto por ID o Nombre.',
+            description: 'Actualiza el stock exacto de un producto o variante por ID o Nombre.',
             parameters: {
               type: SchemaType.OBJECT,
               properties: {
-                id: { type: SchemaType.INTEGER, description: 'ID del producto (opcional si se da el nombre)' },
-                nombre: { type: SchemaType.STRING, description: 'Nombre del producto (opcional si se da el ID)' },
-                nuevoStock: { type: SchemaType.INTEGER, description: 'Nuevo stock exacto' }
+                id: { type: SchemaType.INTEGER, description: 'ID del producto o variante (opcional si se da el nombre)' },
+                nombre: { type: SchemaType.STRING, description: 'Nombre del producto o variante (opcional si se da el ID)' },
+                nuevoStock: { type: SchemaType.INTEGER, description: 'Nuevo stock exacto' },
+                es_variante: { type: SchemaType.BOOLEAN, description: 'Indica si el id/nombre pertenece a una variante en vez de un producto principal' }
               },
               required: ['nuevoStock']
             }
           },
           {
             name: 'ajustarStock',
-            description: "Suma o resta stock a un producto del menú por ID o Nombre.",
+            description: "Suma o resta stock a un producto o variante por ID o Nombre.",
             parameters: {
               type: SchemaType.OBJECT,
               properties: {
-                id: { type: SchemaType.INTEGER, description: 'ID del producto (opcional si se da el nombre)' },
-                nombre: { type: SchemaType.STRING, description: 'Nombre del producto (opcional si se da el ID)' },
-                cantidad: { type: SchemaType.INTEGER, description: 'Cantidad a sumar (+) o restar (-)' }
+                id: { type: SchemaType.INTEGER, description: 'ID del producto o variante (opcional si se da el nombre)' },
+                nombre: { type: SchemaType.STRING, description: 'Nombre del producto o variante (opcional si se da el ID)' },
+                cantidad: { type: SchemaType.INTEGER, description: 'Cantidad a sumar (+) o restar (-)' },
+                es_variante: { type: SchemaType.BOOLEAN, description: 'Indica si el id/nombre pertenece a una variante en vez de un producto principal' }
               },
               required: ['cantidad']
             }
@@ -906,7 +916,7 @@ class WhatsAppBot {
       systemInstruction =
         'Eres el Gerente Asistente IA de Puro Sabor.\n' +
         'Ayudas al administrador a manejar el negocio. Tus capacidades son:\n' +
-        '1. GESTION DE INVENTARIOS: Puedes consultar y editar tanto productos del MENU, como INSUMOS internos (vasos, servilletas, etc).\n' +
+        '1. GESTION DE INVENTARIOS: Puedes consultar y editar productos del MENU e INSUMOS. Los productos pueden tener variantes (ej. sabores). El inventario devuelto incluirá las variantes si existen.\n' +
         '2. GESTION DE PRODUCTOS: Tienes acceso a las herramientas crearProducto y crearInsumo. SI TE PIDEN AGREGAR ALGO QUE NO EXISTE, USA ESTAS HERRAMIENTAS. NUNCA digas que no puedes crear productos.\n' +
         '3. CAJA Y FINANZAS: Puedes registrar gastos (compras, salarios) y consultar las ventas de hoy.\n' +
         '4. VISION E IMAGENES: Tienes visión computacional. Si el administrador te envía una FOTO (ej. de una factura, lista de compras o recibo), analízala, identifica los insumos y usa crearInsumo (si no existen) o actualizarInsumo (si existen). Extrae los precios y registrarGasto.\n' +

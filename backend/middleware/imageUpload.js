@@ -87,85 +87,62 @@ const handleMulterError = (err, req, res, next) => {
  * Debe ejecutarse DESPUÉS del middleware de multer
  */
 const optimizeImage = async (req, res, next) => {
-  // Si no hay archivo, continuar
-  if (!req.file) {
+  // Manejar tanto req.file como req.files
+  let files = [];
+  if (req.files && req.files.length > 0) files = req.files;
+  else if (req.file) files = [req.file];
+
+  if (files.length === 0) {
     return next();
   }
 
-  try {
-    const inputPath = req.file.path;
-    const filename = `${Date.now()}.webp`;
-    const outputPath = path.join(uploadsDir, filename);
+  req.optimizedImages = {};
 
-    logger.info(`Optimizing image: ${req.file.originalname}`);
-
-    // Usar Sharp para optimizar
-    const stats = await sharp(inputPath)
-      .resize(800, 600, {
-        fit: 'cover',
-        position: 'center',
-        withoutEnlargement: true
-      })
-      .webp({
-        quality: 80, // Balance entre calidad y tamaño
-        alphaQuality: 80
-      })
-      .toFile(outputPath);
-
-    // Eliminar archivo temporal
-    fs.unlinkSync(inputPath);
-
-    // Calcular reducción de tamaño
-    const originalSize = req.file.size;
-    const newSize = stats.size;
-    const reduction = Math.round(((originalSize - newSize) / originalSize) * 100);
-
-    logger.info(
-      `Image optimized: ${req.file.originalname} → ${filename} ` +
-      `(${originalSize} → ${newSize} bytes, -${reduction}%)`
-    );
-
-    // Guardar información en el request para usar en la ruta
-    req.optimizedImage = {
-      url: `/uploads/${filename}`,
-      filename,
-      size: newSize,
-      originalSize,
-      reduction
-    };
-
-    next();
-  } catch (error) {
-    logger.error(`Error optimizing image (sharp fallback): ${error.message}`);
-
-    // Si sharp falla (binarios nativos incompatibles en Hostinger, etc.),
-    // mover el archivo original sin optimizar para no bloquear la subida
+  for (const file of files) {
     try {
-      const ext = path.extname(req.file.originalname).toLowerCase() || '.jpg';
-      const fallbackFilename = `${Date.now()}-orig${ext}`;
-      const fallbackPath = path.join(uploadsDir, fallbackFilename);
-      fs.renameSync(req.file.path, fallbackPath);
+      const inputPath = file.path;
+      const filename = `${Date.now()}-${Math.floor(Math.random()*1000)}.webp`;
+      const outputPath = path.join(uploadsDir, filename);
 
-      req.optimizedImage = {
-        url: `/uploads/${fallbackFilename}`,
-        filename: fallbackFilename,
-        size: req.file.size,
-        originalSize: req.file.size,
-        reduction: 0
-      };
+      logger.info(`Optimizing image: ${file.originalname}`);
 
-      logger.info(`Image uploaded without optimization: ${fallbackFilename}`);
-      next();
-    } catch (fallbackError) {
-      // Si incluso mover el archivo falla, limpiar y propagar
-      if (req.file && fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
+      // Usar Sharp para optimizar
+      const stats = await sharp(inputPath)
+        .resize(800, 600, {
+          fit: 'cover',
+          position: 'center',
+          withoutEnlargement: true
+        })
+        .webp({
+          quality: 80, // Balance entre calidad y tamaño
+          alphaQuality: 80
+        })
+        .toFile(outputPath);
+
+      // Eliminar archivo temporal
+      fs.unlinkSync(inputPath);
+
+      req.optimizedImages[file.fieldname] = `/uploads/${filename}`;
+    } catch (error) {
+      logger.error(`Error optimizing image (sharp fallback): ${error.message}`);
+
+      // Si sharp falla, fallback
+      try {
+        const ext = path.extname(file.originalname).toLowerCase() || '.jpg';
+        const fallbackFilename = `${Date.now()}-orig-${Math.floor(Math.random()*1000)}${ext}`;
+        const fallbackPath = path.join(uploadsDir, fallbackFilename);
+        fs.renameSync(file.path, fallbackPath);
+
+        req.optimizedImages[file.fieldname] = `/uploads/${fallbackFilename}`;
+        logger.info(`Image uploaded without optimization: ${fallbackFilename}`);
+      } catch (fallbackError) {
+        if (file && fs.existsSync(file.path)) {
+          fs.unlinkSync(file.path);
+        }
       }
-      const customError = new Error(`Error al subir imagen: ${error.message}`);
-      customError.statusCode = 500;
-      next(customError);
     }
   }
+  next();
 };
 
 /**
@@ -173,12 +150,12 @@ const optimizeImage = async (req, res, next) => {
  * (por si el usuario pasa una URL en lugar de subir archivo)
  */
 const handleImageUpload = (req, res, next) => {
-  if (req.optimizedImage) {
-    // Imagen subida y optimizada
-    req.body.imagen_url = req.optimizedImage.url;
-  } else if (req.body.imagen_url) {
-    // URL proporcionada manualmente - usar como está
-    // (asumiendo que ya está validada)
+  if (req.optimizedImages) {
+    if (req.optimizedImages['imagen']) {
+      req.body.imagen_url = req.optimizedImages['imagen'];
+    }
+    // Also save the map for routes to extract variant images
+    req.body.optimizedImagesMap = req.optimizedImages;
   }
   next();
 };

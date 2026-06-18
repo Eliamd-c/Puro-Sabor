@@ -241,6 +241,19 @@ document.addEventListener('DOMContentLoaded', () => {
       prodImageUrlExistente.value = producto.imagen_url;
       
       imageUploadPreview.innerHTML = `<img src="${producto.imagen_url}" onerror="this.src='/assets/images/default-food.jpg'">`;
+
+      // Variantes
+      if (producto.tiene_variantes) {
+        document.getElementById('prod-has-variants').checked = true;
+        document.getElementById('stock-group').style.display = 'none';
+        document.getElementById('variants-container').style.display = 'block';
+        renderVariants(producto.variantes || []);
+      } else {
+        document.getElementById('prod-has-variants').checked = false;
+        document.getElementById('stock-group').style.display = 'block';
+        document.getElementById('variants-container').style.display = 'none';
+        renderVariants([]);
+      }
     } else {
       // Crear
       modalFormTitle.textContent = 'Añadir Nuevo Producto';
@@ -248,6 +261,11 @@ document.addEventListener('DOMContentLoaded', () => {
       productIdField.value = '';
       prodImageUrlExistente.value = '';
       imageUploadPreview.innerHTML = `<span style="font-size: 24px; color: var(--text-muted);">🍽️</span>`;
+      
+      document.getElementById('prod-has-variants').checked = false;
+      document.getElementById('stock-group').style.display = 'block';
+      document.getElementById('variants-container').style.display = 'none';
+      renderVariants([]);
     }
     
     productModal.classList.add('open');
@@ -300,6 +318,53 @@ document.addEventListener('DOMContentLoaded', () => {
     
     btnCancelDelete.addEventListener('click', cerrarModalEliminar);
 
+    // Variantes UI Events
+    const hasVariantsCheckbox = document.getElementById('prod-has-variants');
+    const stockGroup = document.getElementById('stock-group');
+    const variantsContainer = document.getElementById('variants-container');
+    const btnAddVariant = document.getElementById('btn-add-variant');
+    const variantsList = document.getElementById('variants-list');
+
+    hasVariantsCheckbox.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        stockGroup.style.display = 'none';
+        variantsContainer.style.display = 'block';
+        if (variantsList.children.length === 0) {
+          addVariantRow();
+        }
+      } else {
+        stockGroup.style.display = 'block';
+        variantsContainer.style.display = 'none';
+      }
+    });
+
+    btnAddVariant.addEventListener('click', () => {
+      addVariantRow();
+    });
+
+    // Delegación de eventos para eliminar variantes y preview de imágenes
+    variantsList.addEventListener('click', (e) => {
+      if (e.target.closest('.btn-remove-variant')) {
+        const row = e.target.closest('.variant-row');
+        row.remove();
+      }
+    });
+
+    variantsList.addEventListener('change', (e) => {
+      if (e.target.classList.contains('variant-image-input')) {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            const previewId = e.target.getAttribute('data-preview-id');
+            const previewImg = document.getElementById(previewId);
+            if(previewImg) previewImg.src = event.target.result;
+          };
+          reader.readAsDataURL(file);
+        }
+      }
+    });
+
     // Preview de subida de imagen localmente
     prodImageFile.addEventListener('change', (e) => {
       const file = e.target.files[0];
@@ -326,6 +391,35 @@ document.addEventListener('DOMContentLoaded', () => {
       formData.append('disponible', prodAvailable.checked ? 1 : 0);
       formData.append('descripcion', prodDesc.value.trim());
       
+      const hasVariants = document.getElementById('prod-has-variants').checked;
+      formData.append('tiene_variantes', hasVariants ? 1 : 0);
+      
+      let variantsData = [];
+      if (hasVariants) {
+        const variantRows = document.querySelectorAll('.variant-row');
+        variantRows.forEach((row, index) => {
+          const nameInput = row.querySelector('.variant-name');
+          const stockInput = row.querySelector('.variant-stock');
+          const imageInput = row.querySelector('.variant-image-input');
+          const existingUrlInput = row.querySelector('.variant-image-url-existente');
+          
+          let variant = {
+            nombre: nameInput.value.trim(),
+            stock: parseInt(stockInput.value) || 0,
+            imagen_url: existingUrlInput ? existingUrlInput.value : null
+          };
+
+          if (imageInput.files[0]) {
+            formData.append(`variante_img_${index}`, imageInput.files[0]);
+          } else if (existingUrlInput && existingUrlInput.value) {
+             formData.append(`variante_img_url_${index}`, existingUrlInput.value);
+          }
+
+          variantsData.push(variant);
+        });
+        formData.append('variantes_json', JSON.stringify(variantsData));
+      }
+
       if (prodImageFile.files[0]) {
         formData.append('imagen', prodImageFile.files[0]);
       } else if (prodImageUrlExistente.value) {
@@ -467,6 +561,10 @@ document.addEventListener('DOMContentLoaded', () => {
           formData.append('disponible', dispVal ? 1 : 0);
           formData.append('activo', prod.activo ? 1 : 0);
           formData.append('imagen_url_existente', prod.imagen_url);
+          formData.append('tiene_variantes', prod.tiene_variantes ? 1 : 0);
+          if (prod.tiene_variantes && prod.variantes) {
+            formData.append('variantes_json', JSON.stringify(prod.variantes));
+          }
 
           const response = await fetch(`/api/productos/admin/${id}`, {
             method: 'PUT',
@@ -512,6 +610,10 @@ document.addEventListener('DOMContentLoaded', () => {
           formData.append('disponible', prod.disponible ? 1 : 0);
           formData.append('activo', activeVal ? 1 : 0);
           formData.append('imagen_url_existente', prod.imagen_url);
+          formData.append('tiene_variantes', prod.tiene_variantes ? 1 : 0);
+          if (prod.tiene_variantes && prod.variantes) {
+            formData.append('variantes_json', JSON.stringify(prod.variantes));
+          }
 
           const response = await fetch(`/api/productos/admin/${id}`, {
             method: 'PUT',
@@ -562,6 +664,47 @@ document.addEventListener('DOMContentLoaded', () => {
     localStorage.removeItem('puro_sabor_admin_token');
     localStorage.removeItem('puro_sabor_admin_user');
     window.location.href = '/admin/index.html';
+  }
+
+  // --- FUNCIONES PARA VARIANTES ---
+  function renderVariants(variants) {
+    const variantsList = document.getElementById('variants-list');
+    variantsList.innerHTML = '';
+    
+    if (variants && variants.length > 0) {
+      variants.forEach(variant => {
+        addVariantRow(variant);
+      });
+    }
+  }
+
+  function addVariantRow(variant = { nombre: '', stock: 0, imagen_url: '' }) {
+    const variantsList = document.getElementById('variants-list');
+    const index = variantsList.children.length;
+    const previewId = `variant-preview-${Date.now()}-${index}`;
+    
+    const row = document.createElement('div');
+    row.className = 'variant-row';
+    row.style.cssText = 'display: flex; gap: 10px; align-items: center; background: var(--bg-card); padding: 10px; border-radius: 8px; border: 1px solid var(--border-color);';
+    
+    row.innerHTML = `
+      <div style="flex: 2;">
+        <input type="text" class="form-control form-control-no-icon variant-name" placeholder="Nombre (ej. Uva)" value="${variant.nombre}" required>
+      </div>
+      <div style="flex: 1;">
+        <input type="number" class="form-control form-control-no-icon variant-stock" placeholder="Stock" value="${variant.stock}" min="0">
+      </div>
+      <div style="flex: 2; display: flex; align-items: center; gap: 10px;">
+        <img id="${previewId}" src="${variant.imagen_url || ''}" style="width: 40px; height: 40px; object-fit: cover; border-radius: 4px; display: ${variant.imagen_url ? 'block' : 'none'};" onerror="this.src='/assets/images/default-food.jpg'">
+        <input type="hidden" class="variant-image-url-existente" value="${variant.imagen_url || ''}">
+        <input type="file" class="variant-image-input" accept="image/*" data-preview-id="${previewId}" style="width: 110px; font-size: 11px;">
+      </div>
+      <div>
+        <button type="button" class="btn-icon btn-remove-variant" title="Eliminar Variante" style="color: var(--danger); background: none; border: none; font-size: 18px; cursor: pointer;">&times;</button>
+      </div>
+    `;
+    
+    variantsList.appendChild(row);
   }
 
   // --- EJECUCIÓN INICIAL ---
