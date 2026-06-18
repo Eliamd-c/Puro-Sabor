@@ -144,4 +144,18 @@ router.delete('/admin/:id', verificarJWT, async (req, res, next) => {
   }
 });
 
+// PATCH /api/productos/admin/:id/stock
+router.patch('/admin/:id/stock', verificarJWT, async (req, res, next) => {
+  try {
+    const { stock } = req.body;
+    if (stock === undefined) {
+      return res.status(400).json({ success: false, message: 'Se requiere el campo stock' });
+    }
+    const updatedProduct = await productService.updateStock(req.params.id, stock);
+    res.json({ success: true, data: updatedProduct });
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;

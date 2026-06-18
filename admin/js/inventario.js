@@ -138,7 +138,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     listaProductos.forEach(prod => {
       const tr = document.createElement('tr');
-      tr.className = 'animate-fade-in-up';
       
       // Determinar clase para píldora de stock
       let stockClass = 'success';

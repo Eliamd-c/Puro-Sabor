@@ -141,6 +141,15 @@ class ProductService {
     cacheService.del(CACHE_KEY); // Invalidar caché
     return true;
   }
+  async updateStock(id, stock) {
+    const stockLimpio = Math.max(0, parseInt(stock) || 0);
+    await dbAsync.run(
+      `UPDATE productos SET stock = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      [stockLimpio, id]
+    );
+    cacheService.del(CACHE_KEY);
+    return await dbAsync.get('SELECT * FROM productos WHERE id = ?', [id]);
+  }
 }
 
 module.exports = new ProductService();
