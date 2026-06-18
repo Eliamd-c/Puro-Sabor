@@ -591,8 +591,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         varDisponibles.forEach((v, idx) => {
           const activeClass = idx === 0 ? 'active' : '';
-          // Hereda el precio del producto padre
-          const precioVar = prodGrouped.precio; 
+          // Toma el precio de la variante (antiguos) o hereda del padre (nuevos)
+          const precioVar = v.precio !== undefined ? v.precio : prodGrouped.precio; 
           
           sizeHtml += `
             <button class="size-option-btn ${activeClass}" data-id="${v.id}" data-price="${precioVar}" data-disponible="1" data-name="${v.nombre}">
@@ -610,7 +610,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (varDisponibles && varDisponibles.length > 0) {
         const seleccionada = varDisponibles[0];
-        actualizarPrecioModal(seleccionada.id, prodGrouped.precio);
+        const precioSeleccionada = seleccionada.precio !== undefined ? seleccionada.precio : prodGrouped.precio;
+        actualizarPrecioModal(seleccionada.id, precioSeleccionada);
 
         document.querySelectorAll('.size-option-btn').forEach(btn => {
           btn.addEventListener('click', (e) => {
