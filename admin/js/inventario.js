@@ -113,7 +113,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (botMensajeAusenciaInput) botMensajeAusenciaInput.value = config.bot_mensaje_ausencia || '';
         
         // Actualizar el estado visual del QR / Conexión
-        actualizarEstadoWhatsApp(config.bot_status, config.bot_qr);
+        if (typeof updateAdminBotUI === 'function') {
+          updateAdminBotUI(config.bot_status, config.bot_qr);
+        }
       }
     } catch (error) {
       console.error('Error cargando configuración de IA:', error);
