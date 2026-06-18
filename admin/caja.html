@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Puro Sabor | Panel Administrativo</title>
+  
+  <!-- CSS Stylesheets -->
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/animations.css">
+  <link rel="stylesheet" href="/admin/css/admin.css">
+</head>
+<body>
+
+  <div class="dashboard-wrapper">
+    
+    <!-- 🎛️ SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <span class="sidebar-logo">🔥</span>
+        <h2>Puro Sabor</h2>
+      </div>
+      
+      <div class="sidebar-user">
+        <p class="user-info-role">ADMINISTRADOR</p>
+        <p class="user-info-name" id="admin-display-name">Admin User</p>
+      </div>
+
+      <nav class="sidebar-menu">
+        <a href="/admin/dashboard.html" class="menu-item active">
+          <span>📦</span> Productos
+        </a>
+        <a href="/admin/inventario.html" class="menu-item">
+          <span>📈</span> Inventario / Asistente IA
+        </a>
+        <a href="/admin/insumos.html" class="menu-item">
+          <span>🧻</span> Insumos Internos
+        </a>
+        <a href="/admin/caja.html" class="menu-item">
+          <span>💰</span> Caja del Día
+        </a>
+        <a href="/admin/mesas.html" class="menu-item">
+          <span>🪑</span> Mesas y Pedidos
+        </a>
+        <a href="/admin/chatbots.html" class="menu-item">
+          <span>🤖</span> Chatbots IA
+        </a>
+        <a href="/" class="menu-item" target="_blank">
+          <span>🍽️</span> Ver Menú Público
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button class="btn-logout" id="btn-logout">Cerrar Sesión</button>
+      </div>
+    </aside>
+
+    <!-- 📊 CONTENIDO PRINCIPAL -->
+    <main class="main-content">
+      
+      <!-- Encabezado -->
+      <div class="dashboard-header animate-fade-in-up">
+        <div class="dashboard-title">
+          <h2>Caja del Día y Finanzas</h2>
+          <p>Controla los ingresos por ventas y los gastos de insumos del día.</p>
+        </div>
+        <button class="btn-primary" id="btn-open-add-registro">
+          <span>➕ Registrar Gasto/Ingreso Manual</span>
+        </button>
+      </div>
+
+      <!-- Grid de Indicadores KPI -->
+      <section class="kpi-grid animate-fade-in-up" style="animation-delay: 0.1s;">
+        <div class="kpi-card" style="border-left: 4px solid var(--success);">
+          <div>
+            <p class="kpi-info-label">Ingresos de Hoy</p>
+            <h3 class="kpi-info-value" id="kpi-ingresos">$0</h3>
+          </div>
+          <span class="kpi-icon">📈</span>
+        </div>
+
+        <div class="kpi-card" style="border-left: 4px solid var(--danger);">
+          <div>
+            <p class="kpi-info-label">Gastos de Hoy</p>
+            <h3 class="kpi-info-value" id="kpi-gastos" style="color: var(--danger);">$0</h3>
+          </div>
+          <span class="kpi-icon" style="opacity: 0.8;">📉</span>
+        </div>
+
+        <div class="kpi-card" style="border-left: 4px solid var(--primary);">
+          <div>
+            <p class="kpi-info-label">Balance Neto</p>
+            <h3 class="kpi-info-value" id="kpi-balance" style="color: var(--primary);">$0</h3>
+          </div>
+          <span class="kpi-icon" style="opacity: 0.8;">💰</span>
+        </div>
+      </section>
+
+      <!-- Tabla de Registros -->
+      <section class="table-container animate-fade-in-up" style="animation-delay: 0.2s;">
+        <div class="table-header-bar">
+          <h3>Últimos Registros</h3>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Tipo</th>
+              <th>Descripción</th>
+              <th>Categoría</th>
+              <th>Monto</th>
+              <th>Fecha</th>
+              <th>Creado Por</th>
+            </tr>
+          </thead>
+          <tbody id="admin-caja-table-body">
+            <tr><td colspan="7" style="text-align: center; padding: 40px;">Cargando registros...</td></tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+  </div>
+
+  <!-- MODAL DIÁLOGO: CREAR REGISTRO MANUAL -->
+  <div class="admin-modal-overlay" id="registro-modal">
+    <div class="admin-modal-content">
+      <div class="admin-modal-header">
+        <h3>Añadir Registro Manual</h3>
+        <button class="btn-close-cart" id="btn-close-registro-modal">&times;</button>
+      </div>
+      <form id="registro-form">
+        <div class="admin-modal-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="reg-tipo">Tipo *</label>
+              <select id="reg-tipo" class="table-select form-control form-control-no-icon" style="height: 48px;" required>
+                <option value="gasto">Gasto (Salida)</option>
+                <option value="ingreso">Ingreso (Entrada)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="reg-monto">Monto ($) *</label>
+              <input type="number" id="reg-monto" class="form-control form-control-no-icon" placeholder="Ej. 45000" min="0" required>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="reg-desc">Descripción *</label>
+            <input type="text" id="reg-desc" class="form-control form-control-no-icon" placeholder="Ej. Pago de proveedor de vasos" required>
+          </div>
+
+          <div class="form-group">
+            <label for="reg-category">Categoría</label>
+            <input type="text" id="reg-category" class="form-control form-control-no-icon" placeholder="Ej. Insumos, Servicios, General" value="General">
+          </div>
+        </div>
+        <div class="admin-modal-footer">
+          <button type="button" class="btn-secondary" id="btn-cancel-registro-modal">Cancelar</button>
+          <button type="submit" class="btn-primary" id="btn-save-registro">Guardar Registro</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/admin/js/caja.js?v=1"></script>
+</body>
+</html>

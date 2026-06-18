@@ -3,6 +3,7 @@ const pino = require('pino');
 const qrcode = require('qrcode');
 const { GoogleGenerativeAI, SchemaType } = require('@google/generative-ai');
 const db = require('../config/database');
+const dbAsync = require('../config/database-promise');
 const { Pool } = require('pg');
 require('dotenv').config({ path: require('path').join(__dirname, '..', '..', '.env') });
 
@@ -465,6 +466,158 @@ class WhatsAppBot {
       }
       return { success: res.changes > 0, id: args.id, nuevoStock: res.nuevoStock, nombre: res.nombre, error: res.error };
     }
+    // NUEVAS FUNCIONES PARA IA ADMIN
+    if (name === 'crearProducto') {
+      try {
+        const cat = await dbAsync.get('SELECT id FROM categorias WHERE nombre LIKE ? LIMIT 1', [`%${args.categoria}%`]);
+        const catId = cat ? cat.id : 1;
+        const res = await dbAsync.run(
+          `INSERT INTO productos (nombre, precio, descripcion, categoria_id, stock, activo) VALUES (?, ?, ?, ?, ?, 1)`,
+          [args.nombre, args.precio, args.descripcion || '', catId, args.stock || 0]
+        );
+        return { success: true, message: `Producto creado con id ${res.lastID}` };
+      } catch (err) { return { error: err.message }; }
+    }
+    if (name === 'editarProducto') {
+      try {
+        let updates = [];
+        let params = [];
+        if (args.precio) { updates.push('precio = ?'); params.push(args.precio); }
+        if (args.stock !== undefined) { updates.push('stock = ?'); params.push(args.stock); }
+        if (args.activo !== undefined) { updates.push('activo = ?'); params.push(args.activo); }
+        if (updates.length === 0) return { error: 'Nada que actualizar' };
+        params.push(args.id);
+        const res = await dbAsync.run(`UPDATE productos SET ${updates.join(', ')} WHERE id = ?`, params);
+        return { success: true, changes: res.changes };
+      } catch (err) { return { error: err.message }; }
+    }
+    if (name === 'obtenerVentasHoy') {
+      try {
+        const query = `
+          SELECT SUM(CASE WHEN tipo = 'ingreso' THEN monto ELSE 0 END) as ingresos,
+                 SUM(CASE WHEN tipo = 'gasto' THEN monto ELSE 0 END) as gastos
+          FROM caja_registros WHERE DATE(fecha) = CURRENT_DATE`;
+        const res = await dbAsync.get(query);
+        const ingresos = parseFloat(res?.ingresos || 0);
+        const gastos = parseFloat(res?.gastos || 0);
+        return { hoy: { ingresos, gastos, balance: ingresos - gastos } };
+      } catch (err) { return { error: err.message }; }
+    }
+    if (name === 'registrarGasto') {
+      try {
+        const res = await dbAsync.run(
+          `INSERT INTO caja_registros (tipo, descripcion, monto, categoria, creado_por) VALUES ('gasto', ?, ?, ?, 'whatsapp_bot')`,
+          [args.descripcion, args.monto, args.categoria || 'General']
+        );
+        return { success: true, message: 'Gasto registrado', id: res.lastID };
+      } catch (err) { return { error: err.message }; }
+    }
+    if (name === 'obtenerInsumos') {
+      try {
+        const rows = await dbAsync.all('SELECT * FROM insumos ORDER BY categoria, nombre');
+        return { insumos: rows };
+      } catch (err) { return { error: err.message }; }
+    }
+    if (name === 'actualizarInsumo') {
+      try {
+        let query = '';
+        let params = [];
+        if (args.id) {
+          query = 'UPDATE insumos SET cantidad = ? WHERE id = ?';
+          params = [args.nueva_cantidad, args.id];
+        } else if (args.nombre) {
+          query = 'UPDATE insumos SET cantidad = ? WHERE nombre ILIKE ?';
+          params = [args.nueva_cantidad, `%${args.nombre}%`];
+        } else {
+          return { error: 'Se requiere id o nombre del insumo' };
+        }
+        const res = await dbAsync.run(query, params);
+        return { success: true, changes: res.changes };
+      } catch (err) { return { error: err.message }; }
+    }
+    if (name === 'crearInsumo') {
+      try {
+        const res = await dbAsync.run(
+          `INSERT INTO insumos (nombre, categoria, cantidad, unidad, stock_minimo) VALUES (?, ?, ?, ?, ?)`,
+          [args.nombre, args.categoria || 'General', args.cantidad || 0, args.unidad || 'unidades', args.stock_minimo || 0]
+        );
+        return { success: true, id: res.lastID };
+      } catch (err) { return { error: err.message }; }
+    }
+    if (name === 'registrarCompraInsumo') {
+      try {
+        const { insumo_id, cantidad_comprada, costo_total } = args;
+        const costo_unitario = costo_total / cantidad_comprada;
+        
+        // 1. Obtener insumo actual
+        const insumo = await dbAsync.get('SELECT cantidad, costo_promedio FROM insumos WHERE id = ?', [insumo_id]);
+        if (!insumo) return { error: `No existe el insumo con ID ${insumo_id}` };
+        
+        // 2. Calcular nuevo costo promedio ponderado
+        const cant_actual = parseFloat(insumo.cantidad || 0);
+        const costo_prom_actual = parseFloat(insumo.costo_promedio || 0);
+        const valor_inventario_actual = cant_actual * costo_prom_actual;
+        
+        const nueva_cant = cant_actual + cantidad_comprada;
+        const nuevo_costo_promedio = nueva_cant > 0 ? (valor_inventario_actual + costo_total) / nueva_cant : 0;
+        
+        // 3. Actualizar insumo
+        await dbAsync.run(
+          'UPDATE insumos SET cantidad = ?, costo_promedio = ? WHERE id = ?',
+          [nueva_cant, nuevo_costo_promedio, insumo_id]
+        );
+        
+        // 4. Registrar en historial de compras
+        await dbAsync.run(
+          'INSERT INTO compras_insumos (insumo_id, cantidad, costo_total, costo_unitario) VALUES (?, ?, ?, ?)',
+          [insumo_id, cantidad_comprada, costo_total, costo_unitario]
+        );
+        
+        // 5. Registrar gasto en la caja diaria
+        await dbAsync.run(
+          `INSERT INTO caja_registros (tipo, descripcion, monto, categoria, creado_por) VALUES ('gasto', ?, ?, 'Insumos', 'whatsapp_bot')`,
+          [`Compra insumo #${insumo_id} cant: ${cantidad_comprada}`, costo_total]
+        );
+        
+        return { success: true, nuevo_stock: nueva_cant, nuevo_costo_promedio };
+      } catch (err) { return { error: err.message }; }
+    }
+    
+    if (name === 'costearProducto') {
+      try {
+        const producto = await dbAsync.get('SELECT nombre, precio FROM productos WHERE id = ?', [args.producto_id]);
+        if (!producto) return { error: `Producto no encontrado` };
+        
+        const recetas = await dbAsync.all(
+          `SELECT r.cantidad_usada, i.nombre, i.costo_promedio 
+           FROM recetas r JOIN insumos i ON r.insumo_id = i.id 
+           WHERE r.producto_id = ?`,
+          [args.producto_id]
+        );
+        
+        let costo_materia_prima = 0;
+        recetas.forEach(r => {
+          costo_materia_prima += (r.cantidad_usada * (r.costo_promedio || 0));
+        });
+        
+        // Asumimos el costo fijo operativo de ventas ($3.824 por ejemplo, o lo dejamos como variable)
+        const costo_fijo_estimado = 3824; 
+        const costo_total = costo_materia_prima + costo_fijo_estimado;
+        const ganancia = producto.precio - costo_total;
+        
+        return { 
+          producto: producto.nombre, 
+          precio_venta: producto.precio,
+          desglose: recetas.map(r => `${r.cantidad_usada} de ${r.nombre} a $${r.costo_promedio} c/u`),
+          costo_materia_prima,
+          costo_fijo_estimado,
+          costo_total,
+          ganancia_neta: ganancia,
+          rentabilidad_porcentaje: (ganancia / producto.precio) * 100
+        };
+      } catch (err) { return { error: err.message }; }
+    }
+
     return { error: `Función desconocida: ${name}` };
   }
 
@@ -612,7 +765,7 @@ class WhatsAppBot {
           },
           {
             name: 'ajustarStock',
-            description: "Suma o resta stock a un producto.",
+            description: "Suma o resta stock a un producto del menú.",
             parameters: {
               type: SchemaType.OBJECT,
               properties: {
@@ -621,14 +774,122 @@ class WhatsAppBot {
               },
               required: ['id', 'cantidad']
             }
+          },
+          {
+            name: 'crearProducto',
+            description: 'Añade un nuevo plato/producto al menú del restaurante.',
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                nombre: { type: SchemaType.STRING, description: 'Nombre del producto' },
+                precio: { type: SchemaType.NUMBER, description: 'Precio de venta' },
+                categoria: { type: SchemaType.STRING, description: 'Categoría (Migas, Bebidas, etc)' },
+                descripcion: { type: SchemaType.STRING, description: 'Opcional. Descripción del plato' },
+                stock: { type: SchemaType.INTEGER, description: 'Opcional. Stock inicial' }
+              },
+              required: ['nombre', 'precio', 'categoria']
+            }
+          },
+          {
+            name: 'editarProducto',
+            description: 'Edita precio, stock o disponibilidad de un producto existente.',
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                id: { type: SchemaType.INTEGER, description: 'ID del producto' },
+                precio: { type: SchemaType.NUMBER, description: 'Opcional. Nuevo precio' },
+                stock: { type: SchemaType.INTEGER, description: 'Opcional. Nuevo stock' },
+                activo: { type: SchemaType.INTEGER, description: 'Opcional. 1 para activo, 0 para desactivado' }
+              },
+              required: ['id']
+            }
+          },
+          {
+            name: 'obtenerVentasHoy',
+            description: 'Consulta los ingresos totales, gastos y balance del día actual.',
+            parameters: { type: SchemaType.OBJECT, properties: {}, required: [] }
+          },
+          {
+            name: 'registrarGasto',
+            description: 'Registra un gasto en la caja del día (compras, salarios, etc).',
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                descripcion: { type: SchemaType.STRING, description: 'Qué se compró o pagó' },
+                monto: { type: SchemaType.NUMBER, description: 'Costo total' },
+                categoria: { type: SchemaType.STRING, description: 'Categoría (Ej: Insumos, Servicios)' }
+              },
+              required: ['descripcion', 'monto']
+            }
+          },
+          {
+            name: 'obtenerInsumos',
+            description: 'Obtiene el inventario interno de insumos (vasos, servilletas, etc).',
+            parameters: { type: SchemaType.OBJECT, properties: {}, required: [] }
+          },
+          {
+            name: 'actualizarInsumo',
+            description: 'Actualiza el stock de un insumo interno.',
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                id: { type: SchemaType.INTEGER, description: 'ID del insumo' },
+                nombre: { type: SchemaType.STRING, description: 'Nombre del insumo (si no se sabe el ID)' },
+                nueva_cantidad: { type: SchemaType.NUMBER, description: 'Nueva cantidad total disponible' }
+              },
+              required: ['nueva_cantidad']
+            }
+          },
+          {
+            name: 'crearInsumo',
+            description: 'Registra un nuevo insumo interno en el sistema.',
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                nombre: { type: SchemaType.STRING, description: 'Nombre (Ej: Vasos 7oz)' },
+                categoria: { type: SchemaType.STRING, description: 'Ej: Desechables, Aseo' },
+                cantidad: { type: SchemaType.NUMBER, description: 'Stock inicial' },
+                unidad: { type: SchemaType.STRING, description: 'Ej: unidades, paquetes, kg' },
+                stock_minimo: { type: SchemaType.NUMBER, description: 'Stock de alerta' }
+              },
+              required: ['nombre', 'cantidad']
+            }
+          },
+          {
+            name: 'registrarCompraInsumo',
+            description: 'Registra la compra de un insumo, actualiza el stock y recalcula su costo promedio.',
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                insumo_id: { type: SchemaType.INTEGER, description: 'ID del insumo' },
+                cantidad_comprada: { type: SchemaType.NUMBER, description: 'Cantidad ingresada' },
+                costo_total: { type: SchemaType.NUMBER, description: 'Costo total pagado por esa cantidad' }
+              },
+              required: ['insumo_id', 'cantidad_comprada', 'costo_total']
+            }
+          },
+          {
+            name: 'costearProducto',
+            description: 'Calcula el costo actual de un plato basandose en su receta y los costos promedios.',
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                producto_id: { type: SchemaType.INTEGER, description: 'ID del producto/plato' }
+              },
+              required: ['producto_id']
+            }
           }
         ]
       }];
 
       systemInstruction =
-        'Eres Puro Sabor IA, asistente administrativo.\n' +
-        'Ayudas al administrador a consultar y actualizar inventario.\n' +
-        'REGLA: Confirma nombre y nuevo stock exacto al actualizar.';
+        'Eres el Gerente Asistente IA de Puro Sabor.\n' +
+        'Ayudas al administrador a manejar el negocio. Tus capacidades son:\n' +
+        '1. GESTION DE INVENTARIOS: Puedes consultar y editar tanto productos del MENU, como INSUMOS internos (vasos, servilletas, etc).\n' +
+        '2. GESTION DE PRODUCTOS: Tienes acceso a las herramientas crearProducto y crearInsumo. SI TE PIDEN AGREGAR ALGO QUE NO EXISTE, USA ESTAS HERRAMIENTAS. NUNCA digas que no puedes crear productos.\n' +
+        '3. CAJA Y FINANZAS: Puedes registrar gastos (compras, salarios) y consultar las ventas de hoy.\n' +
+        '4. VISION E IMAGENES: Tienes visión computacional. Si el administrador te envía una FOTO (ej. de una factura, lista de compras o recibo), analízala, identifica los insumos y usa crearInsumo (si no existen) o actualizarInsumo (si existen). Extrae los precios y registrarGasto.\n' +
+        'REGLA: Confirma SIEMPRE con el usuario los montos y cambios antes de ejecutar acciones destructivas o registrar gastos.';
     } else {
       const dominio = await getConfig('dominio_base') || 'https://restaurantepurosabor.com';
       const menuUrl = await getConfig('bot_menu_url') || dominio;
@@ -746,10 +1007,32 @@ class WhatsAppBot {
                !text.includes('mensaje de ausencia');
       });
 
-      const historialGemini = historialFiltrado.map(h => ({
-        role: h.rol === 'user' ? 'user' : 'model',
-        parts: [{ text: h.contenido }]
-      }));
+      // Normalizar historial para Gemini (estrictamente user -> model -> user -> model)
+      let historialGemini = [];
+      let expectedRole = 'user';
+      for (const h of historialFiltrado) {
+        const role = h.rol === 'user' ? 'user' : 'model';
+        if (role === expectedRole) {
+          historialGemini.push({ role, parts: [{ text: h.contenido || ' ' }] });
+          expectedRole = expectedRole === 'user' ? 'model' : 'user';
+        } else {
+          // Si el rol es el mismo que el anterior, concatenar el texto
+          if (historialGemini.length > 0) {
+            historialGemini[historialGemini.length - 1].parts[0].text += '\n' + (h.contenido || ' ');
+          }
+        }
+      }
+      
+      // Gemini exige que el historial (si existe) inicie siempre con 'user'
+      if (historialGemini.length > 0 && historialGemini[0].role === 'model') {
+        historialGemini.shift();
+      }
+      // Gemini exige que el último elemento del historial previo sea 'model' si el siguiente input va a ser 'user'
+      // Pero startChat lo maneja bien siempre y cuando el último del historial no sea del mismo rol que el que sigue
+      if (historialGemini.length > 0 && historialGemini[historialGemini.length - 1].role === 'user') {
+          // Remover el último 'user' o agregar un dummy 'model'
+          historialGemini.push({ role: 'model', parts: [{ text: 'Entendido.' }] });
+      }
 
       const modelConfig = { model: 'gemini-2.5-flash', systemInstruction };
       if (tools && tools.length > 0) modelConfig.tools = tools;

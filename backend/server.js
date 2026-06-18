@@ -289,6 +289,8 @@ const mesasRoutes = require('./routes/mesas');
 const configRoutes = require('./routes/config');
 const inventarioRoutes = require('./routes/inventario');
 const chatbotsRoutes = require('./routes/chatbots');
+const insumosRoutes = require('./routes/insumos');
+const cajaRoutes = require('./routes/caja');
 
 app.use('/api/admin', authRoutes);
 app.use('/api/categorias', categoriasRoutes);
@@ -297,6 +299,8 @@ app.use('/api/mesas', mesasRoutes);
 app.use('/api/config', configRoutes);
 app.use('/api/inventario', inventarioRoutes);
 app.use('/api/chatbots', chatbotsRoutes);
+app.use('/api/insumos', insumosRoutes);
+app.use('/api/caja', cajaRoutes);
 
 // ── Archivos estáticos ─────────────────────────────────────────────────────
 const uploadsDir = path.join(__dirname, '..', 'public', 'uploads');

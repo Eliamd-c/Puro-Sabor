@@ -340,6 +340,60 @@ async function inicializarTablas() {
       )
     `);
 
+    // 17. Tabla Insumos Internos
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS insumos (
+        id SERIAL PRIMARY KEY,
+        nombre VARCHAR(100) NOT NULL,
+        categoria VARCHAR(50),
+        cantidad NUMERIC DEFAULT 0,
+        unidad VARCHAR(20) DEFAULT 'unidades',
+        stock_minimo NUMERIC DEFAULT 0,
+        notas TEXT,
+        costo_promedio NUMERIC DEFAULT 0,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Alter segura para costo_promedio
+    await pool.query(`ALTER TABLE insumos ADD COLUMN IF NOT EXISTS costo_promedio NUMERIC DEFAULT 0`);
+
+    // 18. Tabla Compras de Insumos (Historial)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS compras_insumos (
+        id SERIAL PRIMARY KEY,
+        insumo_id INTEGER REFERENCES insumos(id) ON DELETE CASCADE,
+        cantidad NUMERIC NOT NULL,
+        costo_total NUMERIC NOT NULL,
+        costo_unitario NUMERIC NOT NULL,
+        fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // 19. Tabla Recetas (Escandallos)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS recetas (
+        id SERIAL PRIMARY KEY,
+        producto_id INTEGER REFERENCES productos(id) ON DELETE CASCADE,
+        insumo_id INTEGER REFERENCES insumos(id) ON DELETE CASCADE,
+        cantidad_usada NUMERIC NOT NULL,
+        UNIQUE (producto_id, insumo_id)
+      )
+    `);
+
+    // 20. Tabla Caja (Transacciones Diarias)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS caja_registros (
+        id SERIAL PRIMARY KEY,
+        tipo VARCHAR(20) NOT NULL, -- 'ingreso' o 'gasto'
+        descripcion VARCHAR(255) NOT NULL,
+        monto NUMERIC NOT NULL,
+        categoria VARCHAR(50),
+        creado_por VARCHAR(50) DEFAULT 'sistema',
+        fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // Agregar columna viendo si no existe (migracion segura)
     await pool.query(`ALTER TABLE mesas ADD COLUMN IF NOT EXISTS viendo INTEGER DEFAULT 0`);
 
