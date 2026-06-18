@@ -109,8 +109,10 @@ router.get('/debug/logs', async (req, res) => {
     const fs = require('fs');
     const path = require('path');
     const logsDir = path.join(__dirname, '..', '..', 'logs');
-    // ?file=error lee error.log (solo errores con stack); por defecto combined.log
-    const fileName = req.query.file === 'error' ? 'error.log' : 'combined.log';
+    // ?file=error → error.log | ?file=500 → errores500.log | por defecto combined.log
+    let fileName = 'combined.log';
+    if (req.query.file === 'error') fileName = 'error.log';
+    else if (req.query.file === '500') fileName = 'errores500.log';
     const combinedLogPath = path.join(logsDir, fileName);
 
     let logs = "No log file found.";
