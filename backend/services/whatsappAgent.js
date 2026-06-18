@@ -42,33 +42,52 @@ function getInventarioDb() {
   });
 }
 
-function updateStockDb(id, nuevoStock) {
+function updateStockDb(id, nombre, nuevoStock) {
   return new Promise((resolve, reject) => {
     const stockLimpio = Math.max(0, parseInt(nuevoStock) || 0);
-    db.run(
-      `UPDATE productos SET stock = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-      [stockLimpio, id],
-      function(err) {
-        if (err) reject(err);
-        else resolve({ changes: this.changes });
-      }
-    );
+    let query = '';
+    let params = [];
+    if (id) {
+      query = `UPDATE productos SET stock = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
+      params = [stockLimpio, id];
+    } else if (nombre) {
+      query = `UPDATE productos SET stock = ?, updated_at = CURRENT_TIMESTAMP WHERE nombre ILIKE ?`;
+      params = [stockLimpio, `%${nombre}%`];
+    } else {
+      return reject(new Error('Se requiere id o nombre'));
+    }
+    db.run(query, params, function(err) {
+      if (err) reject(err);
+      else resolve({ changes: this.changes });
+    });
   });
 }
 
-function adjustStockDb(id, delta) {
+function adjustStockDb(id, nombre, delta) {
   return new Promise((resolve, reject) => {
-    db.get(`SELECT stock, nombre FROM productos WHERE id = ?`, [id], (err, row) => {
+    let selectQuery = '';
+    let selectParams = [];
+    if (id) {
+      selectQuery = `SELECT id, stock, nombre FROM productos WHERE id = ?`;
+      selectParams = [id];
+    } else if (nombre) {
+      selectQuery = `SELECT id, stock, nombre FROM productos WHERE nombre ILIKE ? LIMIT 1`;
+      selectParams = [`%${nombre}%`];
+    } else {
+      return reject(new Error('Se requiere id o nombre'));
+    }
+
+    db.get(selectQuery, selectParams, (err, row) => {
       if (err) return reject(err);
       if (!row) return resolve({ changes: 0, error: 'Producto no encontrado' });
       
       const nuevoStock = Math.max(0, row.stock + (parseInt(delta) || 0));
       db.run(
         `UPDATE productos SET stock = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-        [nuevoStock, id],
+        [nuevoStock, row.id],
         function(err) {
           if (err) reject(err);
-          else resolve({ changes: this.changes, nuevoStock, nombre: row.nombre });
+          else resolve({ changes: this.changes, id: row.id, nuevoStock, nombre: row.nombre });
         }
       );
     });
@@ -453,18 +472,18 @@ class WhatsAppBot {
       return { inventario: data };
     }
     if (name === 'actualizarStock') {
-      const res = await updateStockDb(args.id, args.nuevoStock);
+      const res = await updateStockDb(args.id, args.nombre, args.nuevoStock);
       if (res.changes > 0) {
         this.io.to('admin').emit('producto_actualizado', { id: args.id, stock: Math.max(0, parseInt(args.nuevoStock)) });
       }
       return { success: res.changes > 0, id: args.id, nuevoStock: args.nuevoStock };
     }
     if (name === 'ajustarStock') {
-      const res = await adjustStockDb(args.id, args.cantidad);
+      const res = await adjustStockDb(args.id, args.nombre, args.cantidad);
       if (res.changes > 0) {
-        this.io.to('admin').emit('producto_actualizado', { id: args.id, stock: res.nuevoStock });
+        this.io.to('admin').emit('producto_actualizado', { id: res.id, stock: res.nuevoStock });
       }
-      return { success: res.changes > 0, id: args.id, nuevoStock: res.nuevoStock, nombre: res.nombre, error: res.error };
+      return { success: res.changes > 0, id: res.id, nuevoStock: res.nuevoStock, nombre: res.nombre, error: res.error };
     }
     // NUEVAS FUNCIONES PARA IA ADMIN
     if (name === 'crearProducto') {
@@ -753,26 +772,28 @@ class WhatsAppBot {
           },
           {
             name: 'actualizarStock',
-            description: 'Actualiza el stock exacto de un producto por ID.',
+            description: 'Actualiza el stock exacto de un producto por ID o Nombre.',
             parameters: {
               type: SchemaType.OBJECT,
               properties: {
-                id: { type: SchemaType.INTEGER, description: 'ID del producto' },
+                id: { type: SchemaType.INTEGER, description: 'ID del producto (opcional si se da el nombre)' },
+                nombre: { type: SchemaType.STRING, description: 'Nombre del producto (opcional si se da el ID)' },
                 nuevoStock: { type: SchemaType.INTEGER, description: 'Nuevo stock exacto' }
               },
-              required: ['id', 'nuevoStock']
+              required: ['nuevoStock']
             }
           },
           {
             name: 'ajustarStock',
-            description: "Suma o resta stock a un producto del menú.",
+            description: "Suma o resta stock a un producto del menú por ID o Nombre.",
             parameters: {
               type: SchemaType.OBJECT,
               properties: {
-                id: { type: SchemaType.INTEGER, description: 'ID del producto' },
+                id: { type: SchemaType.INTEGER, description: 'ID del producto (opcional si se da el nombre)' },
+                nombre: { type: SchemaType.STRING, description: 'Nombre del producto (opcional si se da el ID)' },
                 cantidad: { type: SchemaType.INTEGER, description: 'Cantidad a sumar (+) o restar (-)' }
               },
-              required: ['id', 'cantidad']
+              required: ['cantidad']
             }
           },
           {
