@@ -30,17 +30,22 @@ document.addEventListener('DOMContentLoaded', () => {
   const inventarioTableBody = document.getElementById('inventario-table-body');
 
   // WhatsApp y Configuración IA
-  const waQrContainer = document.getElementById('wa-qr-container');
-  const btnReconnectWa = document.getElementById('btn-reconnect-wa');
+  const waQrContainer = document.getElementById('qr-admin-container');
+  const btnReconnectWa = document.getElementById('btn-reconnect-admin');
+  const btnLogoutWa = document.getElementById('btn-logout-admin');
+  const waQrImage = document.getElementById('qr-admin-image');
+  const waQrText = document.getElementById('qr-admin-text');
+  const waStatusBadge = document.getElementById('status-admin-badge');
   
-  const formConfigAi = document.getElementById('form-config-ai');
-  const geminiKeyInput = document.getElementById('gemini-key');
-  const btnToggleGeminiKey = document.getElementById('btn-toggle-gemini-key');
-  const whitelistNumbersInput = document.getElementById('whitelist-numbers');
-  const botActiveToggle = document.getElementById('bot-active-toggle');
-  const botHorarioToggle = document.getElementById('bot-horario-toggle');
-  const botMensajeAusenciaInput = document.getElementById('bot-mensaje-ausencia');
-  const configAiAlert = document.getElementById('config-ai-alert');
+  const formConfigAi = null;
+  const geminiKeyInput = null;
+  const btnToggleGeminiKey = null;
+  const whitelistNumbersInput = document.getElementById('input-admin-numbers');
+  const btnSaveNumbers = document.getElementById('btn-save-numbers');
+  const botActiveToggle = null;
+  const botHorarioToggle = null;
+  const botMensajeAusenciaInput = null;
+  const configAiAlert = null;
 
   // --- INICIALIZACIÓN ---
   function init() {
@@ -101,11 +106,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (result.success) {
         const config = result.data;
-        geminiKeyInput.value = config.gemini_api_key || '';
-        whitelistNumbersInput.value = config.whatsapp_whitelist || '';
-        botActiveToggle.checked = config.whatsapp_bot_active;
-        botHorarioToggle.checked = config.bot_horario_activo == '1';
-        botMensajeAusenciaInput.value = config.bot_mensaje_ausencia || '';
+        if (geminiKeyInput) geminiKeyInput.value = config.gemini_api_key || '';
+        if (whitelistNumbersInput) whitelistNumbersInput.value = config.whatsapp_whitelist || '';
+        if (botActiveToggle) botActiveToggle.checked = config.whatsapp_bot_active;
+        if (botHorarioToggle) botHorarioToggle.checked = config.bot_horario_activo == '1';
+        if (botMensajeAusenciaInput) botMensajeAusenciaInput.value = config.bot_mensaje_ausencia || '';
         
         // Actualizar el estado visual del QR / Conexión
         actualizarEstadoWhatsApp(config.bot_status, config.bot_qr);
