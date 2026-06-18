@@ -354,9 +354,6 @@ document.addEventListener('DOMContentLoaded', () => {
     btnLogout: document.getElementById('btn-logout-admin')
   };
 
-  const inputAdminNumbers = document.getElementById('input-admin-numbers');
-  const btnSaveNumbers = document.getElementById('btn-save-numbers');
-
   async function loadAdminBotStatus() {
     try {
       const res = await fetch(`/api/chatbots/admin/status`, { headers: { 'Authorization': `Bearer ${token}` } });
@@ -374,7 +371,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch('/api/config', { headers: { 'Authorization': `Bearer ${token}` } });
       const data = await res.json();
       if (data.success) {
-        if(inputAdminNumbers) inputAdminNumbers.value = data.data.admin_whatsapp_numbers || '';
+        if(whitelistNumbersInput) whitelistNumbersInput.value = data.data.admin_whatsapp_numbers || '';
       }
     } catch (err) {
       console.error('Error loading config:', err);
@@ -387,7 +384,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const res = await fetch('/api/config', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ admin_whatsapp_numbers: inputAdminNumbers.value })
+          body: JSON.stringify({ admin_whatsapp_numbers: whitelistNumbersInput.value })
         });
         const data = await res.json();
         if (data.success) {
