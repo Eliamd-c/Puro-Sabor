@@ -593,10 +593,11 @@ document.addEventListener('DOMContentLoaded', () => {
           const activeClass = idx === 0 ? 'active' : '';
           // Toma el precio de la variante (antiguos) o hereda del padre (nuevos)
           const precioVar = v.precio !== undefined ? v.precio : prodGrouped.precio; 
+          const nombreVar = v.nombre || v.tamano || 'Variante';
           
           sizeHtml += `
-            <button class="size-option-btn ${activeClass}" data-id="${v.id}" data-price="${precioVar}" data-disponible="1" data-name="${v.nombre}">
-              <span>${v.nombre}</span>
+            <button class="size-option-btn ${activeClass}" data-id="${v.id}" data-price="${precioVar}" data-disponible="1" data-name="${nombreVar}">
+              <span>${nombreVar}</span>
               <span class="size-price">$${precioVar.toLocaleString('es-CO', { minimumFractionDigits: 0 })} COP</span>
             </button>
           `;
