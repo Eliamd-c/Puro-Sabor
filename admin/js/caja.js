@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // API Calls
   async function fetchCaja() {
     try {
-      const token = localStorage.getItem('adminToken');
+      const token = localStorage.getItem('puro_sabor_admin_token');
       const [resKpi, resRegistros] = await Promise.all([
         fetch('/api/caja/hoy', { headers: { 'Authorization': `Bearer ${token}` } }),
         fetch('/api/caja/registros', { headers: { 'Authorization': `Bearer ${token}` } })
@@ -85,7 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     try {
-      const token = localStorage.getItem('adminToken');
+      const token = localStorage.getItem('puro_sabor_admin_token');
       const res = await fetch('/api/caja/registro', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },

@@ -12,14 +12,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Handle logout
   document.getElementById('btn-logout')?.addEventListener('click', () => {
-    localStorage.removeItem('adminToken');
+    localStorage.removeItem('puro_sabor_admin_token');
     window.location.href = '/admin/';
   });
 
   // API Calls
   async function fetchInsumos() {
     try {
-      const token = localStorage.getItem('adminToken');
+      const token = localStorage.getItem('puro_sabor_admin_token');
       if (!token) {
         window.location.href = '/admin/';
         return;
@@ -113,7 +113,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     try {
-      const token = localStorage.getItem('adminToken');
+      const token = localStorage.getItem('puro_sabor_admin_token');
       const url = id ? `/api/insumos/${id}` : '/api/insumos';
       const method = id ? 'PUT' : 'POST';
       
@@ -144,7 +144,7 @@ document.addEventListener('DOMContentLoaded', () => {
   window.deleteInsumo = async (id) => {
     if (!confirm('¿Seguro que deseas eliminar este insumo?')) return;
     try {
-      const token = localStorage.getItem('adminToken');
+      const token = localStorage.getItem('puro_sabor_admin_token');
       const res = await fetch(`/api/insumos/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
