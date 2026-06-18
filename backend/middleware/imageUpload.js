@@ -117,18 +117,35 @@ const optimizeImage = async (req, res, next) => {
 
     next();
   } catch (error) {
-    logger.error(`Error optimizing image: ${error.message}`);
+    logger.error(`Error optimizing image (sharp fallback): ${error.message}`);
 
-    // Limpiar archivo temporal si existe
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
+    // Si sharp falla (binarios nativos incompatibles en Hostinger, etc.),
+    // mover el archivo original sin optimizar para no bloquear la subida
+    try {
+      const ext = path.extname(req.file.originalname).toLowerCase() || '.jpg';
+      const fallbackFilename = `${Date.now()}-orig${ext}`;
+      const fallbackPath = path.join(uploadsDir, fallbackFilename);
+      fs.renameSync(req.file.path, fallbackPath);
+
+      req.optimizedImage = {
+        url: `/uploads/${fallbackFilename}`,
+        filename: fallbackFilename,
+        size: req.file.size,
+        originalSize: req.file.size,
+        reduction: 0
+      };
+
+      logger.info(`Image uploaded without optimization: ${fallbackFilename}`);
+      next();
+    } catch (fallbackError) {
+      // Si incluso mover el archivo falla, limpiar y propagar
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      const customError = new Error(`Error al subir imagen: ${error.message}`);
+      customError.statusCode = 500;
+      next(customError);
     }
-
-    const customError = new Error(
-      `Error al procesar la imagen: ${error.message}`
-    );
-    customError.statusCode = 500;
-    next(customError);
   }
 };
 
