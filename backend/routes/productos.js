@@ -103,21 +103,20 @@ router.post(
         }
       }
 
-      // Asignar imágenes a las variantes si se subieron
-      if (req.body.optimizedImagesMap) {
-        variantes.forEach((v, index) => {
-          const field = `variante_img_${index}`;
-          if (req.body.optimizedImagesMap[field]) {
-            v.imagen_url = req.body.optimizedImagesMap[field];
-          } else if (req.body[`variante_img_url_${index}`]) {
-            v.imagen_url = req.body[`variante_img_url_${index}`];
-          }
-        });
-      }
+      // Asignar imágenes a las variantes
+      const optimizedMap = req.body.optimizedImagesMap || {};
+      variantes.forEach((v, index) => {
+        const field = `variante_img_${index}`;
+        if (optimizedMap[field]) {
+          v.imagen_url = optimizedMap[field];
+        } else if (req.body[`variante_img_url_${index}`]) {
+          v.imagen_url = req.body[`variante_img_url_${index}`];
+        }
+      });
 
       const data = {
-        ...req.body, // Validaciones de joi tendrían que ser ignoradas o actualizadas, usaremos req.body temporalmente
-        imagen_url: req.body.imagen_url, // Ya procesada por handleImageUpload
+        ...req.body, 
+        imagen_url: req.body.imagen_url || req.body.imagen_url_existente,
         tiene_variantes: variantes.length > 0 ? 1 : 0,
         variantes: variantes
       };
@@ -154,17 +153,16 @@ router.put(
         }
       }
 
-      // Asignar imágenes a las variantes si se subieron
-      if (req.body.optimizedImagesMap) {
-        variantes.forEach((v, index) => {
-          const field = `variante_img_${index}`;
-          if (req.body.optimizedImagesMap[field]) {
-            v.imagen_url = req.body.optimizedImagesMap[field];
-          } else if (req.body[`variante_img_url_${index}`]) {
-            v.imagen_url = req.body[`variante_img_url_${index}`];
-          }
-        });
-      }
+      // Asignar imágenes a las variantes
+      const optimizedMap = req.body.optimizedImagesMap || {};
+      variantes.forEach((v, index) => {
+        const field = `variante_img_${index}`;
+        if (optimizedMap[field]) {
+          v.imagen_url = optimizedMap[field];
+        } else if (req.body[`variante_img_url_${index}`]) {
+          v.imagen_url = req.body[`variante_img_url_${index}`];
+        }
+      });
 
       const data = { 
         ...req.body,
@@ -173,7 +171,9 @@ router.put(
       };
       
       if (req.body.imagen_url) {
-        data.imagen_url = req.body.imagen_url; // Ya procesada por handleImageUpload
+        data.imagen_url = req.body.imagen_url;
+      } else if (req.body.imagen_url_existente) {
+        data.imagen_url = req.body.imagen_url_existente;
       }
 
       const updatedProduct = await productService.update(req.params.id, data);

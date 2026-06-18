@@ -10,6 +10,7 @@ const sharp = require('sharp');
 const path = require('path');
 const fs = require('fs');
 const logger = require('../config/logger');
+const supabase = require('../config/supabase');
 
 // Configuración de directorios
 const uploadsDir = path.join(__dirname, '..', '..', 'public', 'uploads');
@@ -98,50 +99,92 @@ const optimizeImage = async (req, res, next) => {
 
   req.optimizedImages = {};
 
-  for (const file of files) {
-    try {
-      const inputPath = file.path;
-      const filename = `${Date.now()}-${Math.floor(Math.random()*1000)}.webp`;
-      const outputPath = path.join(uploadsDir, filename);
-
-      logger.info(`Optimizing image: ${file.originalname}`);
-
-      // Usar Sharp para optimizar
-      const stats = await sharp(inputPath)
-        .resize(800, 600, {
-          fit: 'cover',
-          position: 'center',
-          withoutEnlargement: true
-        })
-        .webp({
-          quality: 80, // Balance entre calidad y tamaño
-          alphaQuality: 80
-        })
-        .toFile(outputPath);
-
-      // Eliminar archivo temporal
-      fs.unlinkSync(inputPath);
-
-      req.optimizedImages[file.fieldname] = `/uploads/${filename}`;
-    } catch (error) {
-      logger.error(`Error optimizing image (sharp fallback): ${error.message}`);
-
-      // Si sharp falla, fallback
+    for (const file of files) {
       try {
-        const ext = path.extname(file.originalname).toLowerCase() || '.jpg';
-        const fallbackFilename = `${Date.now()}-orig-${Math.floor(Math.random()*1000)}${ext}`;
-        const fallbackPath = path.join(uploadsDir, fallbackFilename);
-        fs.renameSync(file.path, fallbackPath);
-
-        req.optimizedImages[file.fieldname] = `/uploads/${fallbackFilename}`;
-        logger.info(`Image uploaded without optimization: ${fallbackFilename}`);
-      } catch (fallbackError) {
-        if (file && fs.existsSync(file.path)) {
-          fs.unlinkSync(file.path);
+        const inputPath = file.path;
+        const filename = `${Date.now()}-${Math.floor(Math.random()*1000)}.webp`;
+  
+        logger.info(`Optimizing image: ${file.originalname}`);
+  
+        // Usar Sharp para optimizar y obtener buffer
+        const buffer = await sharp(inputPath)
+          .resize(800, 600, {
+            fit: 'cover',
+            position: 'center',
+            withoutEnlargement: true
+          })
+          .webp({
+            quality: 80, // Balance entre calidad y tamaño
+            alphaQuality: 80
+          })
+          .toBuffer();
+  
+        // Subir a Supabase Storage
+        const { data, error } = await supabase
+          .storage
+          .from('productos')
+          .upload(filename, buffer, {
+            contentType: 'image/webp',
+            upsert: false
+          });
+          
+        if (error) {
+          throw new Error(`Supabase upload error: ${error.message}`);
+        }
+  
+        // Obtener URL pública
+        const { data: publicUrlData } = supabase
+          .storage
+          .from('productos')
+          .getPublicUrl(filename);
+  
+        // Eliminar archivo temporal
+        if (fs.existsSync(inputPath)) {
+          fs.unlinkSync(inputPath);
+        }
+  
+        req.optimizedImages[file.fieldname] = publicUrlData.publicUrl;
+      } catch (error) {
+        logger.error(`Error optimizing/uploading image (fallback activated): ${error.message}`);
+  
+        // Si sharp o subida inicial fallan, fallback a subir archivo original
+        try {
+          const ext = path.extname(file.originalname).toLowerCase() || '.jpg';
+          const fallbackFilename = `${Date.now()}-orig-${Math.floor(Math.random()*1000)}${ext}`;
+          
+          const fileBuffer = fs.readFileSync(file.path);
+          
+          const { error: fallbackError } = await supabase
+            .storage
+            .from('productos')
+            .upload(fallbackFilename, fileBuffer, {
+              contentType: file.mimetype,
+              upsert: false
+            });
+            
+          if (fallbackError) {
+            throw new Error(`Supabase fallback upload error: ${fallbackError.message}`);
+          }
+  
+          const { data: publicUrlData } = supabase
+            .storage
+            .from('productos')
+            .getPublicUrl(fallbackFilename);
+  
+          if (fs.existsSync(file.path)) {
+            fs.unlinkSync(file.path);
+          }
+  
+          req.optimizedImages[file.fieldname] = publicUrlData.publicUrl;
+          logger.info(`Image uploaded to Supabase without optimization: ${fallbackFilename}`);
+        } catch (fatalError) {
+          logger.error(`Fatal error in fallback upload: ${fatalError.message}`);
+          if (file && fs.existsSync(file.path)) {
+            fs.unlinkSync(file.path);
+          }
         }
       }
     }
-  }
   next();
 };
 
