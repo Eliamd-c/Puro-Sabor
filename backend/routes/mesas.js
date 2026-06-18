@@ -109,13 +109,16 @@ router.get('/debug/logs', async (req, res) => {
     const fs = require('fs');
     const path = require('path');
     const logsDir = path.join(__dirname, '..', '..', 'logs');
-    const combinedLogPath = path.join(logsDir, 'combined.log');
-    
+    // ?file=error lee error.log (solo errores con stack); por defecto combined.log
+    const fileName = req.query.file === 'error' ? 'error.log' : 'combined.log';
+    const combinedLogPath = path.join(logsDir, fileName);
+
     let logs = "No log file found.";
     if (fs.existsSync(combinedLogPath)) {
-      // Leer los últimos 10000 caracteres (aprox últimas líneas)
+      // Leer los últimos N caracteres (aprox últimas líneas)
+      const maxBytes = parseInt(req.query.bytes) || 10000;
       const stats = fs.statSync(combinedLogPath);
-      const start = Math.max(0, stats.size - 10000);
+      const start = Math.max(0, stats.size - maxBytes);
       
       const stream = fs.createReadStream(combinedLogPath, { start, encoding: 'utf8' });
       logs = await new Promise((resolve, reject) => {
