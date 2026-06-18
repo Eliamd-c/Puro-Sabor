@@ -71,4 +71,45 @@ router.get('/reporte-ventas', verificarJWT, async (req, res, next) => {
   }
 });
 
+// PUT /api/caja/registro/:id - Editar un registro manual
+router.put('/registro/:id', verificarJWT, async (req, res, next) => {
+  const { tipo, descripcion, monto, categoria } = req.body;
+  const { id } = req.params;
+  
+  if (!tipo || !descripcion || monto === undefined) {
+    return res.status(400).json({ success: false, message: 'Faltan datos obligatorios' });
+  }
+
+  try {
+    const query = `
+      UPDATE caja_registros 
+      SET tipo = ?, descripcion = ?, monto = ?, categoria = ?
+      WHERE id = ?
+    `;
+    const result = await dbAsync.run(query, [tipo, descripcion, monto, categoria || 'General', id]);
+    if (result.changes === 0) {
+      return res.status(404).json({ success: false, message: 'Registro no encontrado' });
+    }
+    res.json({ success: true, message: 'Registro actualizado' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// DELETE /api/caja/registro/:id - Eliminar un registro
+router.delete('/registro/:id', verificarJWT, async (req, res, next) => {
+  const { id } = req.params;
+  
+  try {
+    const query = `DELETE FROM caja_registros WHERE id = ?`;
+    const result = await dbAsync.run(query, [id]);
+    if (result.changes === 0) {
+      return res.status(404).json({ success: false, message: 'Registro no encontrado' });
+    }
+    res.json({ success: true, message: 'Registro eliminado' });
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;

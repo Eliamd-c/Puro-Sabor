@@ -36,7 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Render Table
   function renderTable(registros) {
     if (registros.length === 0) {
-      tableBody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px;">No hay registros de caja aún.</td></tr>';
+      tableBody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 40px;">No hay registros de caja aún.</td></tr>';
       return;
     }
 
@@ -55,10 +55,44 @@ document.addEventListener('DOMContentLoaded', () => {
           <td><strong style="color:${color}">${signo} $${parseFloat(reg.monto).toLocaleString()}</strong></td>
           <td><small>${fecha}</small></td>
           <td><small>${reg.creado_por}</small></td>
+          <td style="text-align: right; white-space: nowrap;">
+            <button class="btn-icon" onclick="editRegistro(${reg.id}, '${reg.tipo}', '${reg.descripcion.replace(/'/g, "\\'")}', ${reg.monto}, '${(reg.categoria || 'General').replace(/'/g, "\\'")}')" title="Editar">✏️</button>
+            <button class="btn-icon" onclick="deleteRegistro(${reg.id})" title="Eliminar" style="color: var(--danger);">🗑️</button>
+          </td>
         </tr>
       `;
     }).join('');
   }
+
+  // Edit logic
+  window.editRegistro = (id, tipo, descripcion, monto, categoria) => {
+    document.getElementById('reg-id').value = id;
+    document.getElementById('reg-tipo').value = tipo;
+    document.getElementById('reg-desc').value = descripcion;
+    document.getElementById('reg-monto').value = monto;
+    document.getElementById('reg-category').value = categoria;
+    document.getElementById('registro-modal-title').textContent = 'Editar Registro';
+    openModal();
+  };
+
+  window.deleteRegistro = async (id) => {
+    if (!confirm('¿Seguro que deseas eliminar este registro? Esto afectará el balance de caja.')) return;
+    try {
+      const token = localStorage.getItem('puro_sabor_admin_token');
+      const res = await fetch(`/api/caja/registro/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchCaja();
+      } else {
+        alert(data.message || 'Error al eliminar');
+      }
+    } catch (e) {
+      alert('Error de red al eliminar');
+    }
+  };
 
   // Modal logic
   function openModal() {
@@ -68,15 +102,22 @@ document.addEventListener('DOMContentLoaded', () => {
   function closeModal() {
     modal.classList.remove('open');
     form.reset();
+    document.getElementById('reg-id').value = '';
+    document.getElementById('registro-modal-title').textContent = 'Añadir Registro Manual';
   }
 
-  btnAdd.addEventListener('click', openModal);
+  btnAdd.addEventListener('click', () => {
+    document.getElementById('reg-id').value = '';
+    document.getElementById('registro-modal-title').textContent = 'Añadir Registro Manual';
+    openModal();
+  });
   btnClose.addEventListener('click', closeModal);
   btnCancel.addEventListener('click', closeModal);
 
   // Save logic
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
+    const id = document.getElementById('reg-id').value;
     const payload = {
       tipo: document.getElementById('reg-tipo').value,
       monto: document.getElementById('reg-monto').value,
@@ -86,8 +127,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     try {
       const token = localStorage.getItem('puro_sabor_admin_token');
-      const res = await fetch('/api/caja/registro', {
-        method: 'POST',
+      const method = id ? 'PUT' : 'POST';
+      const url = id ? `/api/caja/registro/${id}` : '/api/caja/registro';
+      
+      const res = await fetch(url, {
+        method: method,
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(payload)
       });

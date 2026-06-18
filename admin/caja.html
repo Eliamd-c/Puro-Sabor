@@ -112,10 +112,11 @@
               <th>Monto</th>
               <th>Fecha</th>
               <th>Creado Por</th>
+              <th style="text-align: right;">Acciones</th>
             </tr>
           </thead>
           <tbody id="admin-caja-table-body">
-            <tr><td colspan="7" style="text-align: center; padding: 40px;">Cargando registros...</td></tr>
+            <tr><td colspan="8" style="text-align: center; padding: 40px;">Cargando registros...</td></tr>
           </tbody>
         </table>
       </section>
@@ -126,10 +127,11 @@
   <div class="admin-modal-overlay" id="registro-modal">
     <div class="admin-modal-content">
       <div class="admin-modal-header">
-        <h3>Añadir Registro Manual</h3>
+        <h3 id="registro-modal-title">Añadir Registro Manual</h3>
         <button class="btn-close-cart" id="btn-close-registro-modal">&times;</button>
       </div>
       <form id="registro-form">
+        <input type="hidden" id="reg-id" value="">
         <div class="admin-modal-body">
           <div class="form-row">
             <div class="form-group">
@@ -163,6 +165,6 @@
     </div>
   </div>
 
-  <script src="/admin/js/caja.js?v=2?v=1"></script>
+  <script src="/admin/js/caja.js?v=3"></script>
 </body>
 </html>
