@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Puro Sabor | Cocina y Pedidos</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/animations.css">
+  <link rel="stylesheet" href="/admin/css/admin.css">
+  <link rel="stylesheet" href="/admin/css/pedidos.css">
+</head>
+<body>
+  <div class="dashboard-wrapper">
+
+    <!-- ═══ SIDEBAR ═══════════════════════════════════════════════════════ -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <span class="sidebar-logo">🔥</span>
+        <h2>Puro Sabor</h2>
+      </div>
+      <nav class="sidebar-menu">
+        <a href="/admin/dashboard.html" class="menu-item">
+          <span>📦</span> Productos
+        </a>
+        <a href="/admin/pos.html" class="menu-item">
+          <span>📝</span> Tomar Pedido
+        </a>
+        <a href="/admin/pedidos.html" class="menu-item active">
+          <span>🍳</span> Cocina / Pedidos
+        </a>
+        <a href="/admin/mesas.html" class="menu-item">
+          <span>🪑</span> Mesas
+        </a>
+        <a href="/admin/caja.html" class="menu-item">
+          <span>💰</span> Caja del Día
+        </a>
+        <a href="/admin/inventario.html" class="menu-item">
+          <span>📈</span> Inventario
+        </a>
+        <a href="/admin/insumos.html" class="menu-item">
+          <span>🧻</span> Insumos
+        </a>
+        <a href="/admin/chatbots.html" class="menu-item">
+          <span>🤖</span> Chatbots IA
+        </a>
+        <a href="/" class="menu-item" target="_blank">
+          <span>🍽️</span> Ver Menú Público
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        <button class="btn-logout" id="btn-logout">Cerrar Sesión</button>
+      </div>
+    </aside>
+
+    <!-- ═══ CONTENIDO PRINCIPAL ═══════════════════════════════════════════ -->
+    <main class="main-content">
+      <div class="dashboard-header animate-fade-in-up">
+        <div class="dashboard-title">
+          <h2>🍳 Pantalla de Cocina / Historial</h2>
+          <p>Gestiona todos los pedidos que ingresan, cambia su estado y ve el historial.</p>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <button class="btn-primary" id="btn-refresh" style="background:var(--bg-surface); color:var(--text-primary); border:1px solid var(--border-color);">
+            <svg viewBox="0 0 24 24"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+            <span>Actualizar</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- KANBAN BOARD -->
+      <div class="kanban-board animate-fade-in-up" style="animation-delay: 0.1s;">
+        
+        <!-- Columna 1: Pendientes -->
+        <div class="kanban-column" id="col-pendiente">
+          <div class="kanban-header">
+            <h3>⏳ Pendientes (<span id="count-pendiente">0</span>)</h3>
+          </div>
+          <div class="kanban-cards" id="list-pendiente">
+            <!-- Tarjetas de pedidos se inyectan aquí -->
+          </div>
+        </div>
+
+        <!-- Columna 2: Preparando -->
+        <div class="kanban-column" id="col-preparando">
+          <div class="kanban-header">
+            <h3>👨‍🍳 Preparando (<span id="count-preparando">0</span>)</h3>
+          </div>
+          <div class="kanban-cards" id="list-preparando">
+            <!-- Tarjetas de pedidos se inyectan aquí -->
+          </div>
+        </div>
+
+        <!-- Columna 3: Entregados/Cerrados -->
+        <div class="kanban-column" id="col-entregado">
+          <div class="kanban-header">
+            <h3>✅ Listos / Entregados (<span id="count-entregado">0</span>)</h3>
+          </div>
+          <div class="kanban-cards" id="list-entregado">
+            <!-- Tarjetas de pedidos se inyectan aquí -->
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/config.js"></script>
+  <script src="/admin/js/auth.js"></script>
+  <script src="/admin/js/pedidos.js"></script>
+</body>
+</html>

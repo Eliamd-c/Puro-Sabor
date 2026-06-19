@@ -1,0 +1,114 @@
+.kanban-board {
+  display: flex;
+  gap: 20px;
+  overflow-x: auto;
+  padding-bottom: 20px;
+  height: calc(100vh - 150px);
+}
+
+.kanban-column {
+  background: var(--bg-surface);
+  border-radius: 12px;
+  min-width: 320px;
+  max-width: 400px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+}
+
+.kanban-header {
+  padding: 15px 20px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-body);
+  border-radius: 12px 12px 0 0;
+}
+.kanban-header h3 {
+  margin: 0;
+  font-family: 'Outfit', sans-serif;
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+.kanban-cards {
+  flex-grow: 1;
+  padding: 15px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.pedido-card {
+  background: var(--bg-body);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 15px;
+  position: relative;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.pedido-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+}
+
+.pedido-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  border-bottom: 1px dashed var(--border-color);
+  padding-bottom: 10px;
+}
+.pedido-mesa {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--primary-color);
+}
+.pedido-time {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.pedido-items {
+  margin-bottom: 15px;
+}
+.pedido-item {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  margin-bottom: 5px;
+  color: var(--text-primary);
+}
+.pedido-item-qty {
+  font-weight: 700;
+  margin-right: 8px;
+}
+
+.pedido-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.pedido-total {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.pedido-actions select {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-family: inherit;
+  outline: none;
+  font-weight: 600;
+}
+
+/* Status colors */
+.status-pendiente { border-left: 4px solid var(--danger); }
+.status-preparando { border-left: 4px solid var(--warning); }
+.status-listo { border-left: 4px solid var(--success); }
+.status-entregado { border-left: 4px solid var(--text-muted); opacity: 0.8; }
