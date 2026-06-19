@@ -42,13 +42,15 @@ const crearPedidoSchema = Joi.object({
       cantidad: Joi.number().integer().min(1).required()
     })
   ).min(1).required(),
-  total: Joi.number().min(0).required()
+  total: Joi.number().min(0).required(),
+  notas: Joi.string().allow('', null).optional()
 });
 
 router.post('/crear', verificarJWT, validate(crearPedidoSchema), async (req, res, next) => {
   try {
-    const { mesa_numero, items, total } = req.validatedBody;
+    const { mesa_numero, items, total, notas } = req.validatedBody;
     const mesaNum = mesa_numero || 0;
+    const notasVal = notas || '';
 
     // Buscar sesión activa para la mesa (si existe)
     let sesionId = null;
@@ -62,9 +64,9 @@ router.post('/crear', verificarJWT, validate(crearPedidoSchema), async (req, res
 
     // Insertar pedido
     const result = await dbAsync.run(
-      `INSERT INTO pedidos (sesion_id, mesa_numero, items_json, total, estado)
-       VALUES (?, ?, ?, ?, 'pendiente')`,
-      [sesionId, mesaNum, JSON.stringify(items), total]
+      `INSERT INTO pedidos (sesion_id, mesa_numero, items_json, total, notas, estado)
+       VALUES (?, ?, ?, ?, ?, 'pendiente')`,
+      [sesionId, mesaNum, JSON.stringify(items), total, notasVal]
     );
 
     // Notificar por Socket.IO en tiempo real
@@ -74,6 +76,7 @@ router.post('/crear', verificarJWT, validate(crearPedidoSchema), async (req, res
         mesa: mesaNum,
         items,
         total,
+        notas: notasVal,
         id: result.lastID
       });
     }

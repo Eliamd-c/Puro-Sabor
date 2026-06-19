@@ -98,12 +98,16 @@ document.addEventListener('DOMContentLoaded', async () => {
       const fecha = new Date(p.creado_en);
       const timeString = isNaN(fecha) ? '—' : fecha.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
       const tableString = !p.mesa_numero || p.mesa_numero === 0 ? 'Para Llevar' : `Mesa ${p.mesa_numero}`;
+      const notasString = p.notas ? `<div style="font-size: 13px; color: var(--text-secondary); margin-top: 4px; font-weight: 600;">👤 ${p.notas}</div>` : '';
 
       html += `
         <div class="pedido-card status-${statusClass}">
-          <div class="pedido-card-header">
-            <span class="pedido-mesa">${tableString}</span>
-            <span class="pedido-time">${timeString}</span>
+          <div class="pedido-card-header" style="flex-direction: column; align-items: flex-start; gap: 4px;">
+            <div style="display: flex; justify-content: space-between; width: 100%;">
+              <span class="pedido-mesa">${tableString}</span>
+              <span class="pedido-time">${timeString}</span>
+            </div>
+            ${notasString}
           </div>
           <div class="pedido-items">
             ${itemsHtml}
