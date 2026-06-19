@@ -1,5 +1,14 @@
 document.addEventListener('DOMContentLoaded', async () => {
-  if (!verificarAutenticacion()) return;
+  // ── Autenticación ──────────────────────────────────────────────────────
+  const token = localStorage.getItem('puro_sabor_admin_token');
+  if (!token) {
+    window.location.href = '/admin/';
+    return;
+  }
+  const authHeaders = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`
+  };
 
   const btnLogout = document.getElementById('btn-logout');
   const btnRefresh = document.getElementById('btn-refresh');
@@ -13,9 +22,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   const countEntregado = document.getElementById('count-entregado');
 
   let pedidos = [];
+  let refreshInterval = null;
 
   btnLogout.addEventListener('click', () => {
-    localStorage.removeItem('adminToken');
+    localStorage.removeItem('puro_sabor_admin_token');
+    localStorage.removeItem('puro_sabor_admin_user');
     window.location.href = '/admin/';
   });
 
@@ -23,27 +34,36 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   async function cargarPedidos() {
     try {
-      btnRefresh.innerHTML = '<div class="spinner" style="width:16px;height:16px;border-width:2px;display:inline-block;vertical-align:middle;"></div>';
+      btnRefresh.querySelector('span').textContent = 'Actualizando...';
       const response = await fetch('/api/pedidos', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('adminToken')}` }
+        headers: authHeaders
       });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
       const data = await response.json();
       if (data.success) {
         pedidos = data.data;
         renderKanban();
+      } else {
+        throw new Error(data.error || 'Error al cargar pedidos');
       }
     } catch (error) {
-      console.error(error);
+      console.error('Error cargando pedidos:', error);
+      [listPendiente, listPreparando, listEntregado].forEach(el => {
+        el.innerHTML = `<p style="color:var(--danger);text-align:center;padding:20px;">Error: ${error.message}</p>`;
+      });
     } finally {
-      btnRefresh.innerHTML = '<svg viewBox="0 0 24 24"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg><span>Actualizar</span>';
+      if (btnRefresh.querySelector('span')) btnRefresh.querySelector('span').textContent = 'Actualizar';
     }
   }
 
   function renderKanban() {
     const pendientes = pedidos.filter(p => p.estado === 'pendiente');
     const preparando = pedidos.filter(p => p.estado === 'preparando' || p.estado === 'listo');
-    // En historial corto mostramos entregados, pagados o cancelados
-    const entregados = pedidos.filter(p => ['entregado', 'pagado', 'cancelado'].includes(p.estado)).slice(0, 20); // Limitar a los últimos 20
+    const entregados = pedidos.filter(p => ['entregado', 'pagado', 'cancelado'].includes(p.estado)).slice(0, 20);
 
     countPendiente.textContent = pendientes.length;
     countPreparando.textContent = preparando.length;
@@ -56,7 +76,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function renderList(container, lista, statusClass) {
     if (lista.length === 0) {
-      container.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding: 20px;">No hay pedidos</p>';
+      container.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding: 30px;">Sin pedidos</p>';
       return;
     }
 
@@ -71,10 +91,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             </div>
           `;
         });
+      } else {
+        itemsHtml = '<p style="color:var(--text-muted);font-size:13px;">Sin detalle</p>';
       }
 
-      const timeString = new Date(p.creado_en).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
-      const tableString = p.mesa_numero === 0 ? 'Para Llevar / Domicilio' : `Mesa ${p.mesa_numero}`;
+      const fecha = new Date(p.creado_en);
+      const timeString = isNaN(fecha) ? '—' : fecha.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+      const tableString = !p.mesa_numero || p.mesa_numero === 0 ? 'Para Llevar' : `Mesa ${p.mesa_numero}`;
 
       html += `
         <div class="pedido-card status-${statusClass}">
@@ -86,7 +109,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             ${itemsHtml}
           </div>
           <div class="pedido-footer">
-            <span class="pedido-total">$${(p.total || 0).toLocaleString('es-CO')}</span>
+            <span class="pedido-total">$${parseFloat(p.total || 0).toLocaleString('es-CO')}</span>
             <div class="pedido-actions">
               <select data-id="${p.id}" class="select-estado">
                 <option value="pendiente" ${p.estado === 'pendiente' ? 'selected' : ''}>Pendiente ⏳</option>
@@ -103,7 +126,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     container.innerHTML = html;
 
-    // Attach listeners
     container.querySelectorAll('.select-estado').forEach(select => {
       select.addEventListener('change', async (e) => {
         const id = e.target.getAttribute('data-id');
@@ -117,22 +139,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
       const response = await fetch(`/api/pedidos/${id}/estado`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
-        },
+        headers: authHeaders,
         body: JSON.stringify({ estado })
       });
       const data = await response.json();
       if (data.success) {
-        // Optimistic UI update
         const idx = pedidos.findIndex(p => p.id == id);
         if (idx !== -1) {
           pedidos[idx].estado = estado;
           renderKanban();
         }
       } else {
-        alert('Error al cambiar el estado: ' + data.error);
+        alert('Error al cambiar el estado: ' + (data.error || 'Error'));
         cargarPedidos();
       }
     } catch (e) {
@@ -142,25 +160,19 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // Socket.IO para tiempo real
-  const socket = io();
-  socket.on('connect', () => {
-    socket.emit('unirse_admin');
-  });
+  try {
+    const socket = io();
+    socket.on('connect', () => { socket.emit('unirse_admin'); });
+    socket.on('nuevo_pedido', () => { cargarPedidos(); });
+    socket.on('pedido_estado_actualizado', () => { cargarPedidos(); });
+  } catch(e) {
+    console.warn('Socket.IO no disponible, usando polling cada 30s');
+    // Fallback: polling cada 30 segundos
+    refreshInterval = setInterval(cargarPedidos, 30000);
+  }
 
-  socket.on('nuevo_pedido', (data) => {
-    // Si la pantalla de pedidos está abierta, recargar los pedidos para verlo
-    cargarPedidos();
-    
-    // Play sound (opcional)
-    try {
-      const audio = new Audio('/assets/sounds/notification.mp3');
-      audio.play().catch(e=>console.log("Auto-play prevented", e));
-    } catch(e){}
-  });
-
-  socket.on('pedido_estado_actualizado', (data) => {
-    cargarPedidos();
-  });
+  // Auto-refresh cada 30 segundos como seguridad extra
+  setInterval(cargarPedidos, 30000);
 
   // Start
   cargarPedidos();

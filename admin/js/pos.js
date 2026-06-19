@@ -1,6 +1,15 @@
 document.addEventListener('DOMContentLoaded', async () => {
-  if (!verificarAutenticacion()) return;
-  
+  // ── Autenticación ──────────────────────────────────────────────────────
+  const token = localStorage.getItem('puro_sabor_admin_token');
+  if (!token) {
+    window.location.href = '/admin/';
+    return;
+  }
+  const authHeaders = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`
+  };
+
   // Elementos DOM
   const btnLogout = document.getElementById('btn-logout');
   const btnToggleSidebar = document.getElementById('btn-toggle-sidebar');
@@ -28,7 +37,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   
   // Cerrar Sesión
   btnLogout.addEventListener('click', () => {
-    localStorage.removeItem('adminToken');
+    localStorage.removeItem('puro_sabor_admin_token');
+    localStorage.removeItem('puro_sabor_admin_user');
     window.location.href = '/admin/';
   });
 
@@ -46,6 +56,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   btnCloseVariantes.addEventListener('click', () => {
     modalVariantes.classList.remove('open');
   });
+  modalVariantes.addEventListener('click', (e) => {
+    if (e.target === modalVariantes) modalVariantes.classList.remove('open');
+  });
 
   // --- INICIALIZACIÓN ---
   async function init() {
@@ -56,42 +69,42 @@ document.addEventListener('DOMContentLoaded', async () => {
   // --- DATA FETCHING ---
   async function cargarMesas() {
     try {
-      const response = await fetch('/api/mesas/activas', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('adminToken')}` }
-      });
+      const response = await fetch('/api/mesas', { headers: authHeaders });
       const data = await response.json();
       if (data.success) {
-        mesas = data.sesiones || [];
+        mesas = data.mesas || [];
         renderMesas();
       }
     } catch (e) {
-      console.error(e);
+      console.error('Error cargando mesas:', e);
     }
   }
 
   async function cargarCategorias() {
     try {
-      const response = await fetch('/api/categorias');
+      const response = await fetch('/api/categorias', { headers: authHeaders });
       const data = await response.json();
       if (data.success) {
-        categorias = data.data.filter(c => c.activa === 1);
+        categorias = data.data.filter(c => c.activa === 1 || c.activa === true);
         renderCategorias();
       }
     } catch (e) {
-      console.error(e);
+      console.error('Error cargando categorías:', e);
     }
   }
 
   async function cargarProductos() {
     try {
-      const response = await fetch('/api/productos');
+      productsGrid.innerHTML = '<p style="color:var(--text-muted); grid-column:1/-1; text-align:center; padding:40px;">Cargando productos...</p>';
+      const response = await fetch('/api/productos', { headers: authHeaders });
       const data = await response.json();
       if (data.success) {
-        productos = agruparProductos(data.data.filter(p => p.activo === 1));
+        productos = agruparProductos(data.data.filter(p => p.activo === 1 || p.activo === true));
         renderProductos();
       }
     } catch (e) {
-      console.error(e);
+      console.error('Error cargando productos:', e);
+      productsGrid.innerHTML = '<p style="color:var(--danger); grid-column:1/-1; text-align:center;">Error cargando productos</p>';
     }
   }
 
@@ -120,13 +133,14 @@ document.addEventListener('DOMContentLoaded', async () => {
           precio: prod.precio
         });
       } else {
+        // Verificar si el producto tiene variantes nuevas (de producto_variantes)
         agp[prod.nombre] = {
           id: prod.id,
           nombre: prod.nombre,
           imagen_url: prod.imagen_url,
           precio: prod.precio,
           categoria_id: prod.categoria_id,
-          tiene_variantes: prod.tiene_variantes === 1,
+          tiene_variantes: prod.tiene_variantes === 1 || prod.tiene_variantes === true,
           variantes: prod.variantes || []
         };
       }
@@ -136,16 +150,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // --- RENDERING ---
   function renderMesas() {
-    // Resetear, manteniendo "general"
-    mesaSelect.innerHTML = '<option value="0">Para Llevar / Domicilio (General)</option>';
-    
-    // Sort mesas ascending
-    const mesasActivas = [...mesas].sort((a,b) => a.mesa_numero - b.mesa_numero);
-    
-    mesasActivas.forEach(m => {
+    mesaSelect.innerHTML = '<option value="0">Para Llevar / Domicilio</option>';
+    const mesasOrdenadas = [...mesas].sort((a,b) => (a.numero || 0) - (b.numero || 0));
+    mesasOrdenadas.forEach(m => {
       const opt = document.createElement('option');
-      opt.value = m.mesa_numero;
-      opt.textContent = `Mesa ${m.mesa_numero}`;
+      opt.value = m.numero;
+      opt.textContent = `Mesa ${m.numero}`;
       mesaSelect.appendChild(opt);
     });
   }
@@ -157,7 +167,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     categoriesContainer.innerHTML = html;
 
-    // Listeners
     categoriesContainer.querySelectorAll('.pos-category-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         categoriesContainer.querySelectorAll('.pos-category-btn').forEach(b => b.classList.remove('active'));
@@ -172,7 +181,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let filtrados = productos;
     
     if (catId !== '') {
-      filtrados = filtrados.filter(p => p.categoria_id == catId);
+      filtrados = filtrados.filter(p => String(p.categoria_id) === String(catId));
     }
     
     if (search !== '') {
@@ -180,7 +189,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     if (filtrados.length === 0) {
-      productsGrid.innerHTML = '<p style="color:var(--text-muted); grid-column:1/-1; text-align:center;">No hay productos</p>';
+      productsGrid.innerHTML = '<p style="color:var(--text-muted); grid-column:1/-1; text-align:center; padding:40px;">No hay productos en esta categoría</p>';
       return;
     }
 
@@ -189,15 +198,19 @@ document.addEventListener('DOMContentLoaded', async () => {
       const isVariant = prod.tiene_variantes && prod.variantes && prod.variantes.length > 0;
       let precioHtml = '';
       if (isVariant) {
-        const precios = prod.variantes.map(v => v.precio !== undefined ? v.precio : prod.precio).sort((a,b)=>a-b);
-        precioHtml = `Desde $${precios[0].toLocaleString('es-CO')}`;
+        const precios = prod.variantes
+          .map(v => v.precio !== undefined && v.precio !== null ? parseFloat(v.precio) : parseFloat(prod.precio || 0))
+          .filter(p => !isNaN(p))
+          .sort((a,b) => a - b);
+        precioHtml = precios.length > 0 ? `Desde $${precios[0].toLocaleString('es-CO')}` : 'Ver opciones';
       } else {
-        precioHtml = `$${prod.precio.toLocaleString('es-CO')}`;
+        const p = parseFloat(prod.precio || 0);
+        precioHtml = `$${p.toLocaleString('es-CO')}`;
       }
 
       html += `
         <div class="pos-product-card" data-id="${prod.id}">
-          <img src="${prod.imagen_url}?v=2" onerror="this.src='/assets/images/default-food.jpg'" alt="${prod.nombre}">
+          <img src="${prod.imagen_url || '/assets/images/default-food.jpg'}?v=2" onerror="this.src='/assets/images/default-food.jpg'" alt="${prod.nombre}">
           <div class="pos-product-info">
             <h4 class="pos-product-title">${prod.nombre}</h4>
             <span class="pos-product-price">${precioHtml}</span>
@@ -207,16 +220,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     productsGrid.innerHTML = html;
 
-    // Click events
     productsGrid.querySelectorAll('.pos-product-card').forEach(card => {
       card.addEventListener('click', () => {
         const id = parseInt(card.getAttribute('data-id'));
         const prod = productos.find(p => p.id === id);
+        if (!prod) return;
         
         if (prod.tiene_variantes && prod.variantes && prod.variantes.length > 0) {
           abrirModalSeleccionVariante(prod);
         } else {
-          agregarAlCarrito(prod.id, prod.nombre, null, null, prod.precio);
+          agregarAlCarrito(prod.id, prod.nombre, null, null, parseFloat(prod.precio || 0));
         }
       });
     });
@@ -226,8 +239,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     modalVariantesTitle.textContent = prod.nombre;
     let html = '';
     prod.variantes.forEach(v => {
-      const precioVar = v.precio !== undefined ? v.precio : prod.precio;
-      const nombreVar = v.nombre || 'Variante';
+      const precioVar = v.precio !== undefined && v.precio !== null ? parseFloat(v.precio) : parseFloat(prod.precio || 0);
+      const nombreVar = v.nombre || v.tamano || 'Variante';
       
       html += `
         <button class="modal-variante-btn" data-vid="${v.id}" data-vname="${nombreVar}" data-vprice="${precioVar}">
@@ -246,7 +259,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         const vid = parseInt(target.getAttribute('data-vid'));
         const vname = target.getAttribute('data-vname');
         const vprice = parseFloat(target.getAttribute('data-vprice'));
-        
         agregarAlCarrito(prod.id, prod.nombre, vid, vname, vprice);
         modalVariantes.classList.remove('open');
       });
@@ -255,7 +267,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // --- LÓGICA DE CARRITO (TICKET) ---
   function agregarAlCarrito(id, name, variantId, variantName, price) {
-    // Buscar si ya existe
     const existIdx = carrito.findIndex(i => i.id === id && i.variantId === variantId);
     if (existIdx >= 0) {
       carrito[existIdx].qty += 1;
@@ -297,7 +308,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             <span class="ticket-item-price">$${subtotal.toLocaleString('es-CO')}</span>
           </div>
           <div class="ticket-item-controls">
-            <button class="btn-qty" data-idx="${idx}" data-delta="-1">-</button>
+            <button class="btn-qty" data-idx="${idx}" data-delta="-1">−</button>
             <span class="item-qty">${item.qty}</span>
             <button class="btn-qty" data-idx="${idx}" data-delta="1">+</button>
           </div>
@@ -308,7 +319,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     ticketItems.innerHTML = html;
     ticketTotal.textContent = `$${total.toLocaleString('es-CO')}`;
 
-    // Events
     ticketItems.querySelectorAll('.btn-qty').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const idx = parseInt(e.currentTarget.getAttribute('data-idx'));
@@ -322,12 +332,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   btnEnviarPedido.addEventListener('click', async () => {
     if (carrito.length === 0) return;
     
-    const mesaSeleccionada = mesaSelect.value;
-    const token = localStorage.getItem('adminToken');
+    const mesaSeleccionada = parseInt(mesaSelect.value) || 0;
     
-    // Transformar al formato del API
     const itemsEnvio = carrito.map(item => ({
-      id: item.variantId || item.id, // Si es variante antigua, su ID. Si es nueva, pasamos padre + sabor.
+      id: item.variantId || item.id,
       nombre: item.variantName ? `${item.name} - ${item.variantName}` : item.name,
       precio: item.price,
       cantidad: item.qty
@@ -335,28 +343,27 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const totalCalculado = carrito.reduce((sum, item) => sum + (item.price * item.qty), 0);
 
-    const isGeneral = mesaSeleccionada === '0';
-    const url = `/api/mesas/${mesaSeleccionada}/pedido`;
-
     try {
       btnEnviarPedido.disabled = true;
-      btnEnviarPedido.innerHTML = '<div class="spinner" style="width:20px;height:20px;border-width:2px;display:inline-block;vertical-align:middle;"></div> Enviando...';
+      btnEnviarPedido.innerHTML = '⏳ Enviando...';
 
-      const response = await fetch(url, {
+      const response = await fetch('/api/pedidos/crear', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ items: itemsEnvio, total: totalCalculado })
+        headers: authHeaders,
+        body: JSON.stringify({ mesa_numero: mesaSeleccionada, items: itemsEnvio, total: totalCalculado })
       });
 
       const data = await response.json();
       if (data.success) {
-        // Limpiar
         carrito = [];
         renderTicket();
-        alert('✅ Pedido enviado a cocina correctamente');
+        
+        // Feedback visual
+        const feedback = document.createElement('div');
+        feedback.style.cssText = 'position:fixed;top:20px;right:20px;background:#27ae60;color:white;padding:15px 25px;border-radius:10px;z-index:9999;font-weight:600;box-shadow:0 4px 15px rgba(0,0,0,0.2);';
+        feedback.textContent = '✅ Pedido enviado a cocina correctamente';
+        document.body.appendChild(feedback);
+        setTimeout(() => feedback.remove(), 3000);
       } else {
         throw new Error(data.error || 'Error desconocido');
       }

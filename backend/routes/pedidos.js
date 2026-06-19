@@ -5,24 +5,12 @@ const { verificarJWT } = require('../middleware/auth');
 const Joi = require('joi');
 const validate = require('../middleware/validate');
 
-/**
- * @swagger
- * /api/pedidos:
- *   get:
- *     summary: Obtener todos los pedidos
- *     description: Retorna todos los pedidos, incluyendo historial y los más recientes primero.
- *     tags:
- *       - Pedidos
- *     security:
- *       - BearerAuth: []
- */
+// ─── GET /api/pedidos — Listar todos los pedidos ────────────────────────────
 router.get('/', verificarJWT, async (req, res, next) => {
   try {
     const query = `
-      SELECT p.*, 
-             s.mesa_numero as mesa_sesion
+      SELECT p.*
       FROM pedidos p
-      LEFT JOIN sesiones_mesa s ON p.sesion_id = s.id
       ORDER BY p.creado_en DESC
       LIMIT 100
     `;
@@ -34,11 +22,7 @@ router.get('/', verificarJWT, async (req, res, next) => {
       try {
         items = JSON.parse(p.items_json || '[]');
       } catch (e) {}
-      
-      return {
-        ...p,
-        items
-      };
+      return { ...p, items };
     });
     
     res.json({ success: true, data: procesados });
@@ -47,34 +31,75 @@ router.get('/', verificarJWT, async (req, res, next) => {
   }
 });
 
+// ─── POST /api/pedidos/crear — Crear un pedido desde el POS ────────────────
+const crearPedidoSchema = Joi.object({
+  mesa_numero: Joi.number().integer().min(0).default(0),
+  items: Joi.array().items(
+    Joi.object({
+      id: Joi.number().required(),
+      nombre: Joi.string().required(),
+      precio: Joi.number().min(0).required(),
+      cantidad: Joi.number().integer().min(1).required()
+    })
+  ).min(1).required(),
+  total: Joi.number().min(0).required()
+});
+
+router.post('/crear', verificarJWT, validate(crearPedidoSchema), async (req, res, next) => {
+  try {
+    const { mesa_numero, items, total } = req.validatedBody;
+    const mesaNum = mesa_numero || 0;
+
+    // Buscar sesión activa para la mesa (si existe)
+    let sesionId = null;
+    if (mesaNum > 0) {
+      const sesion = await dbAsync.get(
+        "SELECT id FROM sesiones_mesa WHERE mesa_numero = ? AND estado = 'activa' ORDER BY creada_en DESC LIMIT 1",
+        [mesaNum]
+      );
+      if (sesion) sesionId = sesion.id;
+    }
+
+    // Insertar pedido
+    const result = await dbAsync.run(
+      `INSERT INTO pedidos (sesion_id, mesa_numero, items_json, total, estado)
+       VALUES (?, ?, ?, ?, 'pendiente')`,
+      [sesionId, mesaNum, JSON.stringify(items), total]
+    );
+
+    // Notificar por Socket.IO en tiempo real
+    const io = req.app.get('io');
+    if (io) {
+      io.to('admin').emit('nuevo_pedido', {
+        mesa: mesaNum,
+        items,
+        total,
+        id: result.lastID
+      });
+    }
+
+    res.json({ success: true, message: 'Pedido enviado a cocina.', id: result.lastID });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ─── PUT /api/pedidos/:id/estado — Actualizar estado de un pedido ──────────
 const actualizarEstadoSchema = Joi.object({
   estado: Joi.string().valid('pendiente', 'preparando', 'listo', 'entregado', 'pagado', 'cancelado').required()
 });
 
-/**
- * @swagger
- * /api/pedidos/{id}/estado:
- *   put:
- *     summary: Actualizar estado de un pedido
- *     tags:
- *       - Pedidos
- *     security:
- *       - BearerAuth: []
- */
 router.put('/:id/estado', verificarJWT, validate(actualizarEstadoSchema), async (req, res, next) => {
   try {
     const { id } = req.params;
     const { estado } = req.validatedBody;
     
-    const pedidoExisten = await dbAsync.get('SELECT id FROM pedidos WHERE id = ?', [id]);
-    if (!pedidoExisten) {
+    const pedidoExistente = await dbAsync.get('SELECT id FROM pedidos WHERE id = ?', [id]);
+    if (!pedidoExistente) {
       return res.status(404).json({ success: false, error: 'Pedido no encontrado' });
     }
     
-    await dbAsync.run(
-      'UPDATE pedidos SET estado = ? WHERE id = ?',
-      [estado, id]
-    );
+    await dbAsync.run('UPDATE pedidos SET estado = ? WHERE id = ?', [estado, id]);
     
     const io = req.app.get('io');
     if (io) {

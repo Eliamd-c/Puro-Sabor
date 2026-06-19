@@ -203,8 +203,8 @@ async function inicializarTablas() {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS pedidos (
         id SERIAL PRIMARY KEY,
-        sesion_id INTEGER NOT NULL,
-        mesa_numero INTEGER NOT NULL,
+        sesion_id INTEGER,
+        mesa_numero INTEGER NOT NULL DEFAULT 0,
         numero_ronda INTEGER DEFAULT 1,
         items_json TEXT NOT NULL,
         total REAL NOT NULL,
