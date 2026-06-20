@@ -975,8 +975,65 @@
     });
   }
 
+  // Modal agregar producto
+  const modalAddProduct = document.getElementById('modal-add-product');
+  const productList = document.getElementById('product-list');
+  const searchProduct = document.getElementById('search-product');
+
+  function renderProductList(filter = '') {
+    productList.innerHTML = '';
+    const filtered = productos.filter(p =>
+      p.nombre.toLowerCase().includes(filter.toLowerCase())
+    );
+
+    filtered.forEach(prod => {
+      const prodDiv = document.createElement('div');
+      prodDiv.style.cssText = 'padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);cursor:pointer;transition:all 0.2s;';
+      prodDiv.innerHTML = `
+        <div style="font-weight:700;margin-bottom:4px;">${prod.nombre}</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">$${prod.precio.toLocaleString('es-CO')}</div>
+        <input type="number" data-prod-id="${prod.id}" class="product-qty-input" value="1" min="1" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-family:'Outfit',sans-serif;">
+      `;
+      prodDiv.addEventListener('click', () => {
+        const qty = parseInt(prodDiv.querySelector('.product-qty-input').value) || 1;
+        addProductToEditingOrder(prod, qty);
+        modalAddProduct.style.display = 'none';
+        searchProduct.value = '';
+      });
+      productList.appendChild(prodDiv);
+    });
+  }
+
+  function addProductToEditingOrder(product, quantity) {
+    if (!editingOrder.items) editingOrder.items = [];
+    const existing = editingOrder.items.find(i => i.id === product.id);
+    if (existing) {
+      existing.cantidad += quantity;
+    } else {
+      editingOrder.items.push({
+        id: product.id,
+        nombre: product.nombre,
+        precio: product.precio,
+        cantidad: quantity
+      });
+    }
+    renderEditItems();
+    showToast(`✅ Agregado: ${product.nombre} x${quantity}`);
+  }
+
   document.getElementById('btn-add-product').addEventListener('click', () => {
-    showToast('⚠️ Selecciona un producto de la lista (implementar en siguiente paso)');
+    renderProductList('');
+    modalAddProduct.style.display = 'flex';
+    searchProduct.focus();
+  });
+
+  searchProduct.addEventListener('input', (e) => {
+    renderProductList(e.target.value);
+  });
+
+  document.querySelector('[data-close="modal-add-product"]').addEventListener('click', () => {
+    modalAddProduct.style.display = 'none';
+    searchProduct.value = '';
   });
 
   document.getElementById('btn-save-order').addEventListener('click', async () => {

@@ -215,7 +215,23 @@ async function inicializarTablas() {
       )
     `);
 
-    // 8. Tabla Historial WA
+    // 8. Tabla Historial de Cambios en Pedidos (Auditoría)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS pedidos_historial (
+        id SERIAL PRIMARY KEY,
+        pedido_id INTEGER NOT NULL,
+        tipo_cambio VARCHAR(50) NOT NULL,
+        campos_anteriores JSONB,
+        campos_nuevos JSONB,
+        usuario_id INTEGER,
+        usuario_nombre VARCHAR(255),
+        notas_cambio TEXT,
+        creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (pedido_id) REFERENCES pedidos(id) ON DELETE CASCADE
+      )
+    `);
+
+    // 9. Tabla Historial WA
     await pool.query(`
       CREATE TABLE IF NOT EXISTS wa_conversaciones (
         id SERIAL PRIMARY KEY,

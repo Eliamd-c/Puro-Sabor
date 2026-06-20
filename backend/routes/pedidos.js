@@ -236,6 +236,34 @@ router.put('/:id', verificarJWT, validate(editarPedidoSchema), async (req, res, 
       return res.status(404).json({ success: false, error: 'Pedido no encontrado' });
     }
 
+    // Registrar cambios anteriores para auditoría
+    const camposAnteriores = {};
+    const camposNuevos = {};
+
+    if (nombre_cliente !== undefined && nombre_cliente !== pedido.nombre_cliente) {
+      camposAnteriores.nombre_cliente = pedido.nombre_cliente;
+      camposNuevos.nombre_cliente = nombre_cliente;
+    }
+    if (mesa_numero !== undefined && mesa_numero !== pedido.mesa_numero) {
+      camposAnteriores.mesa_numero = pedido.mesa_numero;
+      camposNuevos.mesa_numero = mesa_numero;
+    }
+    if (direccion_domicilio !== undefined && direccion_domicilio !== pedido.direccion_domicilio) {
+      camposAnteriores.direccion_domicilio = pedido.direccion_domicilio;
+      camposNuevos.direccion_domicilio = direccion_domicilio;
+    }
+    if (notas !== undefined && notas !== pedido.notas) {
+      camposAnteriores.notas = pedido.notas;
+      camposNuevos.notas = notas;
+    }
+    if (items && items.length > 0) {
+      const oldItems = JSON.parse(pedido.items_json || '[]');
+      if (JSON.stringify(oldItems) !== JSON.stringify(items)) {
+        camposAnteriores.items = oldItems;
+        camposNuevos.items = items;
+      }
+    }
+
     // Preparar updates dinámicos
     const updates = ['updated_at = CURRENT_TIMESTAMP'];
     const params = [];
@@ -269,6 +297,15 @@ router.put('/:id', verificarJWT, validate(editarPedidoSchema), async (req, res, 
       `UPDATE pedidos SET ${updates.join(', ')} WHERE id = ?`,
       params
     );
+
+    // Registrar en el historial si hay cambios
+    if (Object.keys(camposAnteriores).length > 0) {
+      await dbAsync.run(
+        `INSERT INTO pedidos_historial (pedido_id, tipo_cambio, campos_anteriores, campos_nuevos, usuario_nombre)
+         VALUES (?, 'edicion', ?, ?, 'Mesera')`,
+        [id, JSON.stringify(camposAnteriores), JSON.stringify(camposNuevos)]
+      );
+    }
 
     const io = req.app.get('io');
     if (io) {
