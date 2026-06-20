@@ -394,6 +394,29 @@ async function inicializarTablas() {
       )
     `);
 
+    // 21. Tabla Movimientos de Inventario
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS movimientos_inventario (
+        id SERIAL PRIMARY KEY,
+        producto_id INTEGER NOT NULL,
+        variante_id INTEGER,
+        cantidad_cambio INTEGER NOT NULL,
+        razon VARCHAR(50) NOT NULL,
+        pedido_id INTEGER,
+        notas TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Columnas nuevas en pedidos para features de mesera
+    await pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS tipo_pedido VARCHAR(20) DEFAULT 'local'`);
+    await pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS direccion_domicilio TEXT`);
+    await pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS prepagado INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS carne_en_parrilla INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS metodo_pago VARCHAR(30)`);
+    await pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS nombre_cliente VARCHAR(255)`);
+    await pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
+
     // Agregar columna viendo si no existe (migracion segura)
     await pool.query(`ALTER TABLE mesas ADD COLUMN IF NOT EXISTS viendo INTEGER DEFAULT 0`);
 
