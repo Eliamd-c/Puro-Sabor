@@ -17,6 +17,7 @@
     pedidos:    '/api/pedidos',
     flags:      (id) => `/api/pedidos/${id}/flags`,
     estado:     (id) => `/api/pedidos/${id}/estado`,
+    editarPedido: (id) => `/api/pedidos/${id}`,
   };
 
   // ─── STATE ─────────────────────────────────────────────────
@@ -909,6 +910,117 @@
   });
 
   document.getElementById('btn-refresh-orders').addEventListener('click', loadPedidos);
+
+  // ─── EDIT ORDER MODAL ───────────────────────────────────────
+  const modalEditOrder = document.getElementById('modal-edit-order');
+  let editingOrderId = null;
+  let editingOrder = null;
+
+  function openEditModal(orderId) {
+    editingOrderId = orderId;
+    editingOrder = pedidos.find(p => p.id === orderId);
+    if (!editingOrder) return;
+
+    document.getElementById('edit-order-title').textContent = `Editar Pedido #${orderId}`;
+    document.getElementById('edit-nombre-cliente').value = editingOrder.nombre_cliente || '';
+    document.getElementById('edit-mesa-numero').value = editingOrder.mesa_numero || 0;
+    document.getElementById('edit-direccion').value = editingOrder.direccion_domicilio || '';
+    document.getElementById('edit-notas').value = editingOrder.notas || '';
+
+    renderEditItems();
+    modalEditOrder.style.display = 'flex';
+  }
+
+  function renderEditItems() {
+    const itemsList = document.getElementById('edit-items-list');
+    const items = editingOrder.items || [];
+    itemsList.innerHTML = '';
+
+    items.forEach((item, idx) => {
+      const itemDiv = document.createElement('div');
+      itemDiv.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid var(--border);';
+      itemDiv.innerHTML = `
+        <div style="flex:1;font-size:12px;">
+          <div style="font-weight:700;">${item.nombre}</div>
+          <div style="color:var(--muted);">$${item.precio.toLocaleString('es-CO')}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px;">
+          <button type="button" class="qty-btn-edit" data-idx="${idx}" data-op="-" style="width:28px;height:28px;border:1px solid var(--border);background:var(--surface2);color:var(--text);border-radius:4px;cursor:pointer;font-weight:700;">−</button>
+          <span style="width:30px;text-align:center;font-weight:700;">${item.cantidad}</span>
+          <button type="button" class="qty-btn-edit" data-idx="${idx}" data-op="+" style="width:28px;height:28px;border:1px solid var(--border);background:var(--surface2);color:var(--text);border-radius:4px;cursor:pointer;font-weight:700;">+</button>
+        </div>
+        <button type="button" class="delete-item-edit" data-idx="${idx}" style="width:28px;height:28px;border:1px solid #e74c3c;background:rgba(231,76,60,0.1);color:#e74c3c;border-radius:4px;cursor:pointer;font-weight:700;">🗑</button>
+      `;
+      itemsList.appendChild(itemDiv);
+    });
+
+    document.querySelectorAll('.qty-btn-edit').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const idx = parseInt(e.target.dataset.idx);
+        const op = e.target.dataset.op;
+        const newQty = editingOrder.items[idx].cantidad + (op === '+' ? 1 : -1);
+        if (newQty > 0) {
+          editingOrder.items[idx].cantidad = newQty;
+          renderEditItems();
+        }
+      });
+    });
+
+    document.querySelectorAll('.delete-item-edit').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const idx = parseInt(e.target.dataset.idx);
+        editingOrder.items.splice(idx, 1);
+        renderEditItems();
+      });
+    });
+  }
+
+  document.getElementById('btn-add-product').addEventListener('click', () => {
+    showToast('⚠️ Selecciona un producto de la lista (implementar en siguiente paso)');
+  });
+
+  document.getElementById('btn-save-order').addEventListener('click', async () => {
+    if (!editingOrderId) return;
+    const updates = {
+      nombre_cliente: document.getElementById('edit-nombre-cliente').value,
+      mesa_numero: parseInt(document.getElementById('edit-mesa-numero').value) || 0,
+      direccion_domicilio: document.getElementById('edit-direccion').value,
+      notas: document.getElementById('edit-notas').value
+    };
+    if (editingOrder.items && editingOrder.items.length > 0) {
+      updates.items = editingOrder.items;
+    }
+    try {
+      const res = await fetch(API.editarPedido(editingOrderId), {
+        method: 'PUT',
+        headers: authH(),
+        body: JSON.stringify(updates)
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('✅ Pedido actualizado');
+        modalEditOrder.style.display = 'none';
+        loadPedidos();
+      } else {
+        showToast('❌ Error al actualizar: ' + data.error);
+      }
+    } catch (e) {
+      showToast('❌ Error: ' + e.message);
+    }
+  });
+
+  document.querySelector('[data-close="modal-edit-order"]').addEventListener('click', () => {
+    modalEditOrder.style.display = 'none';
+  });
+
+  // Hacer clickeables los pedidos para editar
+  ordersList.addEventListener('click', (e) => {
+    const card = e.target.closest('.order-card');
+    if (card && !e.target.closest('button')) {
+      const orderNum = card.querySelector('.order-num')?.textContent?.replace('#', '');
+      if (orderNum) openEditModal(parseInt(orderNum));
+    }
+  });
 
   // ─── TOAST ─────────────────────────────────────────────────
   let toastTimer;
