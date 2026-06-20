@@ -491,7 +491,93 @@
     if (confirm('¿Limpiar todos los ítems?')) { carrito = []; renderTicket(); }
   });
 
+  // ─── MESA SELECTION MODAL ─────────────────────────────────
+  const mesaGrid = document.getElementById('mesa-grid');
+  const modalMesa = document.getElementById('modal-mesa');
+  const btnConfirmMesa = document.getElementById('btn-confirm-mesa');
+  let mesaSeleccionada = null;
+  let pendingOrderData = null;
+
+  function renderMesasModal() {
+    mesaGrid.innerHTML = '';
+    mesas.forEach(m => {
+      const isOccupied = m.estado === 'ocupada';
+      const btn = document.createElement('button');
+      btn.className = `mesa-btn ${isOccupied ? 'occupied' : ''} ${mesaSeleccionada === m.numero ? 'selected' : ''}`;
+      btn.type = 'button';
+      btn.disabled = isOccupied;
+      btn.innerHTML = `<div class="mesa-number">🪑 ${m.numero}</div><div class="mesa-status">${isOccupied ? 'Ocupada' : 'Libre'}</div>`;
+      btn.addEventListener('click', () => {
+        if (!isOccupied) {
+          mesaSeleccionada = m.numero;
+          renderMesasModal();
+          btnConfirmMesa.disabled = false;
+        }
+      });
+      mesaGrid.appendChild(btn);
+    });
+  }
+
+  function openMesaModal() {
+    mesaSeleccionada = null;
+    btnConfirmMesa.disabled = true;
+    renderMesasModal();
+    modalMesa.style.display = 'flex';
+  }
+
+  function closeMesaModal() {
+    modalMesa.style.display = 'none';
+    mesaSeleccionada = null;
+  }
+
+  btnConfirmMesa.addEventListener('click', async () => {
+    if (!mesaSeleccionada || !pendingOrderData) return;
+    closeMesaModal();
+    pendingOrderData.mesa_numero = mesaSeleccionada;
+    await doSendOrder(pendingOrderData);
+    pendingOrderData = null;
+  });
+
+  document.querySelectorAll('[data-close="modal-mesa"]').forEach(b => {
+    b.addEventListener('click', closeMesaModal);
+  });
+
   // ─── SEND ORDER ────────────────────────────────────────────
+  async function doSendOrder(orderData) {
+    btnSend.disabled = true;
+    btnSend.innerHTML = '<div class="spinner" style="width:18px;height:18px;border-width:2px;"></div>';
+
+    try {
+      const res = await fetch(API.pedido, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authH() },
+        body: JSON.stringify(orderData)
+      });
+      const data = await res.json();
+      if (data.success) {
+        const nameInput = document.getElementById('order-name-input');
+        const addrInput = document.getElementById('delivery-address');
+        const prepaidCheck = document.getElementById('prepaid-check');
+        carrito = [];
+        if (nameInput) nameInput.value = '';
+        if (addrInput) addrInput.value = '';
+        if (prepaidCheck) prepaidCheck.checked = false;
+        mesaSelect.value = '';
+        renderTicket();
+        playNotificationSound();
+        const typeLabels = { local: `Mesa ${orderData.mesa_numero}`, domicilio: 'Domicilio', recogen: 'Recogen' };
+        showToast(`✅ Pedido enviado — ${typeLabels[orderData.tipo_pedido] || 'Enviado'}`);
+      } else {
+        showToast('❌ Error al enviar pedido: ' + (data.error || 'Error desconocido'));
+      }
+    } catch (e) {
+      showToast('❌ Error de conexión: ' + e.message);
+    } finally {
+      btnSend.disabled = false;
+      btnSend.innerHTML = `<svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg> Enviar a Cocina`;
+    }
+  }
+
   btnSend.addEventListener('click', async () => {
     if (!carrito.length) return;
     const nameInput = document.getElementById('order-name-input');
@@ -501,14 +587,6 @@
     const notas = '';
     const direccion = addrInput ? addrInput.value.trim() : '';
 
-    let mesa = 0;
-    if (tipoPedido === 'local') {
-      mesa = parseInt(mesaSelect.value) || 0;
-      if (!mesa) {
-        showToast('⚠️ Selecciona una mesa para pedido local');
-        return;
-      }
-    }
     if (tipoPedido === 'domicilio' && !direccion) {
       showToast('⚠️ Ingresa la dirección del domicilio');
       return;
@@ -522,40 +600,24 @@
     }));
     const total = carrito.reduce((s, i) => s + i.price * i.qty, 0);
 
-    btnSend.disabled = true;
-    btnSend.innerHTML = '<div class="spinner" style="width:18px;height:18px;border-width:2px;"></div>';
+    const orderData = {
+      mesa_numero: 0,
+      items,
+      total,
+      notas,
+      tipo_pedido: tipoPedido,
+      direccion_domicilio: direccion,
+      nombre_cliente: nombre_cliente,
+      prepagado: prepaidCheck && prepaidCheck.checked ? 1 : 0
+    };
 
-    try {
-      const res = await fetch(API.pedido, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authH() },
-        body: JSON.stringify({
-          mesa_numero: mesa, items, total, notas,
-          tipo_pedido: tipoPedido,
-          direccion_domicilio: direccion,
-          nombre_cliente: nombre_cliente,
-          prepagado: prepaidCheck && prepaidCheck.checked ? 1 : 0
-        })
-      });
-      const data = await res.json();
-      if (data.success) {
-        carrito = [];
-        if (nameInput) nameInput.value = '';
-        if (addrInput) addrInput.value = '';
-        if (prepaidCheck) prepaidCheck.checked = false;
-        mesaSelect.value = '';
-        renderTicket();
-        playNotificationSound();
-        const typeLabels = { local: `Mesa ${mesa}`, domicilio: 'Domicilio', recogen: 'Recogen' };
-        showToast(`✅ Pedido enviado — ${typeLabels[tipoPedido] || 'Enviado'}`);
-      } else {
-        showToast('❌ Error al enviar pedido: ' + (data.error || 'Error desconocido'));
-      }
-    } catch (e) {
-      showToast('❌ Error de conexión: ' + e.message);
-    } finally {
-      btnSend.disabled = false;
-      btnSend.innerHTML = `<svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg> Enviar a Cocina`;
+    if (tipoPedido === 'local') {
+      // Abre modal si no hay mesa seleccionada
+      pendingOrderData = orderData;
+      openMesaModal();
+    } else {
+      // Para domicilio y recogen, envía directamente
+      await doSendOrder(orderData);
     }
   });
 

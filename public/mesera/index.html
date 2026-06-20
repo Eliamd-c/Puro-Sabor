@@ -184,6 +184,24 @@
     </div>
   </div>
 
+  <!-- MESA SELECTION MODAL -->
+  <div id="modal-mesa" class="modal-overlay" style="display:none;">
+    <div class="modal-card" style="max-width:420px;">
+      <div class="modal-head">
+        <h3>Selecciona una Mesa</h3>
+        <button class="btn-close-modal" data-close="modal-mesa">✕</button>
+      </div>
+      <div class="mesa-grid" id="mesa-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:20px;">
+        <!-- Mesas generadas por JS -->
+      </div>
+      <div style="padding:0 20px 20px;text-align:center;">
+        <button id="btn-confirm-mesa" class="btn-send" style="width:100%;justify-content:center;" disabled>
+          Confirmar Mesa
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- PAYMENT MODAL -->
   <div id="modal-payment" class="modal-overlay" style="display:none;">
     <div class="modal-card" style="max-width:380px;">
