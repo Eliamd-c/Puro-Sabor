@@ -315,6 +315,10 @@ app.use('/', express.static(path.join(__dirname, '..', 'public')));
 // Módulo Mesa en '/mesa'
 app.use('/mesa', express.static(path.join(__dirname, '..', 'public', 'mesa')));
 
+// Módulo Mesera/Auxiliar en '/mesera' y '/auxiliar-de-venta'
+app.use('/mesera', express.static(path.join(__dirname, '..', 'public', 'mesera')));
+app.use('/auxiliar-de-venta', express.static(path.join(__dirname, '..', 'public', 'mesera')));
+
 // Módulo Admin en '/admin'
 app.use('/admin', express.static(path.join(__dirname, '..', 'admin')));
 
@@ -325,6 +329,20 @@ app.get('/mesa', (req, res) => {
 });
 app.get('/mesa/*', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'mesa', 'index.html'));
+});
+
+// Mesera/Auxiliar: cualquier ruta /mesera/* y /auxiliar-de-venta/* sirven el index.html
+app.get('/mesera', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'mesera', 'index.html'));
+});
+app.get('/mesera/*', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'mesera', 'index.html'));
+});
+app.get('/auxiliar-de-venta', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'mesera', 'index.html'));
+});
+app.get('/auxiliar-de-venta/*', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'mesera', 'index.html'));
 });
 
 // Admin: rutas específicas de administración
