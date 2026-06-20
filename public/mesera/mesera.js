@@ -695,6 +695,8 @@
       if (p.carne_en_parrilla) flagsHtml += '<span class="order-flag flag-grill">🔥 En parrilla</span>';
 
       let actionsHtml = '';
+
+      // Checkbox de parrilla para pendiente/preparando
       if (p.estado === 'pendiente' || p.estado === 'preparando') {
         actionsHtml += `
           <label class="grill-toggle">
@@ -702,11 +704,25 @@
             <span>🔥 Parrilla</span>
           </label>`;
       }
-      if (p.estado === 'listo') {
-        actionsHtml += `<button class="btn-action btn-deliver" data-id="${p.id}">Marcar Entregado</button>`;
+
+      // Estado: Pendiente → Preparando
+      if (p.estado === 'pendiente') {
+        actionsHtml += `<button class="btn-action btn-prepare" data-id="${p.id}">👨‍🍳 Preparando</button>`;
       }
+
+      // Estado: Preparando → Listo
+      if (p.estado === 'preparando') {
+        actionsHtml += `<button class="btn-action btn-ready" data-id="${p.id}">✅ Listo</button>`;
+      }
+
+      // Estado: Listo → Entregado
+      if (p.estado === 'listo') {
+        actionsHtml += `<button class="btn-action btn-deliver" data-id="${p.id}">🚚 Entregado</button>`;
+      }
+
+      // Estado: Entregado → Pagado
       if (p.estado === 'entregado') {
-        actionsHtml += `<button class="btn-action btn-pay" data-id="${p.id}" data-total="${p.total}">Cobrar</button>`;
+        actionsHtml += `<button class="btn-action btn-pay" data-id="${p.id}" data-total="${p.total}">💳 Cobrar</button>`;
       }
 
       el.innerHTML = `
@@ -743,6 +759,18 @@
       cb.addEventListener('change', async (e) => {
         const id = e.target.dataset.id;
         await updateFlags(id, { carne_en_parrilla: e.target.checked ? 1 : 0 });
+      });
+    });
+
+    ordersList.querySelectorAll('.btn-prepare').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await updateEstado(btn.dataset.id, 'preparando');
+      });
+    });
+
+    ordersList.querySelectorAll('.btn-ready').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await updateEstado(btn.dataset.id, 'listo');
       });
     });
 
