@@ -7,9 +7,10 @@
 (function () {
   'use strict';
 
-  const TOKEN_KEY = 'puro_sabor_admin_token';
+  const TOKEN_KEY = 'puro_sabor_auxiliar_token';
+  const USER_KEY = 'puro_sabor_auxiliar_user';
   const API = {
-    login:      '/api/admin/login',
+    login:      '/api/admin/auxiliar/login',
     productos:  '/api/productos?limit=200',
     categorias: '/api/categorias',
     mesas:      '/api/mesas',
@@ -22,6 +23,7 @@
 
   // ─── STATE ─────────────────────────────────────────────────
   let token       = localStorage.getItem(TOKEN_KEY) || null;
+  let userData    = JSON.parse(localStorage.getItem(USER_KEY) || 'null');
   let productos   = [];
   let categorias  = [];
   let mesas       = [];
@@ -75,6 +77,9 @@
   function showApp() {
     loginScreen.style.display = 'none';
     posApp.style.display = 'flex';
+    if (userData && userData.nombre) {
+      document.getElementById('user-name-display').textContent = userData.nombre;
+    }
     loadAll();
     connectSocket();
     timerInterval = setInterval(updateTimers, 1000);
@@ -94,7 +99,9 @@
       const data = await res.json();
       if (data.success) {
         token = data.token;
+        userData = data.user;
         localStorage.setItem(TOKEN_KEY, token);
+        localStorage.setItem(USER_KEY, JSON.stringify(userData));
         showApp();
       } else {
         showLoginError(data.message || 'Credenciales incorrectas');
@@ -115,7 +122,9 @@
   btnLogout.addEventListener('click', () => {
     if (confirm('¿Salir del sistema?')) {
       localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
       token = null;
+      userData = null;
       carrito = [];
       showLogin();
     }

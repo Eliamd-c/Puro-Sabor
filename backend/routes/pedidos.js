@@ -334,4 +334,78 @@ router.get('/movimientos', verificarJWT, async (req, res, next) => {
   }
 });
 
+// ─── GET /api/pedidos-historial — Obtener historial de cambios (ADMIN) ──────
+router.get('/historial', verificarJWT, async (req, res, next) => {
+  try {
+    const rows = await dbAsync.all(`
+      SELECT *
+      FROM pedidos_historial
+      ORDER BY creado_en DESC
+      LIMIT 500
+    `);
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ─── GET /api/reportes — Obtener reportes (ADMIN) ──────────────────────────
+router.get('/reportes', verificarJWT, async (req, res, next) => {
+  try {
+    // Top 10 productos más vendidos
+    const topProducts = await dbAsync.all(`
+      SELECT
+        p.id,
+        p.nombre,
+        COUNT(*) as cantidad,
+        SUM(CAST(json_extract(pe.items_json, '$[*].cantidad') AS FLOAT)) as total_qty
+      FROM productos p
+      LEFT JOIN pedidos pe ON pe.items_json LIKE '%' || p.nombre || '%'
+      WHERE pe.estado = 'pagado'
+      GROUP BY p.id, p.nombre
+      ORDER BY total_qty DESC
+      LIMIT 10
+    `);
+
+    // Cambios por usuario
+    const changesByUser = await dbAsync.all(`
+      SELECT
+        usuario_nombre,
+        COUNT(*) as cambios,
+        MAX(creado_en) as ultimo_cambio
+      FROM pedidos_historial
+      GROUP BY usuario_nombre
+      ORDER BY cambios DESC
+    `);
+
+    // Total de ventas por día (últimos 7 días)
+    const salesByDay = await dbAsync.all(`
+      SELECT
+        DATE(creado_en) as fecha,
+        COUNT(*) as total_pedidos,
+        SUM(total) as venta_total
+      FROM pedidos
+      WHERE estado = 'pagado'
+        AND creado_en >= datetime('now', '-7 days')
+      GROUP BY DATE(creado_en)
+      ORDER BY fecha DESC
+    `);
+
+    res.json({
+      success: true,
+      data: {
+        topProducts: topProducts.map(p => ({
+          id: p.id,
+          nombre: p.nombre,
+          cantidad: p.total_qty || 0
+        })),
+        changesByUser,
+        salesByDay
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;

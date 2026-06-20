@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Puro Sabor | Panel Administrativo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/admin/admin.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+</head>
+<body>
+
+  <!-- ── LOGIN SCREEN ─────────────────────────────────────── -->
+  <div id="login-screen" class="login-screen">
+    <div class="login-card">
+      <div class="login-logo">🔑</div>
+      <h1>Puro Sabor</h1>
+      <p class="login-subtitle">Panel Administrativo</p>
+      <form id="login-form">
+        <div class="input-group">
+          <label>Usuario</label>
+          <input type="text" id="input-usuario" placeholder="usuario" autocomplete="username" required>
+        </div>
+        <div class="input-group">
+          <label>Contraseña</label>
+          <input type="password" id="input-password" placeholder="••••••••" autocomplete="current-password" required>
+        </div>
+        <div id="login-error" class="login-error" style="display:none;"></div>
+        <button type="submit" id="btn-ingresar">Ingresar</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── ADMIN DASHBOARD ──────────────────────────────────────── -->
+  <div id="admin-app" class="admin-app" style="display:none;">
+
+    <!-- SIDEBAR -->
+    <aside class="admin-sidebar">
+      <div class="sidebar-brand">
+        <span>🔑</span>
+        <h2>Admin</h2>
+      </div>
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-page="dashboard">
+          <span>📊</span>
+          <span>Dashboard</span>
+        </button>
+        <button class="nav-item" data-page="pedidos">
+          <span>📋</span>
+          <span>Pedidos</span>
+        </button>
+        <button class="nav-item" data-page="auditoria">
+          <span>🔍</span>
+          <span>Auditoría</span>
+        </button>
+        <button class="nav-item" data-page="reportes">
+          <span>📈</span>
+          <span>Reportes</span>
+        </button>
+      </nav>
+      <div class="sidebar-footer">
+        <button id="btn-logout" class="btn-logout-sidebar">🚪 Salir</button>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="admin-main">
+
+      <!-- HEADER -->
+      <header class="admin-header">
+        <div class="header-title">
+          <h1 id="page-title">Dashboard</h1>
+          <p id="page-subtitle">Control y auditoría de pedidos</p>
+        </div>
+        <div class="header-right">
+          <span id="current-time" class="current-time">--:--</span>
+          <button id="btn-export" class="btn-export" title="Exportar datos">📥 Exportar</button>
+        </div>
+      </header>
+
+      <!-- CONTENT AREA -->
+      <div class="admin-content">
+
+        <!-- ════ DASHBOARD PAGE ════ -->
+        <div class="page-content active" data-page="dashboard">
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-icon">📦</div>
+              <div class="stat-info">
+                <div class="stat-label">Pedidos Hoy</div>
+                <div class="stat-value" id="stat-total">0</div>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">⏳</div>
+              <div class="stat-info">
+                <div class="stat-label">Pendientes</div>
+                <div class="stat-value" id="stat-pending">0</div>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">💰</div>
+              <div class="stat-info">
+                <div class="stat-label">Venta Total</div>
+                <div class="stat-value" id="stat-revenue">$0</div>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">✏️</div>
+              <div class="stat-info">
+                <div class="stat-label">Cambios Hoy</div>
+                <div class="stat-value" id="stat-changes">0</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="dashboard-grid">
+            <div class="dashboard-section">
+              <h3>Pedidos Recientes</h3>
+              <div id="recent-orders" class="orders-mini-list"></div>
+            </div>
+            <div class="dashboard-section">
+              <h3>Cambios Recientes</h3>
+              <div id="recent-changes" class="changes-mini-list"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ════ PEDIDOS PAGE ════ -->
+        <div class="page-content" data-page="pedidos">
+          <div class="filters-bar">
+            <input type="text" id="search-orders" placeholder="🔍 Buscar por cliente, mesa, ID..." class="search-input">
+            <select id="filter-status" class="filter-select">
+              <option value="">Todos los estados</option>
+              <option value="pendiente">Pendientes</option>
+              <option value="preparando">Preparando</option>
+              <option value="listo">Listos</option>
+              <option value="entregado">Entregados</option>
+              <option value="pagado">Pagados</option>
+            </select>
+            <input type="date" id="filter-date" class="filter-select">
+          </div>
+          <div id="orders-table" class="orders-table"></div>
+        </div>
+
+        <!-- ════ AUDITORIA PAGE ════ -->
+        <div class="page-content" data-page="auditoria">
+          <div class="filters-bar">
+            <input type="text" id="audit-search" placeholder="🔍 Buscar por pedido ID..." class="search-input">
+            <select id="audit-type" class="filter-select">
+              <option value="">Todos los tipos</option>
+              <option value="edicion">Ediciones</option>
+              <option value="estado">Cambios de estado</option>
+            </select>
+            <input type="date" id="audit-date" class="filter-select">
+          </div>
+          <div id="audit-timeline" class="audit-timeline"></div>
+        </div>
+
+        <!-- ════ REPORTES PAGE ════ -->
+        <div class="page-content" data-page="reportes">
+          <div class="reportes-grid">
+            <div class="reporte-section">
+              <h3>Top 10 Productos</h3>
+              <div id="top-products" class="reporte-list"></div>
+            </div>
+            <div class="reporte-section">
+              <h3>Cambios por Mesera</h3>
+              <div id="changes-by-user" class="reporte-list"></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </main>
+
+  </div>
+
+  <!-- TOAST -->
+  <div id="toast" class="toast" style="display:none;"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/admin/admin.js"></script>
+
+</body>
+</html>

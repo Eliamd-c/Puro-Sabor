@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const dbAsync = require('../config/database-promise');
 const authService = require('../services/authService');
 const validate = require('../middleware/validate');
 const schemas = require('../schemas');
@@ -46,6 +47,48 @@ router.post('/logout', (req, res) => {
     success: true,
     message: 'Sesión cerrada con éxito.'
   });
+});
+
+// ─── AUXILIAR LOGIN ───────────────────────────────────────────────
+router.post('/auxiliar/login', loginLimiter, validate(schemas.loginSchema), async (req, res, next) => {
+  try {
+    const { usuario, password } = req.validatedBody;
+    const bcrypt = require('bcryptjs');
+    const jwt = require('jsonwebtoken');
+
+    const auxiliar = await dbAsync.get(
+      'SELECT * FROM auxiliares_venta WHERE usuario = ? AND activo = 1',
+      [usuario]
+    );
+
+    if (!auxiliar) {
+      return res.status(401).json({ success: false, error: 'Credenciales incorrectas.' });
+    }
+
+    const isMatch = await bcrypt.compare(password, auxiliar.password_hash);
+    if (!isMatch) {
+      return res.status(401).json({ success: false, error: 'Credenciales incorrectas.' });
+    }
+
+    await dbAsync.run(
+      'UPDATE auxiliares_venta SET last_login = CURRENT_TIMESTAMP WHERE id = ?',
+      [auxiliar.id]
+    );
+
+    const token = jwt.sign(
+      { id: auxiliar.id, usuario: auxiliar.usuario, nombre: auxiliar.nombre, role: 'auxiliar' },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    res.json({
+      success: true,
+      token,
+      user: { id: auxiliar.id, usuario: auxiliar.usuario, nombre: auxiliar.nombre }
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 module.exports = router;
