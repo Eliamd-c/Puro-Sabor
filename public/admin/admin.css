@@ -385,7 +385,7 @@ html, body {
 
 .orders-table-header {
   display: grid;
-  grid-template-columns: 60px 1fr 1fr 100px 120px 80px;
+  grid-template-columns: 60px 1fr 1fr 100px 120px 80px 60px;
   gap: 12px;
   padding: 14px 16px;
   background: var(--surface2);
@@ -399,18 +399,39 @@ html, body {
 
 .orders-table-row {
   display: grid;
-  grid-template-columns: 60px 1fr 1fr 100px 120px 80px;
+  grid-template-columns: 60px 1fr 1fr 100px 120px 80px 60px;
   gap: 12px;
   padding: 14px 16px;
   border-bottom: 1px solid var(--border);
   align-items: center;
   font-size: 13px;
-  cursor: pointer;
   transition: background 0.2s;
 }
 
 .orders-table-row:hover {
   background: var(--surface2);
+}
+
+.order-actions {
+  display: flex;
+  justify-content: center;
+}
+
+.btn-delete-order {
+  background: rgba(231, 76, 60, 0.2);
+  border: 1px solid rgba(231, 76, 60, 0.4);
+  color: #e74c3c;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-delete-order:hover {
+  background: rgba(231, 76, 60, 0.3);
+  border-color: #e74c3c;
+  transform: scale(1.1);
 }
 
 .order-id-col {

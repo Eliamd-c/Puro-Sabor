@@ -334,6 +334,30 @@ router.get('/movimientos', verificarJWT, async (req, res, next) => {
   }
 });
 
+// ─── DELETE /api/pedidos/:id — Eliminar un pedido (ADMIN) ──────────────────
+router.delete('/:id', verificarJWT, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const pedido = await dbAsync.get('SELECT * FROM pedidos WHERE id = ?', [id]);
+    if (!pedido) {
+      return res.status(404).json({ success: false, error: 'Pedido no encontrado' });
+    }
+
+    await dbAsync.run('DELETE FROM pedidos WHERE id = ?', [id]);
+    await dbAsync.run('DELETE FROM pedidos_historial WHERE pedido_id = ?', [id]);
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to('admin').emit('pedido_eliminado', { id });
+    }
+
+    res.json({ success: true, message: 'Pedido eliminado correctamente', id });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // ─── GET /api/pedidos-historial — Obtener historial de cambios (ADMIN) ──────
 router.get('/historial', verificarJWT, async (req, res, next) => {
   try {

@@ -205,6 +205,7 @@ class AdminApp {
         <div>Total</div>
         <div>Estado</div>
         <div>Cambios</div>
+        <div>Acciones</div>
       </div>
     `;
 
@@ -212,13 +213,16 @@ class AdminApp {
       const lugar = p.tipo_pedido === 'local' ? `Mesa ${p.mesa_numero}` : (p.tipo_pedido === 'domicilio' ? `${p.direccion_domicilio}` : 'Para llevar');
       const cambios = this.allHistorial.filter(h => h.pedido_id === p.id).length;
       return `
-        <div class="orders-table-row" onclick="app.openPedidoDetail(${p.id})">
+        <div class="orders-table-row">
           <div class="order-id-col">#${p.id}</div>
           <div class="order-client-col">${p.nombre_cliente || '-'}</div>
           <div>${lugar}</div>
           <div class="order-total">$${(p.total || 0).toFixed(2)}</div>
           <div class="order-status status-${p.estado}">${p.estado}</div>
           <div class="order-changes">${cambios}</div>
+          <div class="order-actions">
+            <button class="btn-delete-order" onclick="app.deletePedido(${p.id}, event)" title="Eliminar pedido">🗑</button>
+          </div>
         </div>
       `;
     }).join('');
@@ -251,6 +255,30 @@ class AdminApp {
     const pedido = this.allPedidos.find(p => p.id === id);
     if (!pedido) return;
     this.showToast(`Pedido #${id} seleccionado`);
+  }
+
+  async deletePedido(id, event) {
+    event.stopPropagation();
+    if (!confirm(`¿Eliminar pedido #${id}?`)) return;
+
+    try {
+      const res = await fetch(`/api/pedidos/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${this.token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        this.allPedidos = this.allPedidos.filter(p => p.id !== id);
+        this.renderDashboard();
+        this.renderPedidosTable();
+        this.showToast(`✓ Pedido #${id} eliminado`);
+      } else {
+        this.showToast(`✗ Error al eliminar: ${data.error}`);
+      }
+    } catch (error) {
+      this.showToast('Error de conexión');
+      console.error(error);
+    }
   }
 
   // ─── AUDITORIA ───────────────────────────────────────────────
