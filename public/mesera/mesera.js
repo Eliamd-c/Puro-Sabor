@@ -430,12 +430,18 @@
   function cartKey(prodId, variantId) { return `${prodId}__${variantId ?? 'base'}`; }
 
   function addToCart(prodId, name, variantId, variantName, price) {
+    const isFirstItem = carrito.length === 0;
     const key = cartKey(prodId, variantId);
     const existing = carrito.find(i => i.key === key);
     if (existing) { existing.qty++; } else {
       carrito.push({ key, prodId, name, variantId, variantName, price, qty: 1 });
     }
     renderTicket();
+
+    // Si es el primer producto y es local, abre modal de mesa
+    if (isFirstItem && tipoPedido === 'local') {
+      openMesaModal();
+    }
   }
 
   function changeQty(key, delta) {
@@ -527,19 +533,20 @@
 
   function closeMesaModal() {
     modalMesa.style.display = 'none';
-    mesaSeleccionada = null;
   }
 
-  btnConfirmMesa.addEventListener('click', async () => {
-    if (!mesaSeleccionada || !pendingOrderData) return;
+  btnConfirmMesa.addEventListener('click', () => {
+    if (!mesaSeleccionada) return;
+    mesaSelect.value = mesaSeleccionada;
+    showToast(`✅ Mesa ${mesaSeleccionada} seleccionada`);
     closeMesaModal();
-    pendingOrderData.mesa_numero = mesaSeleccionada;
-    await doSendOrder(pendingOrderData);
-    pendingOrderData = null;
   });
 
   document.querySelectorAll('[data-close="modal-mesa"]').forEach(b => {
-    b.addEventListener('click', closeMesaModal);
+    b.addEventListener('click', () => {
+      mesaSeleccionada = null;
+      closeMesaModal();
+    });
   });
 
   // ─── SEND ORDER ────────────────────────────────────────────
@@ -592,6 +599,12 @@
       return;
     }
 
+    if (tipoPedido === 'local' && !mesaSeleccionada) {
+      showToast('⚠️ Selecciona una mesa primero');
+      openMesaModal();
+      return;
+    }
+
     const items = carrito.map(i => ({
       id: i.variantId || i.prodId,
       nombre: i.variantName ? `${i.name} — ${i.variantName}` : i.name,
@@ -601,7 +614,7 @@
     const total = carrito.reduce((s, i) => s + i.price * i.qty, 0);
 
     const orderData = {
-      mesa_numero: 0,
+      mesa_numero: mesaSeleccionada || 0,
       items,
       total,
       notas,
@@ -611,14 +624,7 @@
       prepagado: prepaidCheck && prepaidCheck.checked ? 1 : 0
     };
 
-    if (tipoPedido === 'local') {
-      // Abre modal si no hay mesa seleccionada
-      pendingOrderData = orderData;
-      openMesaModal();
-    } else {
-      // Para domicilio y recogen, envía directamente
-      await doSendOrder(orderData);
-    }
+    await doSendOrder(orderData);
   });
 
   // ─── RENDER PEDIDOS (Mis Pedidos tab) ──────────────────────
