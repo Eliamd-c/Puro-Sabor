@@ -484,51 +484,7 @@
     });
     ticketSub.textContent = `$${total.toLocaleString('es-CO')}`;
     ticketTotal.textContent = `$${total.toLocaleString('es-CO')}`;
-    updateFab();
   }
-
-  // ─── MOBILE BOTTOM SHEET + FAB ─────────────────────────────
-  const fabCart = document.getElementById('fab-cart');
-  const fabBadge = document.getElementById('fab-badge');
-  const fabTotal = document.getElementById('fab-total');
-  const posTicket = document.getElementById('pos-ticket');
-  const sheetBackdrop = document.getElementById('sheet-backdrop');
-
-  function isMobile() { return window.innerWidth <= 768; }
-
-  function updateFab() {
-    if (!fabCart || !isMobile()) return;
-    const count = carrito.reduce((s, i) => s + i.qty, 0);
-    const total = carrito.reduce((s, i) => s + i.price * i.qty, 0);
-    if (count > 0) {
-      fabBadge.textContent = count;
-      fabBadge.style.display = 'flex';
-      fabTotal.textContent = `$${total.toLocaleString('es-CO')}`;
-      fabTotal.style.display = 'block';
-    } else {
-      fabBadge.style.display = 'none';
-      fabTotal.style.display = 'none';
-    }
-  }
-
-  function openSheet() {
-    if (!posTicket) return;
-    posTicket.classList.add('sheet-open');
-    sheetBackdrop.classList.add('visible');
-    document.body.style.overflow = 'hidden';
-  }
-
-  function closeSheet() {
-    if (!posTicket) return;
-    posTicket.classList.remove('sheet-open');
-    sheetBackdrop.classList.remove('visible');
-    document.body.style.overflow = '';
-  }
-
-  if (fabCart) fabCart.addEventListener('click', openSheet);
-  if (sheetBackdrop) sheetBackdrop.addEventListener('click', closeSheet);
-  const sheetHandle = document.getElementById('sheet-handle');
-  if (sheetHandle) sheetHandle.addEventListener('click', closeSheet);
 
   btnClear.addEventListener('click', () => {
     if (!carrito.length) return;
@@ -589,7 +545,6 @@
         if (prepaidCheck) prepaidCheck.checked = false;
         mesaSelect.value = '';
         renderTicket();
-        closeSheet();
         playNotificationSound();
         const typeLabels = { local: `Mesa ${mesa}`, domicilio: 'Domicilio', recogen: 'Recogen' };
         showToast(`✅ Pedido enviado — ${typeLabels[tipoPedido] || 'Enviado'}`);

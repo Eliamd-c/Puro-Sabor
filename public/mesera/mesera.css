@@ -468,7 +468,7 @@ html, body {
   .pos-app { height: auto; min-height: 100vh; overflow: visible; }
   .tab-content { overflow: visible; }
 
-  .pos-topbar { height: 48px; padding: 0 10px; gap: 8px; }
+  .pos-topbar { height: 48px; padding: 0 10px; gap: 8px; position: sticky; top: 0; z-index: 20; }
   .topbar-brand span { font-size: 18px; }
   .topbar-brand h2 { display: none; }
   .topbar-search { max-width: 160px; padding: 6px 10px; }
@@ -476,95 +476,27 @@ html, body {
   .topbar-tab { padding: 6px 10px; font-size: 11px; }
   .btn-logout-top { padding: 5px 10px; font-size: 11px; }
 
-  /* ── FULL-HEIGHT PRODUCTS + BOTTOM SHEET TICKET ────── */
+  /* ── VERTICAL STACK: PRODUCTS + TICKET ────── */
   .pos-body { flex-direction: column; overflow: visible; }
   .pos-left { flex: none; height: auto; overflow: visible; }
   .pos-ticket {
-    position: fixed;
-    bottom: 0; left: 0; right: 0;
-    height: 85vh;
-    max-height: 85vh;
+    position: static;
+    width: 100%;
+    height: auto;
     border-left: none;
-    border-top: none;
-    border-radius: 20px 20px 0 0;
-    box-shadow: 0 -10px 40px rgba(0,0,0,0.5);
-    transform: translateY(100%);
-    transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-    z-index: 60;
-    overflow: hidden;
-  }
-  .pos-ticket.sheet-open {
-    transform: translateY(0);
+    border-top: 1px solid var(--border);
+    border-radius: 0;
+    box-shadow: none;
+    transform: none;
+    transition: none;
+    z-index: auto;
+    overflow: visible;
   }
 
-  /* Bottom sheet backdrop */
-  .sheet-backdrop {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.5);
-    z-index: 55;
-  }
-  .sheet-backdrop.visible { display: block; }
-
-  /* Drag handle on ticket */
-  .sheet-handle {
-    display: flex;
-    justify-content: center;
-    padding: 10px 0 4px;
-    cursor: grab;
-  }
-  .sheet-handle::after {
-    content: '';
-    width: 40px; height: 4px;
-    background: var(--muted);
-    border-radius: 4px;
-  }
-
-  /* Floating cart button */
-  .fab-cart {
-    display: flex !important;
-    position: fixed;
-    bottom: 20px; right: 16px;
-    width: 60px; height: 60px;
-    border-radius: 50%;
-    background: var(--brand);
-    color: white;
-    border: none;
-    box-shadow: 0 6px 20px rgba(192,57,43,0.5);
-    align-items: center; justify-content: center;
-    font-size: 24px;
-    cursor: pointer;
-    z-index: 50;
-    transition: transform 0.2s, box-shadow 0.2s;
-  }
-  .fab-cart:active { transform: scale(0.9); }
-  .fab-cart .fab-badge {
-    position: absolute;
-    top: -2px; right: -2px;
-    background: #27ae60;
-    color: white;
-    font-size: 12px; font-weight: 800;
-    min-width: 22px; height: 22px;
-    border-radius: 11px;
-    display: flex; align-items: center; justify-content: center;
-    padding: 0 5px;
-  }
-  .fab-cart .fab-total {
-    position: absolute;
-    bottom: -8px; left: 50%;
-    transform: translateX(-50%);
-    background: var(--surface);
-    border: 1px solid var(--border);
-    color: var(--brand);
-    font-size: 10px; font-weight: 800;
-    padding: 2px 8px;
-    border-radius: 10px;
-    white-space: nowrap;
-  }
-
-  /* Hide fab when sheet is open */
-  .pos-ticket.sheet-open ~ .fab-cart { display: none !important; }
+  /* Hide bottom sheet elements */
+  .sheet-backdrop { display: none !important; }
+  .sheet-handle { display: none !important; }
+  .fab-cart { display: none !important; }
 
   /* COMPACT CATEGORY NAV */
   .cat-nav { padding: 8px 10px; gap: 6px; }
