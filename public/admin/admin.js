@@ -1,5 +1,6 @@
 // ════════════════════════════════════════════════════════════════
-// PURO SABOR — ADMIN DASHBOARD
+// PURO SABOR — ADMIN DASHBOARD (MEJORADO)
+// Interfaz profesional con gráficos, búsqueda avanzada y más
 // ════════════════════════════════════════════════════════════════
 
 class AdminApp {
@@ -9,6 +10,7 @@ class AdminApp {
     this.currentPage = 'dashboard';
     this.allPedidos = [];
     this.allHistorial = [];
+    this.charts = {};
     this.init();
   }
 
@@ -71,23 +73,20 @@ class AdminApp {
 
   // ─── EVENT LISTENERS ─────────────────────────────────────────
   setupEventListeners() {
-    // Logout
     document.getElementById('btn-logout').addEventListener('click', () => this.logout());
 
-    // Navigation
     document.querySelectorAll('.nav-item').forEach(btn => {
       btn.addEventListener('click', (e) => this.switchPage(e.currentTarget.dataset.page));
     });
 
-    // Export
     document.getElementById('btn-export').addEventListener('click', () => this.exportData());
 
-    // Filters - Pedidos
+    // Pedidos filters
     document.getElementById('search-orders').addEventListener('input', () => this.filterPedidos());
     document.getElementById('filter-status').addEventListener('change', () => this.filterPedidos());
     document.getElementById('filter-date').addEventListener('change', () => this.filterPedidos());
 
-    // Filters - Auditoría
+    // Auditoria filters
     document.getElementById('audit-search').addEventListener('input', () => this.filterAuditoria());
     document.getElementById('audit-type').addEventListener('change', () => this.filterAuditoria());
     document.getElementById('audit-date').addEventListener('change', () => this.filterAuditoria());
@@ -101,7 +100,6 @@ class AdminApp {
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
     document.querySelector(`[data-page="${page}"]`).classList.add('active');
 
-    // Update header
     const titles = {
       dashboard: { title: 'Dashboard', subtitle: 'Control y auditoría de pedidos' },
       pedidos: { title: 'Pedidos', subtitle: 'Historial completo de órdenes' },
@@ -111,6 +109,10 @@ class AdminApp {
     const t = titles[page];
     document.getElementById('page-title').textContent = t.title;
     document.getElementById('page-subtitle').textContent = t.subtitle;
+
+    if (page === 'dashboard') {
+      setTimeout(() => this.renderCharts(), 100);
+    }
   }
 
   logout() {
@@ -162,46 +164,121 @@ class AdminApp {
     const totalVentas = todayPedidos.filter(p => p.estado === 'pagado').reduce((s, p) => s + (p.total || 0), 0);
     const cambiosHoy = this.allHistorial.filter(h => h.creado_en?.startsWith(today)).length;
 
-    document.getElementById('stat-total').textContent = todayPedidos.length;
-    document.getElementById('stat-pending').textContent = pendientes;
-    document.getElementById('stat-revenue').textContent = '$' + totalVentas.toFixed(2);
-    document.getElementById('stat-changes').textContent = cambiosHoy;
+    document.getElementById('kpi-total').textContent = todayPedidos.length;
+    document.getElementById('kpi-total-sub').textContent = `${todayPedidos.length} hoy`;
+
+    document.getElementById('kpi-pending').textContent = pendientes;
+    document.getElementById('kpi-pending-sub').textContent = `${pendientes} en cola`;
+
+    document.getElementById('kpi-revenue').textContent = `$${totalVentas.toFixed(0)}`;
+    document.getElementById('kpi-revenue-sub').textContent = `Ingresos hoy`;
+
+    document.getElementById('kpi-changes').textContent = cambiosHoy;
+    document.getElementById('kpi-changes-sub').textContent = `${cambiosHoy} cambios`;
 
     // Recent orders
-    const recentOrders = this.allPedidos.slice(0, 5);
+    const recentOrders = todayPedidos.slice(0, 5);
     const ordersHtml = recentOrders.map(p => `
-      <div class="mini-item">
-        <div class="mini-item-main">
-          <div class="mini-item-id">#${p.id}</div>
-          <div class="mini-item-meta">${p.nombre_cliente || 'Cliente'} • $${p.total || 0}</div>
-        </div>
-        <div class="mini-item-badge status-${p.estado}">${p.estado}</div>
+      <div class="activity-item">
+        <div class="activity-item-id">#${p.id} - ${p.nombre_cliente || 'Cliente'}</div>
+        <div class="activity-item-meta">$${p.total || 0} • <span class="status-badge status-${p.estado}">${p.estado}</span></div>
       </div>
     `).join('');
     document.getElementById('recent-orders').innerHTML = ordersHtml || '<p style="color: var(--muted); font-size: 12px;">Sin pedidos hoy</p>';
 
     // Recent changes
-    const recentChanges = this.allHistorial.slice(0, 5);
+    const recentChanges = this.allHistorial.filter(h => h.creado_en?.startsWith(today)).slice(0, 5);
     const changesHtml = recentChanges.map(h => `
-      <div class="mini-item">
-        <div class="mini-item-main">
-          <div class="mini-item-id">Pedido #${h.pedido_id}</div>
-          <div class="mini-item-meta">${h.tipo_cambio} • ${h.usuario_nombre || 'Sistema'}</div>
-        </div>
-        <div class="mini-item-badge">✓</div>
+      <div class="activity-item">
+        <div class="activity-item-id">Pedido #${h.pedido_id}</div>
+        <div class="activity-item-meta">${h.tipo_cambio} • ${h.usuario_nombre || 'Sistema'}</div>
       </div>
     `).join('');
     document.getElementById('recent-changes').innerHTML = changesHtml || '<p style="color: var(--muted); font-size: 12px;">Sin cambios hoy</p>';
+  }
+
+  // ─── CHARTS ───────────────────────────────────────────────────
+  renderCharts() {
+    const ctx1 = document.getElementById('chart-status')?.getContext('2d');
+    const ctx2 = document.getElementById('chart-revenue')?.getContext('2d');
+
+    if (!ctx1 || !ctx2) return;
+
+    // Chart 1: Orders by status
+    const statusData = {};
+    this.allPedidos.forEach(p => {
+      statusData[p.estado] = (statusData[p.estado] || 0) + 1;
+    });
+
+    if (this.charts.status) this.charts.status.destroy();
+    this.charts.status = new Chart(ctx1, {
+      type: 'doughnut',
+      data: {
+        labels: Object.keys(statusData),
+        datasets: [{
+          data: Object.values(statusData),
+          backgroundColor: ['#f39c12', '#3498db', '#27ae60', '#9b59b6', '#2ecc71'],
+          borderColor: 'var(--surface)',
+          borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: { legend: { position: 'bottom' } }
+      }
+    });
+
+    // Chart 2: Revenue by day (last 7 days)
+    const last7Days = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      last7Days.push(d.toISOString().split('T')[0]);
+    }
+
+    const revenueByDay = {};
+    last7Days.forEach(day => {
+      revenueByDay[day] = this.allPedidos
+        .filter(p => p.creado_en?.startsWith(day) && p.estado === 'pagado')
+        .reduce((sum, p) => sum + (p.total || 0), 0);
+    });
+
+    if (this.charts.revenue) this.charts.revenue.destroy();
+    this.charts.revenue = new Chart(ctx2, {
+      type: 'line',
+      data: {
+        labels: last7Days.map(d => new Date(d).toLocaleDateString('es-ES', { weekday: 'short' })),
+        datasets: [{
+          label: 'Ingresos',
+          data: Object.values(revenueByDay),
+          borderColor: 'var(--brand)',
+          backgroundColor: 'rgba(192, 57, 43, 0.1)',
+          tension: 0.4,
+          fill: true,
+          pointRadius: 4,
+          pointBackgroundColor: 'var(--brand)'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true }
+        }
+      }
+    });
   }
 
   // ─── PEDIDOS TABLE ───────────────────────────────────────────
   renderPedidosTable(filtered = null) {
     const pedidos = filtered || this.allPedidos;
     const headerHtml = `
-      <div class="orders-table-header">
+      <div class="orders-table-modern-header">
         <div>ID</div>
         <div>Cliente</div>
-        <div>Mesa/Dirección</div>
+        <div>Lugar</div>
         <div>Total</div>
         <div>Estado</div>
         <div>Cambios</div>
@@ -210,24 +287,25 @@ class AdminApp {
     `;
 
     const rowsHtml = pedidos.map(p => {
-      const lugar = p.tipo_pedido === 'local' ? `Mesa ${p.mesa_numero}` : (p.tipo_pedido === 'domicilio' ? `${p.direccion_domicilio}` : 'Para llevar');
+      const lugar = p.tipo_pedido === 'local' ? `Mesa ${p.mesa_numero}` : (p.tipo_pedido === 'domicilio' ? p.direccion_domicilio : 'Recogen');
       const cambios = this.allHistorial.filter(h => h.pedido_id === p.id).length;
       return `
-        <div class="orders-table-row">
-          <div class="order-id-col">#${p.id}</div>
-          <div class="order-client-col">${p.nombre_cliente || '-'}</div>
-          <div>${lugar}</div>
+        <div class="orders-table-modern-row">
+          <div class="order-id">#${p.id}</div>
+          <div class="order-client">${p.nombre_cliente || '-'}</div>
+          <div class="order-info">${lugar}</div>
           <div class="order-total">$${(p.total || 0).toFixed(2)}</div>
-          <div class="order-status status-${p.estado}">${p.estado}</div>
-          <div class="order-changes">${cambios}</div>
-          <div class="order-actions">
-            <button class="btn-delete-order" onclick="app.deletePedido(${p.id}, event)" title="Eliminar pedido">🗑</button>
+          <div><span class="status-badge status-${p.estado}">${p.estado}</span></div>
+          <div class="order-info">${cambios}</div>
+          <div style="display:flex;gap:6px;">
+            <button class="btn-delete-order" onclick="app.deletePedido(${p.id}, event)" title="Eliminar">🗑</button>
           </div>
         </div>
       `;
     }).join('');
 
     document.getElementById('orders-table').innerHTML = headerHtml + rowsHtml;
+    document.getElementById('orders-count').textContent = `${pedidos.length} pedidos`;
   }
 
   filterPedidos() {
@@ -236,25 +314,13 @@ class AdminApp {
     const date = document.getElementById('filter-date').value;
 
     let filtered = this.allPedidos.filter(p => {
-      const matchSearch = !search ||
-        p.nombre_cliente?.toLowerCase().includes(search) ||
-        p.id.toString().includes(search) ||
-        p.mesa_numero?.toString().includes(search);
-
+      const matchSearch = !search || p.nombre_cliente?.toLowerCase().includes(search) || p.id.toString().includes(search) || p.mesa_numero?.toString().includes(search);
       const matchStatus = !status || p.estado === status;
-
       const matchDate = !date || p.creado_en?.startsWith(date);
-
       return matchSearch && matchStatus && matchDate;
     });
 
     this.renderPedidosTable(filtered);
-  }
-
-  openPedidoDetail(id) {
-    const pedido = this.allPedidos.find(p => p.id === id);
-    if (!pedido) return;
-    this.showToast(`Pedido #${id} seleccionado`);
   }
 
   async deletePedido(id, event) {
@@ -273,7 +339,7 @@ class AdminApp {
         this.renderPedidosTable();
         this.showToast(`✓ Pedido #${id} eliminado`);
       } else {
-        this.showToast(`✗ Error al eliminar: ${data.error}`);
+        this.showToast(`✗ Error: ${data.error}`);
       }
     } catch (error) {
       this.showToast('Error de conexión');
@@ -294,9 +360,9 @@ class AdminApp {
             campos.push(`
               <div class="audit-change">
                 <div class="audit-change-field">${key}:</div>
-                <div class="audit-change-before">${JSON.stringify(antes[key])}</div>
+                <div class="audit-change-before">${JSON.stringify(antes[key]).substring(0, 20)}</div>
                 <div class="audit-change-arrow">→</div>
-                <div class="audit-change-after">${JSON.stringify(ahora[key])}</div>
+                <div class="audit-change-after">${JSON.stringify(ahora[key]).substring(0, 20)}</div>
               </div>
             `);
           }
@@ -304,15 +370,13 @@ class AdminApp {
       } catch (e) {}
 
       return `
-        <div class="audit-entry">
-          <div class="audit-entry-header">
-            <div class="audit-entry-id">Pedido #${h.pedido_id}</div>
-            <div class="audit-entry-time">${new Date(h.creado_en).toLocaleString()}</div>
+        <div class="audit-item">
+          <div class="audit-item-header">
+            <div class="audit-item-id">Pedido #${h.pedido_id}</div>
+            <div class="audit-item-time">${new Date(h.creado_en).toLocaleString()}</div>
           </div>
-          <div style="font-size: 12px; color: var(--muted); margin-bottom: 8px;">
-            ${h.tipo_cambio} • ${h.usuario_nombre || 'Sistema'} ${h.notas_cambio ? '• ' + h.notas_cambio : ''}
-          </div>
-          <div class="audit-entry-changes">${campos.join('')}</div>
+          <div class="audit-item-type">${h.tipo_cambio} • ${h.usuario_nombre || 'Sistema'}</div>
+          <div class="audit-changes">${campos.join('')}</div>
         </div>
       `;
     }).join('');
@@ -337,21 +401,25 @@ class AdminApp {
 
   // ─── REPORTES ────────────────────────────────────────────────
   renderReportes(data) {
-    // Top products
     const topProducts = data.topProducts || [];
-    const productsHtml = topProducts.slice(0, 10).map(p => `
+    const productsHtml = topProducts.slice(0, 10).map((p, i) => `
       <div class="reporte-item">
-        <div class="reporte-item-name">${p.nombre}</div>
+        <div style="display:flex;align-items:center;flex:1;">
+          <div class="reporte-rank">#${i + 1}</div>
+          <div class="reporte-item-name">${p.nombre}</div>
+        </div>
         <div class="reporte-item-value">${p.cantidad} unid.</div>
       </div>
     `).join('');
     document.getElementById('top-products').innerHTML = productsHtml || '<p style="color: var(--muted); font-size: 12px;">Sin datos</p>';
 
-    // Changes by user
     const changesByUser = data.changesByUser || [];
-    const usersHtml = changesByUser.map(u => `
+    const usersHtml = changesByUser.slice(0, 10).map((u, i) => `
       <div class="reporte-item">
-        <div class="reporte-item-name">${u.usuario_nombre}</div>
+        <div style="display:flex;align-items:center;flex:1;">
+          <div class="reporte-rank">#${i + 1}</div>
+          <div class="reporte-item-name">${u.usuario_nombre}</div>
+        </div>
         <div class="reporte-item-value">${u.cambios} cambios</div>
       </div>
     `).join('');
@@ -368,7 +436,7 @@ class AdminApp {
 
     this.socket.on('nuevo_pedido', (data) => {
       this.loadData();
-      this.showToast(`Nuevo pedido #${data.id} - $${data.total}`);
+      this.showToast(`🔔 Nuevo pedido #${data.id}`);
     });
 
     this.socket.on('pedido_estado_actualizado', (data) => {
@@ -404,7 +472,7 @@ class AdminApp {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Pedidos');
     XLSX.writeFile(wb, `pedidos_${today}.xlsx`);
-    this.showToast('Datos exportados');
+    this.showToast('✓ Datos exportados');
   }
 
   // ─── CLOCK ──────────────────────────────────────────────────

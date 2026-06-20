@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/admin/admin.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 </head>
 <body>
@@ -85,90 +86,148 @@
 
         <!-- ════ DASHBOARD PAGE ════ -->
         <div class="page-content active" data-page="dashboard">
-          <div class="stats-grid">
-            <div class="stat-card">
-              <div class="stat-icon">📦</div>
-              <div class="stat-info">
-                <div class="stat-label">Pedidos Hoy</div>
-                <div class="stat-value" id="stat-total">0</div>
+          <!-- KPI CARDS -->
+          <div class="kpi-grid">
+            <div class="kpi-card kpi-total">
+              <div class="kpi-header">
+                <div class="kpi-icon">📦</div>
+                <div class="kpi-trend" id="trend-total">↑</div>
+              </div>
+              <div class="kpi-content">
+                <div class="kpi-label">Total Pedidos</div>
+                <div class="kpi-value" id="kpi-total">0</div>
+                <div class="kpi-subtitle" id="kpi-total-sub">Hoy</div>
               </div>
             </div>
-            <div class="stat-card">
-              <div class="stat-icon">⏳</div>
-              <div class="stat-info">
-                <div class="stat-label">Pendientes</div>
-                <div class="stat-value" id="stat-pending">0</div>
+
+            <div class="kpi-card kpi-pending">
+              <div class="kpi-header">
+                <div class="kpi-icon">⏳</div>
+                <div class="kpi-trend" id="trend-pending">●</div>
+              </div>
+              <div class="kpi-content">
+                <div class="kpi-label">Pendientes</div>
+                <div class="kpi-value" id="kpi-pending">0</div>
+                <div class="kpi-subtitle" id="kpi-pending-sub">En cola</div>
               </div>
             </div>
-            <div class="stat-card">
-              <div class="stat-icon">💰</div>
-              <div class="stat-info">
-                <div class="stat-label">Venta Total</div>
-                <div class="stat-value" id="stat-revenue">$0</div>
+
+            <div class="kpi-card kpi-revenue">
+              <div class="kpi-header">
+                <div class="kpi-icon">💰</div>
+                <div class="kpi-trend" id="trend-revenue">↑</div>
+              </div>
+              <div class="kpi-content">
+                <div class="kpi-label">Venta Total</div>
+                <div class="kpi-value" id="kpi-revenue">$0</div>
+                <div class="kpi-subtitle" id="kpi-revenue-sub">Hoy</div>
               </div>
             </div>
-            <div class="stat-card">
-              <div class="stat-icon">✏️</div>
-              <div class="stat-info">
-                <div class="stat-label">Cambios Hoy</div>
-                <div class="stat-value" id="stat-changes">0</div>
+
+            <div class="kpi-card kpi-changes">
+              <div class="kpi-header">
+                <div class="kpi-icon">✏️</div>
+                <div class="kpi-trend" id="trend-changes">↑</div>
+              </div>
+              <div class="kpi-content">
+                <div class="kpi-label">Cambios</div>
+                <div class="kpi-value" id="kpi-changes">0</div>
+                <div class="kpi-subtitle" id="kpi-changes-sub">Registrados</div>
               </div>
             </div>
           </div>
 
-          <div class="dashboard-grid">
-            <div class="dashboard-section">
-              <h3>Pedidos Recientes</h3>
-              <div id="recent-orders" class="orders-mini-list"></div>
+          <!-- CHARTS SECTION -->
+          <div class="dashboard-charts">
+            <div class="chart-container">
+              <h3>Ventas por Estado</h3>
+              <canvas id="chart-status"></canvas>
             </div>
-            <div class="dashboard-section">
-              <h3>Cambios Recientes</h3>
-              <div id="recent-changes" class="changes-mini-list"></div>
+            <div class="chart-container">
+              <h3>Ingresos (Últimos 7 días)</h3>
+              <canvas id="chart-revenue"></canvas>
+            </div>
+          </div>
+
+          <!-- RECENT ACTIVITY -->
+          <div class="dashboard-activity">
+            <div class="activity-card">
+              <div class="activity-header">
+                <h3>Pedidos Recientes</h3>
+                <a href="#" onclick="app.switchPage('pedidos'); return false;" class="view-all">Ver todos →</a>
+              </div>
+              <div id="recent-orders" class="activity-list"></div>
+            </div>
+
+            <div class="activity-card">
+              <div class="activity-header">
+                <h3>Cambios Recientes</h3>
+                <a href="#" onclick="app.switchPage('auditoria'); return false;" class="view-all">Ver todos →</a>
+              </div>
+              <div id="recent-changes" class="activity-list"></div>
             </div>
           </div>
         </div>
 
         <!-- ════ PEDIDOS PAGE ════ -->
         <div class="page-content" data-page="pedidos">
-          <div class="filters-bar">
-            <input type="text" id="search-orders" placeholder="🔍 Buscar por cliente, mesa, ID..." class="search-input">
-            <select id="filter-status" class="filter-select">
-              <option value="">Todos los estados</option>
-              <option value="pendiente">Pendientes</option>
-              <option value="preparando">Preparando</option>
-              <option value="listo">Listos</option>
-              <option value="entregado">Entregados</option>
-              <option value="pagado">Pagados</option>
-            </select>
-            <input type="date" id="filter-date" class="filter-select">
+          <div class="pedidos-toolbar">
+            <div class="toolbar-filters">
+              <div class="search-wrapper">
+                <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                <input type="text" id="search-orders" placeholder="Buscar cliente, mesa o ID...">
+              </div>
+              <select id="filter-status" class="filter-select">
+                <option value="">Todos los estados</option>
+                <option value="pendiente">⏳ Pendientes</option>
+                <option value="preparando">👨‍🍳 Preparando</option>
+                <option value="listo">✅ Listos</option>
+                <option value="entregado">🍽️ Entregados</option>
+                <option value="pagado">💳 Pagados</option>
+              </select>
+              <input type="date" id="filter-date" class="filter-select" title="Filtrar por fecha">
+            </div>
+            <div class="toolbar-stats">
+              <span id="orders-count" class="orders-stat">0 pedidos</span>
+            </div>
           </div>
-          <div id="orders-table" class="orders-table"></div>
+          <div id="orders-table" class="orders-table-modern"></div>
         </div>
 
         <!-- ════ AUDITORIA PAGE ════ -->
         <div class="page-content" data-page="auditoria">
-          <div class="filters-bar">
-            <input type="text" id="audit-search" placeholder="🔍 Buscar por pedido ID..." class="search-input">
+          <div class="audit-toolbar">
+            <div class="search-wrapper">
+              <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+              <input type="text" id="audit-search" placeholder="Buscar por pedido ID...">
+            </div>
             <select id="audit-type" class="filter-select">
               <option value="">Todos los tipos</option>
-              <option value="edicion">Ediciones</option>
-              <option value="estado">Cambios de estado</option>
+              <option value="edicion">✏️ Ediciones</option>
+              <option value="estado">🔄 Cambios de estado</option>
             </select>
             <input type="date" id="audit-date" class="filter-select">
           </div>
-          <div id="audit-timeline" class="audit-timeline"></div>
+          <div id="audit-timeline" class="audit-timeline-modern"></div>
         </div>
 
         <!-- ════ REPORTES PAGE ════ -->
         <div class="page-content" data-page="reportes">
           <div class="reportes-grid">
-            <div class="reporte-section">
-              <h3>Top 10 Productos</h3>
-              <div id="top-products" class="reporte-list"></div>
+            <div class="reporte-card">
+              <div class="reporte-header">
+                <h3>🔥 Top 10 Productos</h3>
+                <span class="reporte-badge">Más vendidos</span>
+              </div>
+              <div id="top-products" class="reporte-ranking"></div>
             </div>
-            <div class="reporte-section">
-              <h3>Cambios por Mesera</h3>
-              <div id="changes-by-user" class="reporte-list"></div>
+
+            <div class="reporte-card">
+              <div class="reporte-header">
+                <h3>👥 Actividad por Auxiliar</h3>
+                <span class="reporte-badge">Cambios realizados</span>
+              </div>
+              <div id="changes-by-user" class="reporte-ranking"></div>
             </div>
           </div>
         </div>
@@ -177,6 +236,20 @@
 
     </main>
 
+  </div>
+
+  <!-- MODALS -->
+  <div id="modal-order-detail" class="modal" style="display:none;">
+    <div class="modal-content modal-large">
+      <div class="modal-header">
+        <h2 id="modal-order-title">Detalles del Pedido</h2>
+        <button class="modal-close" onclick="document.getElementById('modal-order-detail').style.display='none';">×</button>
+      </div>
+      <div id="modal-order-body" class="modal-body"></div>
+      <div class="modal-footer">
+        <button onclick="document.getElementById('modal-order-detail').style.display='none';" class="btn-secondary">Cerrar</button>
+      </div>
+    </div>
   </div>
 
   <!-- TOAST -->
