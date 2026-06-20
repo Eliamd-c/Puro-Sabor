@@ -137,6 +137,10 @@
           showBanner('🍽 ¡Pedido listo para entregar!');
         }
         loadPedidos();
+        // Actualiza estado de mesas si el modal está abierto
+        if (modalMesa.style.display === 'flex') {
+          renderMesasModal();
+        }
       });
       socket.on('pedido_flags_actualizado', () => loadPedidos());
     } catch (e) {
@@ -503,21 +507,55 @@
   const btnConfirmMesa = document.getElementById('btn-confirm-mesa');
   let mesaSeleccionada = null;
   let pendingOrderData = null;
+  let mesaStates = {}; // { mesa_numero: { isOccupied, lastState } }
 
-  function renderMesasModal() {
+  async function getMesaStates() {
+    try {
+      const res = await fetch(API.pedidos, { headers: authH() });
+      const data = await res.json();
+      const orders = data.data || [];
+
+      mesaStates = {};
+      mesas.forEach(m => {
+        const hasPendingOrder = orders.some(p =>
+          p.mesa_numero === m.numero &&
+          p.estado !== 'pagado' &&
+          p.estado !== 'cancelado'
+        );
+        const lastOrder = orders
+          .filter(p => p.mesa_numero === m.numero)
+          .sort((a, b) => new Date(b.creado_en) - new Date(a.creado_en))[0];
+
+        mesaStates[m.numero] = {
+          isOccupied: hasPendingOrder,
+          lastState: lastOrder?.estado || null
+        };
+      });
+    } catch (e) {
+      console.warn('Error getting mesa states:', e);
+    }
+  }
+
+  async function renderMesasModal() {
+    await getMesaStates();
     mesaGrid.innerHTML = '';
     mesas.forEach(m => {
-      const isOccupied = m.estado === 'ocupada';
+      const state = mesaStates[m.numero];
+      const isOccupied = state?.isOccupied || false;
+      const lastState = state?.lastState;
       const btn = document.createElement('button');
       btn.className = `mesa-btn ${isOccupied ? 'occupied' : ''} ${mesaSeleccionada === m.numero ? 'selected' : ''}`;
       btn.type = 'button';
       btn.disabled = isOccupied;
-      btn.innerHTML = `<div class="mesa-number">🪑 ${m.numero}</div><div class="mesa-status">${isOccupied ? 'Ocupada' : 'Libre'}</div>`;
+      const statusText = isOccupied ? `Con clientes\n${lastState}` : 'Libre';
+      btn.innerHTML = `<div class="mesa-number">🪑 ${m.numero}</div><div class="mesa-status">${statusText}</div>`;
       btn.addEventListener('click', () => {
         if (!isOccupied) {
           mesaSeleccionada = m.numero;
           renderMesasModal();
           btnConfirmMesa.disabled = false;
+        } else {
+          showToast('⚠️ Esta mesa tiene un pedido abierto');
         }
       });
       mesaGrid.appendChild(btn);
