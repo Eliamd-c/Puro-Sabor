@@ -110,8 +110,15 @@ class AdminApp {
     document.getElementById('page-title').textContent = t.title;
     document.getElementById('page-subtitle').textContent = t.subtitle;
 
+    // Renderizar contenido según página
     if (page === 'dashboard') {
       setTimeout(() => this.renderCharts(), 100);
+    } else if (page === 'pedidos') {
+      this.renderPedidosTable();
+    } else if (page === 'auditoria') {
+      this.renderAuditoria();
+    } else if (page === 'reportes') {
+      // reportes ya se cargó en loadData()
     }
   }
 
