@@ -250,6 +250,50 @@
     <span class="fab-total" id="fab-total" style="display:none;"></span>
   </button>
 
+  <!-- EDIT ORDER MODAL -->
+  <div id="modal-edit-order" class="modal-overlay" style="display:none;">
+    <div class="modal-card" style="max-width:500px;">
+      <div class="modal-head">
+        <h3 id="edit-order-title">Editar Pedido #0</h3>
+        <button class="btn-close-modal" data-close="modal-edit-order">✕</button>
+      </div>
+      <div class="edit-order-body" style="padding:20px;max-height:70vh;overflow-y:auto;">
+        <!-- Cliente -->
+        <div class="input-group">
+          <label>Nombre del cliente</label>
+          <input type="text" id="edit-nombre-cliente" class="order-name-input" placeholder="Nombre...">
+        </div>
+
+        <!-- Mesa/Dirección -->
+        <div class="input-group">
+          <label>Mesa / Dirección</label>
+          <input type="number" id="edit-mesa-numero" class="order-name-input" placeholder="Mesa (0 para llevar)" min="0">
+          <input type="text" id="edit-direccion" class="order-name-input" placeholder="Dirección (si es domicilio)" style="margin-top:8px;">
+        </div>
+
+        <!-- Notas -->
+        <div class="input-group">
+          <label>Notas</label>
+          <textarea id="edit-notas" class="order-name-input" placeholder="Notas especiales..." style="min-height:80px;resize:none;"></textarea>
+        </div>
+
+        <!-- Productos -->
+        <div class="input-group">
+          <label>Productos</label>
+          <div id="edit-items-list" style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:10px;"></div>
+          <button type="button" id="btn-add-product" class="btn-send" style="width:100%;justify-content:center;margin-bottom:10px;">
+            ➕ Agregar Producto
+          </button>
+        </div>
+
+        <!-- Guardar -->
+        <button type="button" id="btn-save-order" class="btn-send" style="width:100%;justify-content:center;">
+          💾 Guardar Cambios
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- SUCCESS TOAST -->
   <div id="toast" class="toast" style="display:none;"></div>
 

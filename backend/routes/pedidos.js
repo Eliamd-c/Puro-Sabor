@@ -209,6 +209,78 @@ router.patch('/:id/flags', verificarJWT, validate(updateFlagsSchema), async (req
   }
 });
 
+// ─── PUT /api/pedidos/:id — Editar un pedido completo ──────────────────────
+const editarPedidoSchema = Joi.object({
+  nombre_cliente: Joi.string().allow('', null).optional(),
+  mesa_numero: Joi.number().integer().min(0).optional(),
+  direccion_domicilio: Joi.string().allow('', null).optional(),
+  notas: Joi.string().allow('', null).optional(),
+  items: Joi.array().items(
+    Joi.object({
+      id: Joi.number().required(),
+      nombre: Joi.string().required(),
+      precio: Joi.number().min(0).required(),
+      cantidad: Joi.number().integer().min(1).required()
+    })
+  ).min(1).optional()
+});
+
+router.put('/:id', verificarJWT, validate(editarPedidoSchema), async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { nombre_cliente, mesa_numero, direccion_domicilio, notas, items } = req.validatedBody;
+
+    // Verificar que el pedido existe
+    const pedido = await dbAsync.get('SELECT * FROM pedidos WHERE id = ?', [id]);
+    if (!pedido) {
+      return res.status(404).json({ success: false, error: 'Pedido no encontrado' });
+    }
+
+    // Preparar updates dinámicos
+    const updates = ['updated_at = CURRENT_TIMESTAMP'];
+    const params = [];
+
+    if (nombre_cliente !== undefined) {
+      updates.push('nombre_cliente = ?');
+      params.push(nombre_cliente || '');
+    }
+    if (mesa_numero !== undefined) {
+      updates.push('mesa_numero = ?');
+      params.push(mesa_numero);
+    }
+    if (direccion_domicilio !== undefined) {
+      updates.push('direccion_domicilio = ?');
+      params.push(direccion_domicilio || '');
+    }
+    if (notas !== undefined) {
+      updates.push('notas = ?');
+      params.push(notas || '');
+    }
+    if (items && items.length > 0) {
+      const total = items.reduce((s, i) => s + (i.precio * i.cantidad), 0);
+      updates.push('items_json = ?');
+      updates.push('total = ?');
+      params.push(JSON.stringify(items));
+      params.push(total);
+    }
+
+    params.push(id);
+    await dbAsync.run(
+      `UPDATE pedidos SET ${updates.join(', ')} WHERE id = ?`,
+      params
+    );
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to('admin').emit('pedido_actualizado', { id, ...req.validatedBody });
+    }
+
+    res.json({ success: true, message: 'Pedido actualizado correctamente', id });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // ─── GET /api/pedidos/movimientos — Historial de movimientos de inventario ──
 router.get('/movimientos', verificarJWT, async (req, res, next) => {
   try {
