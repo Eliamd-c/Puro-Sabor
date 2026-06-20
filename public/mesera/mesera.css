@@ -429,6 +429,15 @@ html, body {
 .modal-options { padding: 16px; display: flex; flex-direction: column; gap: 8px; }
 
 /* MESA SELECTION MODAL */
+.mesa-grid {
+  display: grid !important;
+  grid-template-columns: repeat(3, 1fr) !important;
+  gap: 12px !important;
+  padding: 20px !important;
+  min-height: 250px;
+  width: 100%;
+}
+
 .mesa-btn {
   position: relative;
   padding: 16px;
