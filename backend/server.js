@@ -329,6 +329,9 @@ app.use('/mesa', express.static(path.join(__dirname, '..', 'public', 'mesa')));
 app.use('/mesera', express.static(path.join(__dirname, '..', 'public', 'mesera')));
 app.use('/auxiliar-de-venta', express.static(path.join(__dirname, '..', 'public', 'mesera')));
 
+// Módulo Cocina (KDS) en '/cocina'
+app.use('/cocina', express.static(path.join(__dirname, '..', 'public', 'cocina')));
+
 // Módulo Admin en '/admin'
 app.use('/admin', express.static(path.join(__dirname, '..', 'admin')));
 
@@ -353,6 +356,14 @@ app.get('/auxiliar-de-venta', (req, res) => {
 });
 app.get('/auxiliar-de-venta/*', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'mesera', 'index.html'));
+});
+
+// Cocina (KDS)
+app.get('/cocina', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'cocina', 'index.html'));
+});
+app.get('/cocina/*', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'cocina', 'index.html'));
 });
 
 // Admin: rutas específicas de administración

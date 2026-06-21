@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Puro Sabor | Cocina</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/cocina/cocina.css">
+</head>
+<body>
+
+  <!-- ── LOGIN ─────────────────────────────────── -->
+  <div id="login-screen" class="login-screen">
+    <div class="login-card">
+      <div class="login-logo">👨‍🍳</div>
+      <h1>Cocina</h1>
+      <p class="login-subtitle">Pantalla de Pedidos · Puro Sabor</p>
+      <form id="login-form">
+        <div class="input-group">
+          <label>Usuario</label>
+          <input type="text" id="input-usuario" placeholder="usuario" autocomplete="username" required>
+        </div>
+        <div class="input-group">
+          <label>Contraseña</label>
+          <input type="password" id="input-password" placeholder="••••••••" autocomplete="current-password" required>
+        </div>
+        <div id="login-error" class="login-error" style="display:none;"></div>
+        <button type="submit" id="btn-ingresar">Entrar a Cocina</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── KDS APP ──────────────────────────────── -->
+  <div id="kds-app" class="kds-app" style="display:none;">
+    <header class="kds-topbar">
+      <div class="kds-brand">
+        <span>👨‍🍳</span>
+        <h2>Cocina</h2>
+        <span id="conn-dot" class="conn-dot" title="Conexión"></span>
+      </div>
+      <div class="kds-actions">
+        <button id="btn-sound" class="kds-btn-icon" title="Sonido de avisos">🔔</button>
+        <button id="btn-refresh" class="kds-btn-icon" title="Refrescar">↻</button>
+        <button id="btn-logout" class="kds-btn-logout">Salir</button>
+      </div>
+    </header>
+
+    <div class="kds-board">
+      <section class="kds-col" data-col="pendiente">
+        <div class="kds-col-head pendiente">🔴 Pendientes <span class="kds-count" id="count-pendiente">0</span></div>
+        <div class="kds-col-body" id="col-pendiente"></div>
+      </section>
+      <section class="kds-col" data-col="preparando">
+        <div class="kds-col-head preparando">🟡 En preparación <span class="kds-count" id="count-preparando">0</span></div>
+        <div class="kds-col-body" id="col-preparando"></div>
+      </section>
+      <section class="kds-col" data-col="listo">
+        <div class="kds-col-head listo">🟢 Listos para entregar <span class="kds-count" id="count-listo">0</span></div>
+        <div class="kds-col-body" id="col-listo"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Área de impresión de comanda (solo visible al imprimir) -->
+  <div id="print-area"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/cocina/cocina.js"></script>
+</body>
+</html>
