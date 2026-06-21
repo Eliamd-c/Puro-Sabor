@@ -318,6 +318,7 @@ class AdminApp {
           <div><span class="status-badge status-${p.estado}">${p.estado}</span></div>
           <div class="order-info">${cambios}</div>
           <div style="display:flex;gap:6px;">
+            <button class="btn-view-order" onclick="app.viewPedido(${p.id})" title="Ver detalle">👁</button>
             <button class="btn-delete-order" onclick="app.deletePedido(${p.id}, event)" title="Eliminar">🗑</button>
           </div>
         </div>
@@ -365,6 +366,114 @@ class AdminApp {
       this.showToast('Error de conexión');
       console.error(error);
     }
+  }
+
+  // ─── VER DETALLE PEDIDO ──────────────────────────────────────
+  viewPedido(id) {
+    const pedido = this.allPedidos.find(p => p.id === id);
+    if (!pedido) return;
+
+    const items = pedido.items || [];
+    const historial = this.allHistorial.filter(h => h.pedido_id === id);
+
+    const fecha = pedido.creado_en
+      ? new Date(pedido.creado_en).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' })
+      : '—';
+
+    const lugarMap = {
+      local: `Mesa ${pedido.mesa_numero || '—'}`,
+      domicilio: pedido.direccion_domicilio || 'Sin dirección',
+      recogen: 'Para recoger'
+    };
+    const lugar = lugarMap[pedido.tipo_pedido] || `Mesa ${pedido.mesa_numero || '—'}`;
+
+    const tipoIcon = { local: '🏪', domicilio: '🏍', recogen: '🛍' }[pedido.tipo_pedido] || '📋';
+
+    const itemsHtml = items.length
+      ? items.map(i => `
+          <div class="detail-item-row">
+            <span class="detail-item-qty">${i.cantidad}x</span>
+            <span class="detail-item-name">${i.nombre}</span>
+            <span class="detail-item-price">$${((i.precio || 0) * i.cantidad).toLocaleString('es-CO')}</span>
+          </div>`).join('')
+      : '<p style="color:var(--muted);font-size:13px;">Sin items registrados</p>';
+
+    const historialHtml = historial.length
+      ? historial.map(h => {
+          const when = new Date(h.creado_en).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' });
+          return `
+            <div class="detail-audit-row">
+              <span class="detail-audit-who">👤 ${h.usuario_nombre || 'Sistema'}</span>
+              <span class="detail-audit-type">${h.tipo_cambio}</span>
+              <span class="detail-audit-when">${when}</span>
+            </div>`;
+        }).join('')
+      : '<p style="color:var(--muted);font-size:13px;">Sin modificaciones registradas</p>';
+
+    const creadoPor = pedido.creado_por || 'QR / Cliente';
+    const metodo = pedido.metodo_pago || '—';
+    const notas = pedido.notas || '—';
+    const prepagado = pedido.prepagado ? '✅ Sí' : 'No';
+
+    document.getElementById('modal-order-title').textContent = `Pedido #${pedido.id}`;
+    document.getElementById('modal-order-body').innerHTML = `
+      <div class="order-detail-wrap">
+
+        <div class="detail-header-row">
+          <span class="status-badge status-${pedido.estado}">${pedido.estado}</span>
+          <span class="detail-meta">${tipoIcon} ${lugar}</span>
+          <span class="detail-meta">🕐 ${fecha}</span>
+        </div>
+
+        <div class="detail-section">
+          <div class="detail-field">
+            <span class="detail-label">👤 Atendido por</span>
+            <span class="detail-value detail-highlight">${creadoPor}</span>
+          </div>
+          <div class="detail-field">
+            <span class="detail-label">🙍 Cliente</span>
+            <span class="detail-value">${pedido.nombre_cliente || '—'}</span>
+          </div>
+          ${pedido.tipo_pedido === 'domicilio' ? `
+          <div class="detail-field">
+            <span class="detail-label">📍 Dirección</span>
+            <span class="detail-value">${pedido.direccion_domicilio || '—'}</span>
+          </div>` : ''}
+        </div>
+
+        <div class="detail-section">
+          <h4 class="detail-section-title">🛒 Productos</h4>
+          <div class="detail-items-list">${itemsHtml}</div>
+          <div class="detail-total-row">
+            <span>Total</span>
+            <span class="detail-total-amount">$${(pedido.total || 0).toLocaleString('es-CO')}</span>
+          </div>
+        </div>
+
+        <div class="detail-section detail-row-2">
+          <div class="detail-field">
+            <span class="detail-label">📝 Notas</span>
+            <span class="detail-value">${notas}</span>
+          </div>
+          <div class="detail-field">
+            <span class="detail-label">💳 Método de pago</span>
+            <span class="detail-value">${metodo}</span>
+          </div>
+          <div class="detail-field">
+            <span class="detail-label">💰 Prepagado</span>
+            <span class="detail-value">${prepagado}</span>
+          </div>
+        </div>
+
+        <div class="detail-section">
+          <h4 class="detail-section-title">🔍 Historial de cambios</h4>
+          <div class="detail-audit-list">${historialHtml}</div>
+        </div>
+
+      </div>
+    `;
+
+    document.getElementById('modal-order-detail').style.display = 'flex';
   }
 
   // ─── AUDITORIA ───────────────────────────────────────────────

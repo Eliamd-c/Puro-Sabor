@@ -63,10 +63,11 @@ router.post('/crear', verificarJWT, validate(crearPedidoSchema), async (req, res
       if (sesion) sesionId = sesion.id;
     }
 
+    const creado_por = req.admin?.nombre || req.admin?.usuario || 'Sistema';
     const result = await dbAsync.run(
-      `INSERT INTO pedidos (sesion_id, mesa_numero, items_json, total, notas, estado, tipo_pedido, direccion_domicilio, nombre_cliente, prepagado)
-       VALUES (?, ?, ?, ?, ?, 'pendiente', ?, ?, ?, ?)`,
-      [sesionId, mesaNum, JSON.stringify(items), total, notas || '', tipo_pedido || 'local', direccion_domicilio || '', nombre_cliente || '', prepagado || 0]
+      `INSERT INTO pedidos (sesion_id, mesa_numero, items_json, total, notas, estado, tipo_pedido, direccion_domicilio, nombre_cliente, prepagado, creado_por)
+       VALUES (?, ?, ?, ?, ?, 'pendiente', ?, ?, ?, ?, ?)`,
+      [sesionId, mesaNum, JSON.stringify(items), total, notas || '', tipo_pedido || 'local', direccion_domicilio || '', nombre_cliente || '', prepagado || 0, creado_por]
     );
 
     const io = req.app.get('io');

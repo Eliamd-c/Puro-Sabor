@@ -432,6 +432,7 @@ async function inicializarTablas() {
     await pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS metodo_pago VARCHAR(30)`);
     await pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS nombre_cliente VARCHAR(255)`);
     await pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
+    await pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS creado_por VARCHAR(255) DEFAULT ''`);
 
     // Agregar columna viendo si no existe (migracion segura)
     await pool.query(`ALTER TABLE mesas ADD COLUMN IF NOT EXISTS viendo INTEGER DEFAULT 0`);
