@@ -48,16 +48,21 @@ class MesaService {
     return true;
   }
 
-  async createOrder(mesaNumero, items, total) {
+  async createOrder(mesaNumero, items, total, notas, nombre_cliente) {
     const sesion = await this.getSession(mesaNumero);
-    
+
+    const pedidosEnSesion = sesion
+      ? await dbAsync.all('SELECT COUNT(*) as cnt FROM pedidos WHERE sesion_id = ?', [sesion.id])
+      : [{ cnt: 0 }];
+    const ronda = (pedidosEnSesion[0]?.cnt || 0) + 1;
+
     const result = await dbAsync.run(
-      `INSERT INTO pedidos (mesa_numero, sesion_id, items_json, total, estado)
-       VALUES (?, ?, ?, ?, 'pendiente')`,
-      [mesaNumero, sesion ? sesion.id : null, JSON.stringify(items), total]
+      `INSERT INTO pedidos (mesa_numero, sesion_id, items_json, total, notas, nombre_cliente, estado, tipo_pedido, numero_ronda)
+       VALUES (?, ?, ?, ?, ?, ?, 'pendiente', 'local', ?)`,
+      [mesaNumero, sesion ? sesion.id : null, JSON.stringify(items), total, notas || '', nombre_cliente || '', ronda]
     );
-    
-    return result.lastID;
+
+    return { pedidoId: result.lastID, ronda };
   }
 }
 

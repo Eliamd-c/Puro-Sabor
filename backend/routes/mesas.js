@@ -288,29 +288,39 @@ router.patch('/:numero/cerrar', verificarJWT, async (req, res, next) => {
 
 const pedidoSchema = Joi.object({
   items: Joi.array().required(),
-  total: Joi.number().required()
+  total: Joi.number().required(),
+  notas: Joi.string().allow('', null).optional(),
+  nombre_cliente: Joi.string().allow('', null).optional()
 });
 
 // POST /api/mesas/:numero/pedido
 router.post('/:numero/pedido', validate(pedidoSchema), async (req, res, next) => {
   try {
-    const { items, total } = req.validatedBody;
+    const { items, total, notas, nombre_cliente } = req.validatedBody;
     const mesaNumero = req.params.numero;
-    
-    await mesaService.createOrder(mesaNumero, items, total);
-    
+
+    const { pedidoId, ronda } = await mesaService.createOrder(mesaNumero, items, total, notas, nombre_cliente);
+
     const io = req.app.get('io');
     if (io) {
-      io.to('admin').emit('nuevo_pedido', { mesa: mesaNumero, items, total });
+      io.to('admin').emit('nuevo_pedido', {
+        id: pedidoId,
+        mesa: mesaNumero,
+        items,
+        total,
+        notas: notas || '',
+        nombre_cliente: nombre_cliente || '',
+        tipo_pedido: 'local'
+      });
     }
-    
+
     try {
       await waAgent.notificarPedidoMesaAdmin(mesaNumero, items, total);
     } catch (e) {
       console.error('[Mesa] Error al enviar WhatsApp del pedido:', e.message);
     }
-    
-    res.json({ success: true, message: 'Pedido enviado a cocina.' });
+
+    res.json({ success: true, message: 'Pedido enviado a cocina.', data: { ronda } });
   } catch (error) {
     next(error);
   }
