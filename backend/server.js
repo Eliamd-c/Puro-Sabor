@@ -281,6 +281,16 @@ app.get('/api-docs', swaggerUi.setup(swaggerSpecs, {
   }
 }));
 
+// ── Healthcheck (para monitoreo / uptime) ──────────────────────────────────
+app.get('/health', async (req, res) => {
+  try {
+    await dbAsync.get('SELECT 1 AS ok');
+    res.json({ status: 'ok', db: 'up', uptime: Math.round(process.uptime()), ts: new Date().toISOString() });
+  } catch (err) {
+    res.status(503).json({ status: 'degraded', db: 'down', error: err.message });
+  }
+});
+
 // ── Rutas API ──────────────────────────────────────────────────────────────
 const authRoutes = require('./routes/auth');
 const categoriasRoutes = require('./routes/categorias');
@@ -375,4 +385,33 @@ server.listen(PORT, () => {
   console.log(`👉 Panel Admin:    http://localhost:${PORT}/admin`);
   console.log(`👉 Panel Mesas:    http://localhost:${PORT}/admin/mesas`);
   console.log(`==================================================`);
+});
+
+// ── Apagado ordenado (graceful shutdown) ────────────────────────────────────
+let cerrando = false;
+function apagadoOrdenado(signal) {
+  if (cerrando) return;
+  cerrando = true;
+  console.log(`[Server] ${signal} recibido. Cerrando ordenadamente...`);
+
+  // Dejar de aceptar nuevas conexiones HTTP y terminar las en curso
+  server.close(() => {
+    console.log('[Server] Servidor HTTP cerrado.');
+    try { io.close(); } catch (_) {}
+    process.exit(0);
+  });
+
+  // Si algo queda colgado, forzar salida a los 15s
+  setTimeout(() => {
+    console.error('[Server] Cierre forzado tras timeout.');
+    process.exit(1);
+  }, 15000).unref();
+}
+
+process.on('SIGTERM', () => apagadoOrdenado('SIGTERM'));
+process.on('SIGINT', () => apagadoOrdenado('SIGINT'));
+
+// Evitar que una promesa rechazada sin manejar tumbe el proceso
+process.on('unhandledRejection', (reason) => {
+  console.error('[Server] Promesa rechazada sin manejar:', reason?.message || reason);
 });

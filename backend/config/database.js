@@ -7,9 +7,10 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-pool.on('error', (err, client) => {
-  console.error('Error inesperado en PostgreSQL', err);
-  process.exit(-1);
+// Un error en un cliente ocioso NO debe tumbar todo el servidor.
+// El Pool descarta el cliente roto y crea uno nuevo en la siguiente query.
+pool.on('error', (err) => {
+  console.error('[DB] Error en cliente ocioso de PostgreSQL (recuperable):', err.message);
 });
 
 console.log('Conectado a la base de datos PostgreSQL (Supabase).');
