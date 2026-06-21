@@ -176,13 +176,19 @@ class AdminApp {
     }
   }
 
+  // Fecha YYYY-MM-DD en zona horaria de Colombia (no UTC)
+  coDate(ts) {
+    return new Date(ts).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+  }
+
   // ─── DASHBOARD ────────────────────────────────────────────────
   renderDashboard() {
-    const today = new Date().toISOString().split('T')[0];
-    const todayPedidos = this.allPedidos.filter(p => p.creado_en?.startsWith(today));
+    const today = this.coDate(new Date());
+    const esHoy = (ts) => ts && this.coDate(ts) === today;
+    const todayPedidos = this.allPedidos.filter(p => esHoy(p.creado_en));
     const pendientes = todayPedidos.filter(p => p.estado === 'pendiente' || p.estado === 'preparando').length;
     const totalVentas = todayPedidos.filter(p => p.estado === 'pagado').reduce((s, p) => s + (p.total || 0), 0);
-    const cambiosHoy = this.allHistorial.filter(h => h.creado_en?.startsWith(today)).length;
+    const cambiosHoy = this.allHistorial.filter(h => esHoy(h.creado_en)).length;
 
     document.getElementById('kpi-total').textContent = todayPedidos.length;
     document.getElementById('kpi-total-sub').textContent = `${todayPedidos.length} hoy`;
@@ -207,7 +213,7 @@ class AdminApp {
     document.getElementById('recent-orders').innerHTML = ordersHtml || '<p style="color: var(--muted); font-size: 12px;">Sin pedidos hoy</p>';
 
     // Recent changes
-    const recentChanges = this.allHistorial.filter(h => h.creado_en?.startsWith(today)).slice(0, 5);
+    const recentChanges = this.allHistorial.filter(h => esHoy(h.creado_en)).slice(0, 5);
     const changesHtml = recentChanges.map(h => `
       <div class="activity-item">
         <div class="activity-item-id">Pedido #${h.pedido_id}</div>
@@ -254,13 +260,13 @@ class AdminApp {
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
-      last7Days.push(d.toISOString().split('T')[0]);
+      last7Days.push(this.coDate(d));
     }
 
     const revenueByDay = {};
     last7Days.forEach(day => {
       revenueByDay[day] = this.allPedidos
-        .filter(p => p.creado_en?.startsWith(day) && p.estado === 'pagado')
+        .filter(p => p.creado_en && this.coDate(p.creado_en) === day && p.estado === 'pagado')
         .reduce((sum, p) => sum + (p.total || 0), 0);
     });
 
@@ -268,7 +274,7 @@ class AdminApp {
     this.charts.revenue = new Chart(ctx2, {
       type: 'line',
       data: {
-        labels: last7Days.map(d => new Date(d).toLocaleDateString('es-ES', { weekday: 'short' })),
+        labels: last7Days.map(d => new Date(d).toLocaleDateString('es-ES', { weekday: 'short', timeZone: 'UTC' })),
         datasets: [{
           label: 'Ingresos',
           data: Object.values(revenueByDay),
