@@ -1,5 +1,12 @@
-const { Pool } = require('pg');
+const { Pool, types } = require('pg');
 require('dotenv').config();
+
+// IMPORTANTE: node-postgres devuelve las columnas NUMERIC/DECIMAL como TEXTO por defecto
+// (para no perder precisión). Como migramos precio/total a NUMERIC, forzamos que vuelvan
+// a llegar como NÚMERO de JavaScript (igual que antes con REAL), así todo el frontend
+// y los cálculos que hacen .toFixed()/sumas siguen funcionando sin cambios.
+// OID 1700 = NUMERIC.
+types.setTypeParser(1700, (val) => (val === null ? null : parseFloat(val)));
 
 // Configuración del Pool de PostgreSQL conectado a Supabase
 const pool = new Pool({
@@ -487,11 +494,23 @@ async function inicializarTablas() {
     await pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS creado_por VARCHAR(255) DEFAULT ''`);
 
     // Migración de DINERO: REAL (float) → NUMERIC(12,2) para evitar errores de redondeo.
-    // Idempotente: si ya es NUMERIC, es prácticamente un no-op. Envuelto por si falla no rompe el arranque.
+    // Solo se ejecuta si la columna AÚN no es numeric (evita reescribir la tabla en cada reinicio
+    // y choques de bloqueo entre los múltiples procesos de Hostinger).
     try {
-      await pool.query(`ALTER TABLE productos ALTER COLUMN precio TYPE NUMERIC(12,2) USING ROUND(precio::numeric, 2)`);
-      await pool.query(`ALTER TABLE pedidos ALTER COLUMN total TYPE NUMERIC(12,2) USING ROUND(total::numeric, 2)`);
-      console.log('✅ Columnas de dinero verificadas como NUMERIC(12,2).');
+      const colPrecio = await pool.query(
+        `SELECT data_type FROM information_schema.columns WHERE table_name = 'productos' AND column_name = 'precio'`
+      );
+      if (colPrecio.rows[0] && colPrecio.rows[0].data_type !== 'numeric') {
+        await pool.query(`ALTER TABLE productos ALTER COLUMN precio TYPE NUMERIC(12,2) USING ROUND(precio::numeric, 2)`);
+        console.log('✅ productos.precio migrado a NUMERIC(12,2).');
+      }
+      const colTotal = await pool.query(
+        `SELECT data_type FROM information_schema.columns WHERE table_name = 'pedidos' AND column_name = 'total'`
+      );
+      if (colTotal.rows[0] && colTotal.rows[0].data_type !== 'numeric') {
+        await pool.query(`ALTER TABLE pedidos ALTER COLUMN total TYPE NUMERIC(12,2) USING ROUND(total::numeric, 2)`);
+        console.log('✅ pedidos.total migrado a NUMERIC(12,2).');
+      }
     } catch (e) {
       console.error('[DB] Migración money NUMERIC (no crítico):', e.message);
     }
