@@ -18,6 +18,9 @@ const newMenu = `<a href="/admin/dashboard.html" class="menu-item">
         <a href="/admin/chatbots.html" class="menu-item">
           <span>🤖</span> Chatbots IA
         </a>
+        <a href="/admin/" class="menu-item">
+          <span>📊</span> Panel de Ventas
+        </a>
         <a href="/" class="menu-item" target="_blank">
           <span>🍽️</span> Ver Menú Público
         </a>`;
