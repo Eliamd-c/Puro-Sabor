@@ -84,6 +84,7 @@ router.get('/config-ai', verificarJWT, async (req, res, next) => {
     const botMensajeAusencia = await configService.getConfig('bot_mensaje_ausencia') || '';
     const botMenuUrl = await configService.getConfig('bot_menu_url') || '';
     const botSystemPrompt = await configService.getConfig('bot_system_prompt') || '';
+    const botMenuImagen = await configService.getConfig('bot_menu_imagen_url') || '';
 
     res.json({
       success: true,
@@ -93,7 +94,8 @@ router.get('/config-ai', verificarJWT, async (req, res, next) => {
         bot_horario_activo: botHorarioActivo,
         bot_mensaje_ausencia: botMensajeAusencia,
         bot_menu_url: botMenuUrl,
-        bot_system_prompt: botSystemPrompt
+        bot_system_prompt: botSystemPrompt,
+        bot_menu_imagen_url: botMenuImagen
       }
     });
   } catch (err) {
@@ -134,6 +136,28 @@ router.post('/config-ai', verificarJWT, async (req, res, next) => {
       message: 'Configuración de IA guardada con éxito.'
     });
 
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/chatbots/menu-imagen — Subir la imagen del menú que envía el bot cliente
+router.post('/menu-imagen', verificarJWT, upload.single('imagen'), async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, message: 'No se recibió imagen.' });
+    const url = '/uploads/media/' + req.file.filename;
+    await configService.setConfig('bot_menu_imagen_url', url);
+    res.json({ success: true, message: 'Imagen del menú guardada.', url });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/chatbots/menu-imagen — Quitar la imagen del menú
+router.delete('/menu-imagen', verificarJWT, async (req, res, next) => {
+  try {
+    await configService.setConfig('bot_menu_imagen_url', '');
+    res.json({ success: true, message: 'Imagen del menú eliminada.' });
   } catch (err) {
     next(err);
   }

@@ -495,6 +495,45 @@ class WhatsAppBot {
   }
 
   async ejecutarFuncion(name, args) {
+    // Seguridad: el bot cliente SOLO puede usar funciones de lectura
+    const CLIENT_ALLOWED = ['consultarMenuDisponible', 'consultarEstadoPedido'];
+    if (this.botType === 'client' && !CLIENT_ALLOWED.includes(name)) {
+      return { error: 'Función no disponible' };
+    }
+
+    if (name === 'consultarMenuDisponible') {
+      try {
+        const rows = await dbAsync.all(
+          `SELECT p.nombre, p.precio, p.descripcion, c.nombre as categoria
+           FROM productos p JOIN categorias c ON p.categoria_id = c.id
+           WHERE p.activo = 1 AND p.stock > 0
+           ORDER BY c.nombre, p.nombre`
+        );
+        const menu = {};
+        for (const r of rows) {
+          if (!menu[r.categoria]) menu[r.categoria] = [];
+          menu[r.categoria].push({ nombre: r.nombre, precio: parseFloat(r.precio), descripcion: r.descripcion || '' });
+        }
+        return { menu_disponible: menu, nota: 'Solo productos disponibles ahora. Usa estos nombres y precios exactos, nunca inventes.' };
+      } catch (err) { return { error: err.message }; }
+    }
+
+    if (name === 'consultarEstadoPedido') {
+      try {
+        const tel = (args.telefono || '').replace(/\D/g, '');
+        const pedido = await dbAsync.get(
+          `SELECT id, estado, total, mesa_numero, tipo_pedido, creado_en
+           FROM pedidos
+           WHERE (nombre_cliente ILIKE ? OR direccion_domicilio ILIKE ?)
+           ORDER BY creado_en DESC LIMIT 1`,
+          [`%${tel}%`, `%${tel}%`]
+        );
+        if (!pedido) return { encontrado: false, nota: 'No se encontró un pedido reciente con esos datos. Ofrece pasar a un asesor.' };
+        const estados = { pendiente: 'recibido, esperando preparación', preparando: 'en preparación 👨‍🍳', listo: 'listo ✅', entregado: 'entregado', pagado: 'completado' };
+        return { encontrado: true, id: pedido.id, estado: estados[pedido.estado] || pedido.estado, total: parseFloat(pedido.total) };
+      } catch (err) { return { error: err.message }; }
+    }
+
     if (name === 'obtenerInventario') {
       const data = await getInventarioDb();
       return { inventario: data };
@@ -827,6 +866,31 @@ class WhatsAppBot {
     return { error: `Función desconocida: ${name}` };
   }
 
+  // Handoff a humano: pausa el chat, avisa al cliente y alerta a los admins
+  async solicitarAsesorHumano(remoteJid, senderNumber, message, body, motivo) {
+    const msgCliente = '¡Perfecto! 🙋 Te estoy conectando con una persona de nuestro equipo. En un momento te responderán por aquí mismo. Gracias por tu paciencia.';
+    try {
+      await this.client.sendMessage(remoteJid, { text: msgCliente }, { quoted: message });
+      await guardarMensajeHistorial(senderNumber, 'model', msgCliente, this.botType);
+      this.emitMessage({ type: 'out', sender: 'Bot IA (Handoff)', text: msgCliente, time: new Date().toLocaleTimeString() });
+      await pauseChat(senderNumber, message.pushName || 'Cliente', body || motivo);
+      await logChatbotInteraction(senderNumber, message.pushName || 'Cliente', 'handoff', body, msgCliente, { motivo });
+
+      const adminNumbersStr = await getConfig('admin_whatsapp_numbers') || '';
+      const admins = adminNumbersStr.split(',').map(n => n.trim().replace(/^\+/, '')).filter(Boolean);
+      const adminBot = bots.admin?.client;
+      if (adminBot) {
+        const alertMsg = `🔔 *Asistencia Requerida*\nCliente ${senderNumber} (${message.pushName || 'Cliente'})\nMotivo: ${motivo}\nÚltimo mensaje: "${body || '—'}"\n\nIngresa al panel para responderle.`;
+        for (const adminNum of admins) {
+          try { await adminBot.sendMessage(`${adminNum}@s.whatsapp.net`, { text: alertMsg }); } catch (_) {}
+        }
+      }
+      this.io.emit('whatsapp_handoff_requested');
+    } catch (err) {
+      console.error('[WA Agent] Error en solicitarAsesorHumano:', err.message);
+    }
+  }
+
   async procesarMensajeEntrante(message) {
     const remoteJid = message.key.remoteJid;
     const isGroup = remoteJid.endsWith('@g.us');
@@ -887,6 +951,15 @@ class WhatsAppBot {
       const paused = await isChatPaused(senderNumber);
       if (paused) {
         console.log(`[WA Agent client] Chat en pausa para ${senderNumber}. Ignorando IA.`);
+        return;
+      }
+
+      // --- HANDOFF DETERMINÍSTICO POR PALABRA CLAVE (funciona siempre) ---
+      const lower = (body || '').toLowerCase().trim();
+      const pideHumano = /\b(asesor|humano|persona|agente|operador|hablar con (alguien|una persona|un humano)|atenci[oó]n humana)\b/.test(lower);
+      if (pideHumano) {
+        console.log(`[WA Agent client] Handoff por palabra clave de ${senderNumber}.`);
+        await this.solicitarAsesorHumano(remoteJid, senderNumber, message, body, 'El cliente solicitó hablar con una persona.');
         return;
       }
 
@@ -1255,16 +1328,50 @@ class WhatsAppBot {
       const min = colombiaTime.getUTCMinutes().toString().padStart(2, '0');
       const timeStrLocal = `${hour}:${min}`;
 
-      systemInstruction = 
-        'Eres el recepcionista oficial de Puro Sabor.\n' +
+      // Herramientas de lectura para el bot cliente (inventario real + estado de pedido)
+      tools = [{
+        functionDeclarations: [
+          {
+            name: 'consultarMenuDisponible',
+            description: 'Devuelve el menú con productos DISPONIBLES ahora (activos y con stock), con precios reales. Úsalo SIEMPRE antes de dar precios o tomar un pedido.',
+            parameters: { type: SchemaType.OBJECT, properties: {}, required: [] }
+          },
+          {
+            name: 'consultarEstadoPedido',
+            description: 'Consulta el estado del pedido más reciente de un cliente por su número de teléfono.',
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: { telefono: { type: SchemaType.STRING, description: 'Número de teléfono del cliente' } },
+              required: ['telefono']
+            }
+          }
+        ]
+      }];
+
+      systemInstruction =
+        'Eres el ASISTENTE VIRTUAL (un bot 🤖) de Puro Sabor, NO una persona.\n' +
+        'TRANSPARENCIA: Si te preguntan si eres un bot o una persona, responde con honestidad que eres un asistente virtual y que puedes conectarlos con una persona cuando quieran (solo deben escribir "asesor").\n' +
         (customPrompt ? `${customPrompt}\n` : '') +
         ruleSaludo +
         `FECHA Y HORA ACTUAL (Colombia): ${hoyName}, ${timeStrLocal}.\n` +
         'ESTADO: ABIERTO.\n' +
-        'REGLA 2: Para realizar pedidos, ver el menú completo o consultar precios, entrega siempre el enlace de nuestro menú digital: 👉 ' + menuUrl + '. Explica al cliente que toda la plataforma de pedidos está allí para que ordene de forma rápida y segura. No intentes tomar el pedido directamente en este chat.\n' +
-        'REGLA 3 (HANDOFF): Si el cliente pide hablar con un humano, asesor, o pregunta algo que no sabes (no está en la Base de Conocimiento ni en las Promociones), responde ÚNICAMENTE con la palabra exacta: [HUMAN_HANDOFF]. No añadas ningún otro texto.\n' +
-        'REGLA 4 (PROMOCIONES): Si respondes sobre una promoción que tiene imagen publicitaria asociada, DEBES incluir al final exacto de tu respuesta la etiqueta: [SEND_PROMO:id] (por ejemplo, [SEND_PROMO:1]) para que el sistema le envíe la imagen.\n' +
-        'REGLA 5 (MULTIMEDIA): Si respondes basándote en una entrada de la BASE DE CONOCIMIENTO que tiene un [ID:x], DEBES incluir al final de tu respuesta la etiqueta exacta [SEND_MEDIA:x].\n' +
+        'TONO: Cálido, breve y claro. Usa emojis con moderación. Mensajes cortos, fáciles de leer en WhatsApp.\n' +
+        '\n— PRECIOS Y MENÚ —\n' +
+        'REGLA PRECIOS: NUNCA inventes precios ni productos. Usa SIEMPRE la herramienta consultarMenuDisponible para dar precios o disponibilidad reales. Si algo no está en esa lista, no está disponible.\n' +
+        'REGLA MENÚ IMAGEN: Si el cliente pide "el menú", "la carta" o "qué tienen", incluye al final exacto de tu respuesta la etiqueta [SEND_MENU] para enviarle la imagen del menú. También puedes mencionar el enlace: ' + menuUrl + '\n' +
+        '\n— TOMA DE PEDIDOS (el bot arma, un humano confirma) —\n' +
+        'PASO 1: Ayuda al cliente a elegir usando consultarMenuDisponible (productos y precios reales).\n' +
+        'PASO 2: Cuando tenga claro qué quiere, pídele: (a) tipo de pedido (domicilio/recoge/mesa), (b) dirección si es domicilio, (c) nombre, (d) método de pago.\n' +
+        'PASO 3: Muestra un RESUMEN claro: items con cantidades, precios, TOTAL, tipo, dirección/nombre y pago.\n' +
+        'PASO 4: Pide confirmación al cliente. Cuando el cliente confirme, incluye al final exacto de tu respuesta la etiqueta [PEDIDO_BORRADOR] para que una persona del equipo revise y confirme el pedido antes de mandarlo a cocina. Avísale que un asesor lo confirmará en breve.\n' +
+        'NO marques [PEDIDO_BORRADOR] hasta que el cliente confirme el resumen.\n' +
+        '\n— ESTADO DE PEDIDO —\n' +
+        'Si preguntan por su pedido ("¿ya está listo?", "¿dónde va mi pedido?"), usa consultarEstadoPedido con su número.\n' +
+        '\n— HABLAR CON UNA PERSONA —\n' +
+        'REGLA HANDOFF: Si el cliente pide un humano/asesor, o haces algo que no sabes resolver (no está en la Base de Conocimiento ni en las Promociones), responde ÚNICAMENTE con la palabra exacta: [HUMAN_HANDOFF]. No añadas ningún otro texto.\n' +
+        '\n— PROMOCIONES Y MULTIMEDIA —\n' +
+        'REGLA PROMOCIONES: Si respondes sobre una promoción con imagen asociada, incluye al final exacto la etiqueta [SEND_PROMO:id] (ej: [SEND_PROMO:1]).\n' +
+        'REGLA MULTIMEDIA: Si respondes basándote en una entrada de la BASE DE CONOCIMIENTO con [ID:x], incluye al final exacto la etiqueta [SEND_MEDIA:x].\n' +
         promosText +
         ctxText +
         kbText;
@@ -1343,25 +1450,28 @@ class WhatsAppBot {
           const finalText = response.text();
           
           if (finalText.trim().includes('[HUMAN_HANDOFF]')) {
-            await pauseChat(senderNumber, message.pushName || 'Cliente', body);
-            const handoffMsg = 'Un momento por favor, te estoy transfiriendo con un asesor humano. 🧑‍💼';
-            await this.client.sendMessage(remoteJid, { text: handoffMsg }, { quoted: message });
-            await guardarMensajeHistorial(senderNumber, 'model', handoffMsg, this.botType);
-            this.emitMessage({ type: 'out', sender: 'Bot IA (Handoff)', text: handoffMsg, time: new Date().toLocaleTimeString() });
-            
-            // Guardar analítica
-            await logChatbotInteraction(senderNumber, message.pushName || 'Cliente', 'handoff', body, handoffMsg);
+            await this.solicitarAsesorHumano(remoteJid, senderNumber, message, body, 'El asistente no pudo resolver la consulta.');
+            break;
+          }
 
-            // Notify admin via Admin Bot
+          // PEDIDO BORRADOR: el bot armó el pedido, lo pasamos a un humano para confirmar
+          if (finalText.includes('[PEDIDO_BORRADOR]')) {
+            const resumenPedido = finalText.replace(/\[PEDIDO_BORRADOR\]/g, '').trim();
+            // Mostrar el resumen al cliente
+            const clienteMsg = resumenPedido + '\n\n📝 _Un asesor confirmará tu pedido en breve y lo enviará a cocina. ¡Gracias!_';
+            await this.client.sendMessage(remoteJid, { text: clienteMsg }, { quoted: message });
+            await guardarMensajeHistorial(senderNumber, 'model', clienteMsg, this.botType);
+            this.emitMessage({ type: 'out', sender: 'Bot IA (Pedido)', text: clienteMsg, time: new Date().toLocaleTimeString() });
+            // Pausar y alertar a los admins con el detalle del pedido
+            await pauseChat(senderNumber, message.pushName || 'Cliente', resumenPedido);
+            await logChatbotInteraction(senderNumber, message.pushName || 'Cliente', 'pedido_borrador', body, resumenPedido);
             const adminNumbersStr = await getConfig('admin_whatsapp_numbers') || '';
-            const authorizedNumbers = adminNumbersStr.split(',').map(n => n.trim().replace('+', '')).filter(Boolean);
+            const admins = adminNumbersStr.split(',').map(n => n.trim().replace(/^\+/, '')).filter(Boolean);
             const adminBot = bots.admin?.client;
             if (adminBot) {
-              const alertMsg = `🚨 *Asistencia Requerida*\nEl cliente ${senderNumber} necesita ayuda.\nÚltimo mensaje: "${body}"\n\nIngresa al panel web para responderle.`;
-              for (const adminNum of authorizedNumbers) {
-                try {
-                  await adminBot.sendMessage(`${adminNum}@s.whatsapp.net`, { text: alertMsg });
-                } catch(e){}
+              const alertMsg = `🛒 *Pedido por confirmar (vía bot)*\nCliente: ${senderNumber} (${message.pushName || 'Cliente'})\n\n${resumenPedido}\n\n✅ Revisa y confírmalo desde el panel para enviarlo a cocina.`;
+              for (const adminNum of admins) {
+                try { await adminBot.sendMessage(`${adminNum}@s.whatsapp.net`, { text: alertMsg }); } catch (_) {}
               }
             }
             this.io.emit('whatsapp_handoff_requested');
@@ -1369,6 +1479,25 @@ class WhatsAppBot {
           }
 
           let cleanText = finalText;
+
+          // Etiqueta de imagen del menú
+          if (finalText.includes('[SEND_MENU]')) {
+            cleanText = finalText.replace(/\[SEND_MENU\]/g, '').trim();
+            const menuImg = await getConfig('bot_menu_imagen_url');
+            if (menuImg) {
+              const _path = require('path'), _fs = require('fs');
+              const uploadsDir = _path.resolve(__dirname, '..', 'uploads');
+              const safePath = _path.resolve(uploadsDir, _path.basename(menuImg));
+              if (safePath.startsWith(uploadsDir) && _fs.existsSync(safePath)) {
+                await this.client.sendMessage(remoteJid, { image: { url: safePath }, caption: cleanText || '📋 Nuestro menú' }, { quoted: message });
+                await guardarMensajeHistorial(senderNumber, 'model', cleanText || '(Menú enviado)', this.botType);
+                this.emitMessage({ type: 'out', sender: 'Bot IA', text: cleanText || '(Menú enviado)', time: new Date().toLocaleTimeString() });
+                await logChatbotInteraction(senderNumber, message.pushName || 'Cliente', 'menu_enviado', body, cleanText);
+                break;
+              }
+            }
+            // Sin imagen configurada: continuar con texto normal (incluye el link en el prompt)
+          }
 
           // A. Evaluar si tiene etiqueta de Promoción
           let promoIdMatch = finalText.match(/\[SEND_PROMO:(\d+)\]/);
@@ -1588,11 +1717,38 @@ module.exports = {
       console.log(`[WA Proactivo] Resumen diario programado en ${Math.round(msHasta/60000)} minutos`);
     }
 
-    // Iniciar alertas y resumen (con delay de 2 min para que el bot esté listo)
+    // ── Auto-resume de chats atascados en handoff (cada 5 min) ──
+    async function autoResumeChatsAtascados() {
+      const bot = bots.client;
+      if (!bot || bot.botStatus !== 'ready' || !bot.client) return;
+      try {
+        const timeoutMin = parseInt(await getConfig('bot_handoff_timeout_min') || '30', 10);
+        const atascados = await dbAsync.all(
+          `SELECT telefono, nombre_cliente FROM chatbots_paused
+           WHERE fecha_pausa < NOW() - INTERVAL '${timeoutMin} minutes'`
+        );
+        for (const chat of atascados) {
+          try {
+            await dbAsync.run('DELETE FROM chatbots_paused WHERE telefono = ?', [chat.telefono]);
+            const msg = '👋 ¡Hola de nuevo! Sigo disponible para ayudarte. ' +
+              'Si aún necesitas a una persona del equipo, escribe *asesor* y con gusto te conecto. ' +
+              '¿En qué te puedo ayudar?';
+            await bot.client.sendMessage(`${chat.telefono}@s.whatsapp.net`, { text: msg });
+            await guardarMensajeHistorial(chat.telefono, 'model', msg, 'client');
+            console.log(`[WA Proactivo] Chat ${chat.telefono} auto-reactivado tras ${timeoutMin} min sin respuesta`);
+          } catch (_) {}
+        }
+      } catch (err) {
+        console.error('[WA Proactivo] Error en auto-resume:', err.message);
+      }
+    }
+
+    // Iniciar alertas, resumen y auto-resume (con delay de 2 min para que el bot esté listo)
     setTimeout(() => {
       enviarAlertasStock();
       setInterval(enviarAlertasStock, 30 * 60_000);
       programarResumenDiario();
+      setInterval(autoResumeChatsAtascados, 5 * 60_000);
     }, 2 * 60_000);
   },
   guardarMensajeHistorial,

@@ -71,6 +71,17 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('bot-config-nombre').value = 'Puro Sabor Bot'; // Valor por defecto
         document.getElementById('bot-config-prompt').value = result.data.bot_system_prompt || '';
         document.getElementById('bot-config-ausencia').value = result.data.bot_mensaje_ausencia || '';
+
+        // Imagen del menú
+        const menuImg = result.data.bot_menu_imagen_url;
+        const previewWrap = document.getElementById('menu-img-preview-wrap');
+        const previewImg = document.getElementById('menu-img-preview');
+        if (menuImg && previewWrap && previewImg) {
+          previewImg.src = menuImg;
+          previewWrap.style.display = 'block';
+        } else if (previewWrap) {
+          previewWrap.style.display = 'none';
+        }
         
         const configActivo = document.getElementById('bot-config-activo');
         const configHorario = document.getElementById('bot-config-horario');
@@ -147,6 +158,76 @@ document.addEventListener('DOMContentLoaded', () => {
       } finally {
         btnSave.disabled = false;
         btnSave.innerHTML = '<span>💾 Guardar Configuración Base</span>';
+      }
+    });
+  }
+
+  // --- IMAGEN DEL MENÚ (subir / quitar) ---
+  const btnUploadMenuImg = document.getElementById('btn-upload-menu-img');
+  const btnDeleteMenuImg = document.getElementById('btn-delete-menu-img');
+  const alertMenuImg = document.getElementById('alert-menu-img');
+
+  function showMenuImgAlert(msg, ok) {
+    if (!alertMenuImg) return;
+    alertMenuImg.textContent = msg;
+    alertMenuImg.className = 'alert-box ' + (ok ? 'success' : 'error');
+    alertMenuImg.style.display = 'block';
+    setTimeout(() => { alertMenuImg.style.display = 'none'; }, 4000);
+  }
+
+  if (btnUploadMenuImg) {
+    btnUploadMenuImg.addEventListener('click', async () => {
+      const fileInput = document.getElementById('menu-img-file');
+      const file = fileInput?.files?.[0];
+      if (!file) { showMenuImgAlert('Selecciona una imagen primero.', false); return; }
+
+      const fd = new FormData();
+      fd.append('imagen', file);
+      btnUploadMenuImg.disabled = true;
+      btnUploadMenuImg.textContent = 'Subiendo...';
+      try {
+        const res = await fetch('/api/chatbots/menu-imagen', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: fd
+        });
+        const r = await res.json();
+        if (r.success) {
+          const previewWrap = document.getElementById('menu-img-preview-wrap');
+          const previewImg = document.getElementById('menu-img-preview');
+          if (previewImg) previewImg.src = r.url + '?v=' + Date.now();
+          if (previewWrap) previewWrap.style.display = 'block';
+          if (fileInput) fileInput.value = '';
+          showMenuImgAlert('Imagen del menú guardada.', true);
+        } else {
+          showMenuImgAlert(r.message || 'Error al subir.', false);
+        }
+      } catch (err) {
+        showMenuImgAlert('Error de conexión.', false);
+      } finally {
+        btnUploadMenuImg.disabled = false;
+        btnUploadMenuImg.textContent = '⬆️ Subir Imagen';
+      }
+    });
+  }
+
+  if (btnDeleteMenuImg) {
+    btnDeleteMenuImg.addEventListener('click', async () => {
+      try {
+        const res = await fetch('/api/chatbots/menu-imagen', {
+          method: 'DELETE',
+          headers: authHeaders
+        });
+        const r = await res.json();
+        if (r.success) {
+          const previewWrap = document.getElementById('menu-img-preview-wrap');
+          if (previewWrap) previewWrap.style.display = 'none';
+          showMenuImgAlert('Imagen del menú eliminada.', true);
+        } else {
+          showMenuImgAlert(r.message || 'Error al eliminar.', false);
+        }
+      } catch (err) {
+        showMenuImgAlert('Error de conexión.', false);
       }
     });
   }

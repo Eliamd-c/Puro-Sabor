@@ -141,6 +141,20 @@
                   <textarea id="bot-config-ausencia" class="form-control" style="min-height: 80px; resize: vertical;" placeholder="Mensaje de ausencia cuando el restaurante está cerrado..."></textarea>
                 </div>
 
+                <!-- Imagen del Menú (la envía el bot cuando piden "el menú") -->
+                <div class="form-group">
+                  <label>📋 Imagen del Menú (la envía el bot al cliente)</label>
+                  <div id="menu-img-preview-wrap" style="margin-bottom:8px; display:none;">
+                    <img id="menu-img-preview" src="" alt="Menú" style="max-width:180px; border-radius:8px; border:1px solid var(--border);">
+                  </div>
+                  <input type="file" id="menu-img-file" accept="image/*" class="form-control">
+                  <div style="display:flex; gap:8px; margin-top:8px;">
+                    <button type="button" class="btn-primary" id="btn-upload-menu-img" style="flex:1; justify-content:center;">⬆️ Subir Imagen</button>
+                    <button type="button" class="btn-secondary" id="btn-delete-menu-img" style="flex:1; justify-content:center;">🗑 Quitar</button>
+                  </div>
+                  <div id="alert-menu-img" class="alert-box" style="display:none; padding:8px; margin-top:8px;"></div>
+                </div>
+
                 <div id="alert-config-base" class="alert-box" style="display:none; padding:10px; margin-bottom:16px;"></div>
                 <button type="submit" class="btn-primary" id="btn-save-bot-base" style="width:100%; justify-content:center;">
                   <span>💾 Guardar Configuración Base</span>
