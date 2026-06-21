@@ -251,61 +251,55 @@
     <span class="fab-total" id="fab-total" style="display:none;"></span>
   </button>
 
-  <!-- ADD PRODUCT TO ORDER MODAL -->
-  <div id="modal-add-product" class="modal-overlay" style="display:none;">
-    <div class="modal-card" style="max-width:400px;">
-      <div class="modal-head">
-        <h3>Agregar Producto</h3>
-        <button class="btn-close-modal" data-close="modal-add-product">✕</button>
-      </div>
-      <div style="padding:20px;max-height:60vh;overflow-y:auto;">
-        <input type="text" id="search-product" placeholder="Buscar producto..." style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:12px;background:var(--surface2);color:var(--text);font-family:'Outfit',sans-serif;">
-        <div id="product-list" style="display:grid;grid-template-columns:1fr;gap:8px;"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- EDIT ORDER MODAL -->
+  <!-- EDIT ORDER MODAL (two-tab: Pedido + Productos) -->
   <div id="modal-edit-order" class="modal-overlay" style="display:none;">
-    <div class="modal-card" style="max-width:500px;">
+    <div class="modal-card edit-order-card">
+
+      <!-- Header -->
       <div class="modal-head">
         <h3 id="edit-order-title">Editar Pedido #0</h3>
         <button class="btn-close-modal" data-close="modal-edit-order">✕</button>
       </div>
-      <div class="edit-order-body" style="padding:20px;max-height:70vh;overflow-y:auto;">
-        <!-- Cliente -->
-        <div class="input-group">
-          <label>Nombre del cliente</label>
-          <input type="text" id="edit-nombre-cliente" class="order-name-input" placeholder="Nombre...">
+
+      <!-- Tab bar -->
+      <div class="edit-tabs">
+        <button class="edit-tab active" data-etab="items">📋 Pedido</button>
+        <button class="edit-tab" data-etab="products">➕ Agregar</button>
+      </div>
+
+      <!-- TAB: Pedido -->
+      <div id="etab-items" class="edit-tab-content">
+        <div class="edit-fields">
+          <input type="text" id="edit-nombre-cliente" class="edit-input" placeholder="👤 Nombre del cliente…">
+          <div class="edit-fields-row">
+            <input type="number" id="edit-mesa-numero" class="edit-input" placeholder="Mesa #" min="0">
+            <input type="text" id="edit-direccion" class="edit-input" placeholder="📍 Dirección domicilio…">
+          </div>
+          <textarea id="edit-notas" class="edit-input edit-textarea" placeholder="📝 Notas especiales…"></textarea>
         </div>
 
-        <!-- Mesa/Dirección -->
-        <div class="input-group">
-          <label>Mesa / Dirección</label>
-          <input type="number" id="edit-mesa-numero" class="order-name-input" placeholder="Mesa (0 para llevar)" min="0">
-          <input type="text" id="edit-direccion" class="order-name-input" placeholder="Dirección (si es domicilio)" style="margin-top:8px;">
-        </div>
+        <div id="edit-items-list" class="edit-items-list"></div>
 
-        <!-- Notas -->
-        <div class="input-group">
-          <label>Notas</label>
-          <textarea id="edit-notas" class="order-name-input" placeholder="Notas especiales..." style="min-height:80px;resize:none;"></textarea>
-        </div>
-
-        <!-- Productos -->
-        <div class="input-group">
-          <label>Productos</label>
-          <div id="edit-items-list" style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:10px;"></div>
-          <button type="button" id="btn-add-product" class="btn-send" style="width:100%;justify-content:center;margin-bottom:10px;">
-            ➕ Agregar Producto
+        <div class="edit-footer">
+          <div class="edit-total-bar">
+            <span class="edit-total-label">Total del pedido</span>
+            <span id="edit-total-display" class="edit-total-amount">$0</span>
+          </div>
+          <button type="button" id="btn-save-order" class="btn-send" style="width:100%;justify-content:center;">
+            💾 Guardar Cambios
           </button>
         </div>
-
-        <!-- Guardar -->
-        <button type="button" id="btn-save-order" class="btn-send" style="width:100%;justify-content:center;">
-          💾 Guardar Cambios
-        </button>
       </div>
+
+      <!-- TAB: Productos -->
+      <div id="etab-products" class="edit-tab-content" style="display:none;">
+        <div class="edit-prod-search">
+          <input type="text" id="edit-search-product" class="edit-input" placeholder="🔍 Buscar producto…">
+        </div>
+        <div id="edit-cat-nav" class="edit-cat-nav"></div>
+        <div id="edit-product-grid" class="edit-product-grid"></div>
+      </div>
+
     </div>
   </div>
 

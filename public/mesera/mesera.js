@@ -947,130 +947,188 @@
 
   document.getElementById('btn-refresh-orders').addEventListener('click', loadPedidos);
 
-  // ─── EDIT ORDER MODAL ───────────────────────────────────────
+  // ─── EDIT ORDER MODAL (dos pestañas) ───────────────────────
   const modalEditOrder = document.getElementById('modal-edit-order');
   let editingOrderId = null;
-  let editingOrder = null;
+  let editingOrder   = null;
+  let editCatActiva  = 'todos';
+
+  // Tab switching dentro del modal
+  document.querySelectorAll('.edit-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.edit-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.edit-tab-content').forEach(c => c.style.display = 'none');
+      tab.classList.add('active');
+      document.getElementById('etab-' + tab.dataset.etab).style.display = 'flex';
+      if (tab.dataset.etab === 'products') renderEditProductBrowser();
+    });
+  });
+
+  document.getElementById('edit-search-product').addEventListener('input', () => renderEditProductBrowser());
 
   function openEditModal(orderId) {
     editingOrderId = orderId;
-    editingOrder = pedidos.find(p => p.id === orderId);
-    if (!editingOrder) return;
+    // Copia profunda para no mutar el array original hasta guardar
+    editingOrder = JSON.parse(JSON.stringify(pedidos.find(p => p.id === orderId) || {}));
+    if (!editingOrder.id) return;
 
     document.getElementById('edit-order-title').textContent = `Editar Pedido #${orderId}`;
-    document.getElementById('edit-nombre-cliente').value = editingOrder.nombre_cliente || '';
-    document.getElementById('edit-mesa-numero').value = editingOrder.mesa_numero || 0;
-    document.getElementById('edit-direccion').value = editingOrder.direccion_domicilio || '';
-    document.getElementById('edit-notas').value = editingOrder.notas || '';
+    document.getElementById('edit-nombre-cliente').value  = editingOrder.nombre_cliente || '';
+    document.getElementById('edit-mesa-numero').value     = editingOrder.mesa_numero || 0;
+    document.getElementById('edit-direccion').value       = editingOrder.direccion_domicilio || '';
+    document.getElementById('edit-notas').value           = editingOrder.notas || '';
+    document.getElementById('edit-search-product').value  = '';
 
+    // Volver siempre a pestaña "Pedido" al abrir
+    document.querySelectorAll('.edit-tab').forEach(t => t.classList.remove('active'));
+    document.querySelector('.edit-tab[data-etab="items"]').classList.add('active');
+    document.getElementById('etab-items').style.display    = 'flex';
+    document.getElementById('etab-products').style.display = 'none';
+
+    editCatActiva = 'todos';
+    renderEditCats();
     renderEditItems();
     modalEditOrder.style.display = 'flex';
   }
 
+  function calcEditTotal() {
+    return (editingOrder.items || []).reduce((s, i) => s + (parseFloat(i.precio) * i.cantidad), 0);
+  }
+
+  function updateEditTotal() {
+    const el = document.getElementById('edit-total-display');
+    if (el) el.textContent = `$${calcEditTotal().toLocaleString('es-CO')}`;
+  }
+
   function renderEditItems() {
-    const itemsList = document.getElementById('edit-items-list');
+    const list  = document.getElementById('edit-items-list');
     const items = editingOrder.items || [];
-    itemsList.innerHTML = '';
 
+    if (!items.length) {
+      list.innerHTML = '<div class="edit-empty">Sin productos — usa "➕ Agregar" para añadir</div>';
+      updateEditTotal();
+      return;
+    }
+
+    list.innerHTML = '';
     items.forEach((item, idx) => {
-      const itemDiv = document.createElement('div');
-      itemDiv.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid var(--border);';
-      itemDiv.innerHTML = `
-        <div style="flex:1;font-size:12px;">
-          <div style="font-weight:700;">${item.nombre}</div>
-          <div style="color:var(--muted);">$${item.precio.toLocaleString('es-CO')}</div>
+      const row = document.createElement('div');
+      row.className = 'edit-item-row';
+      row.innerHTML = `
+        <div class="edit-item-info">
+          <div class="edit-item-name">${item.nombre}</div>
+          <div class="edit-item-price">$${(parseFloat(item.precio) * item.cantidad).toLocaleString('es-CO')}</div>
         </div>
-        <div style="display:flex;align-items:center;gap:4px;">
-          <button type="button" class="qty-btn-edit" data-idx="${idx}" data-op="-" style="width:28px;height:28px;border:1px solid var(--border);background:var(--surface2);color:var(--text);border-radius:4px;cursor:pointer;font-weight:700;">−</button>
-          <span style="width:30px;text-align:center;font-weight:700;">${item.cantidad}</span>
-          <button type="button" class="qty-btn-edit" data-idx="${idx}" data-op="+" style="width:28px;height:28px;border:1px solid var(--border);background:var(--surface2);color:var(--text);border-radius:4px;cursor:pointer;font-weight:700;">+</button>
-        </div>
-        <button type="button" class="delete-item-edit" data-idx="${idx}" style="width:28px;height:28px;border:1px solid #e74c3c;background:rgba(231,76,60,0.1);color:#e74c3c;border-radius:4px;cursor:pointer;font-weight:700;">🗑</button>
-      `;
-      itemsList.appendChild(itemDiv);
+        <div class="edit-item-controls">
+          <button class="edit-qty-btn" data-idx="${idx}" data-op="−">−</button>
+          <span class="edit-qty-num">${item.cantidad}</span>
+          <button class="edit-qty-btn" data-idx="${idx}" data-op="+">+</button>
+          <button class="edit-del-btn" data-idx="${idx}" title="Quitar">🗑</button>
+        </div>`;
+      list.appendChild(row);
     });
 
-    document.querySelectorAll('.qty-btn-edit').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const idx = parseInt(e.target.dataset.idx);
-        const op = e.target.dataset.op;
-        const newQty = editingOrder.items[idx].cantidad + (op === '+' ? 1 : -1);
-        if (newQty > 0) {
-          editingOrder.items[idx].cantidad = newQty;
-          renderEditItems();
-        }
-      });
-    });
-
-    document.querySelectorAll('.delete-item-edit').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const idx = parseInt(e.target.dataset.idx);
-        editingOrder.items.splice(idx, 1);
+    list.querySelectorAll('.edit-qty-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.dataset.idx);
+        const delta = btn.dataset.op === '+' ? 1 : -1;
+        const newQty = editingOrder.items[idx].cantidad + delta;
+        if (newQty > 0) { editingOrder.items[idx].cantidad = newQty; }
+        else { editingOrder.items.splice(idx, 1); }
         renderEditItems();
+        renderEditProductBrowserIfOpen();
       });
+    });
+
+    list.querySelectorAll('.edit-del-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        editingOrder.items.splice(parseInt(btn.dataset.idx), 1);
+        renderEditItems();
+        renderEditProductBrowserIfOpen();
+      });
+    });
+
+    updateEditTotal();
+  }
+
+  function renderEditProductBrowserIfOpen() {
+    const tab = document.getElementById('etab-products');
+    if (tab && tab.style.display !== 'none') renderEditProductBrowser();
+  }
+
+  function renderEditCats() {
+    const nav = document.getElementById('edit-cat-nav');
+    if (!nav) return;
+    nav.innerHTML = '';
+    const allBtn = document.createElement('button');
+    allBtn.className = 'edit-cat-btn' + (editCatActiva === 'todos' ? ' active' : '');
+    allBtn.textContent = 'Todas';
+    allBtn.addEventListener('click', () => { editCatActiva = 'todos'; renderEditCats(); renderEditProductBrowser(); });
+    nav.appendChild(allBtn);
+    categorias.forEach(c => {
+      const btn = document.createElement('button');
+      btn.className = 'edit-cat-btn' + (editCatActiva == c.id ? ' active' : '');
+      btn.textContent = c.nombre;
+      btn.addEventListener('click', () => { editCatActiva = c.id; renderEditCats(); renderEditProductBrowser(); });
+      nav.appendChild(btn);
     });
   }
 
-  // Modal agregar producto
-  const modalAddProduct = document.getElementById('modal-add-product');
-  const productList = document.getElementById('product-list');
-  const searchProduct = document.getElementById('search-product');
+  function renderEditProductBrowser() {
+    const grid   = document.getElementById('edit-product-grid');
+    if (!grid) return;
+    const search = (document.getElementById('edit-search-product')?.value || '').toLowerCase();
 
-  function renderProductList(filter = '') {
-    productList.innerHTML = '';
-    const filtered = productos.filter(p =>
-      p.nombre.toLowerCase().includes(filter.toLowerCase())
-    );
+    let list = productos;
+    if (editCatActiva !== 'todos') list = list.filter(p => p.categoria_id == editCatActiva);
+    if (search) list = list.filter(p => p.nombre.toLowerCase().includes(search));
 
-    filtered.forEach(prod => {
-      const prodDiv = document.createElement('div');
-      prodDiv.style.cssText = 'padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);cursor:pointer;transition:all 0.2s;';
-      prodDiv.innerHTML = `
-        <div style="font-weight:700;margin-bottom:4px;">${prod.nombre}</div>
-        <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">$${prod.precio.toLocaleString('es-CO')}</div>
-        <input type="number" data-prod-id="${prod.id}" class="product-qty-input" value="1" min="1" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-family:'Outfit',sans-serif;">
-      `;
-      prodDiv.addEventListener('click', () => {
-        const qty = parseInt(prodDiv.querySelector('.product-qty-input').value) || 1;
-        addProductToEditingOrder(prod, qty);
-        modalAddProduct.style.display = 'none';
-        searchProduct.value = '';
+    if (!list.length) {
+      grid.innerHTML = '<div class="edit-empty">Sin resultados</div>';
+      return;
+    }
+
+    grid.innerHTML = '';
+    list.forEach(prod => {
+      const inOrder = (editingOrder.items || []).find(i => i.id === prod.id);
+      const qty     = inOrder ? inOrder.cantidad : 0;
+      const price   = parseFloat(prod.precio || 0);
+      const icon    = getProductIcon(prod.nombre) || '🍽';
+
+      const card = document.createElement('div');
+      card.className = 'edit-prod-card';
+      card.innerHTML = `
+        <div class="edit-prod-top">
+          <span class="edit-prod-icon">${icon}</span>
+          ${qty > 0 ? `<span class="edit-prod-badge">${qty}</span>` : ''}
+        </div>
+        <div class="edit-prod-name">${prod.nombre}</div>
+        <div class="edit-prod-price">$${price.toLocaleString('es-CO')}</div>
+        <button class="edit-prod-add-btn">+ Agregar</button>`;
+
+      card.querySelector('.edit-prod-add-btn').addEventListener('click', () => {
+        addProductToEditingOrder(prod, 1);
       });
-      productList.appendChild(prodDiv);
+      grid.appendChild(card);
     });
   }
 
   function addProductToEditingOrder(product, quantity) {
     if (!editingOrder.items) editingOrder.items = [];
     const existing = editingOrder.items.find(i => i.id === product.id);
-    if (existing) {
-      existing.cantidad += quantity;
-    } else {
+    if (existing) { existing.cantidad += quantity; }
+    else {
       editingOrder.items.push({
         id: product.id,
         nombre: product.nombre,
-        precio: product.precio,
+        precio: parseFloat(product.precio),
         cantidad: quantity
       });
     }
     renderEditItems();
-    showToast(`✅ Agregado: ${product.nombre} x${quantity}`);
+    renderEditProductBrowser();
+    showToast(`+1 ${product.nombre}`);
   }
-
-  document.getElementById('btn-add-product').addEventListener('click', () => {
-    renderProductList('');
-    modalAddProduct.style.display = 'flex';
-    searchProduct.focus();
-  });
-
-  searchProduct.addEventListener('input', (e) => {
-    renderProductList(e.target.value);
-  });
-
-  document.querySelector('[data-close="modal-add-product"]').addEventListener('click', () => {
-    modalAddProduct.style.display = 'none';
-    searchProduct.value = '';
-  });
 
   document.getElementById('btn-save-order').addEventListener('click', async () => {
     if (!editingOrderId) return;
