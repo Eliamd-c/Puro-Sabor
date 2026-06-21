@@ -9,8 +9,28 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '..', '.e
 
 const pgPool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+  ssl: process.env.NODE_ENV === 'production'
+    ? { rejectUnauthorized: true }
+    : { rejectUnauthorized: false },
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000
 });
+
+// ── Rate limiting en memoria (10 msg/min por número) ───────────
+const _rateLimits = new Map();
+const RATE_MAX = 10, RATE_WINDOW = 60_000;
+function checkRateLimit(num) {
+  const now = Date.now();
+  let entry = _rateLimits.get(num);
+  if (!entry || now > entry.reset) { _rateLimits.set(num, { count: 1, reset: now + RATE_WINDOW }); return true; }
+  if (entry.count >= RATE_MAX) return false;
+  entry.count++;
+  return true;
+}
+setInterval(() => { const now = Date.now(); for (const [k, v] of _rateLimits) if (now > v.reset + RATE_WINDOW) _rateLimits.delete(k); }, 3_600_000);
+
+// ── Límites de tamaño de media ──────────────────────────────────
+const MAX_MEDIA = { image: 5 * 1024 * 1024, audio: 10 * 1024 * 1024, default: 5 * 1024 * 1024 };
 
 // Helpers para base de datos
 function getConfig(key) {
@@ -520,14 +540,26 @@ class WhatsAppBot {
     }
     if (name === 'obtenerVentasHoy') {
       try {
-        const query = `
-          SELECT SUM(CASE WHEN tipo = 'ingreso' THEN monto ELSE 0 END) as ingresos,
-                 SUM(CASE WHEN tipo = 'gasto' THEN monto ELSE 0 END) as gastos
-          FROM caja_registros WHERE DATE(fecha) = CURRENT_DATE`;
-        const res = await dbAsync.get(query);
-        const ingresos = parseFloat(res?.ingresos || 0);
-        const gastos = parseFloat(res?.gastos || 0);
-        return { hoy: { ingresos, gastos, balance: ingresos - gastos } };
+        // Ventas reales desde pedidos pagados
+        const ventas = await dbAsync.get(
+          `SELECT COUNT(*) as total_pedidos, COALESCE(SUM(total), 0) as ingresos
+           FROM pedidos WHERE estado = 'pagado' AND DATE(creado_en) = CURRENT_DATE`
+        );
+        // Gastos registrados en caja
+        const gastos = await dbAsync.get(
+          `SELECT COALESCE(SUM(monto), 0) as gastos FROM caja_registros
+           WHERE tipo = 'gasto' AND DATE(fecha) = CURRENT_DATE`
+        );
+        const ingresos = parseFloat(ventas?.ingresos || 0);
+        const totalGastos = parseFloat(gastos?.gastos || 0);
+        return {
+          hoy: {
+            total_pedidos: parseInt(ventas?.total_pedidos || 0),
+            ingresos,
+            gastos: totalGastos,
+            balance: ingresos - totalGastos
+          }
+        };
       } catch (err) { return { error: err.message }; }
     }
     if (name === 'registrarGasto') {
@@ -645,6 +677,153 @@ class WhatsAppBot {
       } catch (err) { return { error: err.message }; }
     }
 
+    if (name === 'consultarVentas') {
+      try {
+        const periodo = args.periodo || 'hoy'; // hoy | ayer | semana | mes
+        let condicion = '';
+        if (periodo === 'hoy')    condicion = "DATE(creado_en) = CURRENT_DATE";
+        else if (periodo === 'ayer')   condicion = "DATE(creado_en) = CURRENT_DATE - INTERVAL '1 day'";
+        else if (periodo === 'semana') condicion = "creado_en >= CURRENT_DATE - INTERVAL '7 days'";
+        else if (periodo === 'mes')    condicion = "creado_en >= CURRENT_DATE - INTERVAL '30 days'";
+        else condicion = "DATE(creado_en) = CURRENT_DATE";
+
+        const resumen = await dbAsync.get(
+          `SELECT COUNT(*) as total_pedidos,
+                  COALESCE(SUM(total), 0) as ingresos_brutos,
+                  COUNT(CASE WHEN tipo_pedido='local' THEN 1 END) as pedidos_local,
+                  COUNT(CASE WHEN tipo_pedido='domicilio' THEN 1 END) as pedidos_domicilio,
+                  AVG(total) as ticket_promedio
+           FROM pedidos WHERE estado = 'pagado' AND ${condicion}`
+        );
+        const gastos = await dbAsync.get(
+          `SELECT COALESCE(SUM(monto), 0) as total_gastos FROM caja_registros
+           WHERE tipo = 'gasto' AND ${condicion.replace('creado_en', 'fecha')}`
+        );
+        const ingresos = parseFloat(resumen?.ingresos_brutos || 0);
+        const totalGastos = parseFloat(gastos?.total_gastos || 0);
+        return {
+          periodo,
+          total_pedidos: parseInt(resumen?.total_pedidos || 0),
+          ingresos_brutos: ingresos,
+          gastos: totalGastos,
+          ganancia_estimada: ingresos - totalGastos,
+          pedidos_local: parseInt(resumen?.pedidos_local || 0),
+          pedidos_domicilio: parseInt(resumen?.pedidos_domicilio || 0),
+          ticket_promedio: Math.round(parseFloat(resumen?.ticket_promedio || 0))
+        };
+      } catch (err) { return { error: err.message }; }
+    }
+
+    if (name === 'pedidosActivos') {
+      try {
+        const activos = await dbAsync.all(
+          `SELECT id, estado, mesa_numero, nombre_cliente, total, tipo_pedido,
+                  creado_en,
+                  EXTRACT(EPOCH FROM (NOW() - creado_en))/60 as minutos_transcurridos
+           FROM pedidos WHERE estado IN ('pendiente','preparando')
+           ORDER BY creado_en ASC`
+        );
+        return {
+          total: activos.length,
+          pedidos: activos.map(p => ({
+            id: p.id,
+            estado: p.estado,
+            mesa: p.mesa_numero > 0 ? `Mesa ${p.mesa_numero}` : 'Para llevar',
+            cliente: p.nombre_cliente || 'Sin nombre',
+            total: parseFloat(p.total),
+            tipo: p.tipo_pedido,
+            minutos: Math.round(parseFloat(p.minutos_transcurridos || 0)),
+            alerta: parseFloat(p.minutos_transcurridos || 0) > 20 ? '⚠️ DEMORADO' : '✅'
+          }))
+        };
+      } catch (err) { return { error: err.message }; }
+    }
+
+    if (name === 'topProductos') {
+      try {
+        const periodo = args.periodo || 'hoy';
+        let condicion = '';
+        if (periodo === 'hoy')    condicion = "DATE(p.creado_en) = CURRENT_DATE";
+        else if (periodo === 'semana') condicion = "p.creado_en >= CURRENT_DATE - INTERVAL '7 days'";
+        else if (periodo === 'mes')    condicion = "p.creado_en >= CURRENT_DATE - INTERVAL '30 days'";
+        else condicion = "DATE(p.creado_en) = CURRENT_DATE";
+
+        // Aplanamos el JSON de items en la app layer (PostgreSQL no tiene json_each fácil sin extensión)
+        const pedidos = await dbAsync.all(
+          `SELECT items_json FROM pedidos WHERE estado = 'pagado' AND ${condicion}`
+        );
+        const conteo = {};
+        for (const p of pedidos) {
+          try {
+            const items = JSON.parse(p.items_json || '[]');
+            for (const it of items) {
+              if (!conteo[it.nombre]) conteo[it.nombre] = { nombre: it.nombre, cantidad: 0, ingresos: 0 };
+              conteo[it.nombre].cantidad += it.cantidad;
+              conteo[it.nombre].ingresos += it.cantidad * parseFloat(it.precio);
+            }
+          } catch (_) {}
+        }
+        const top = Object.values(conteo).sort((a, b) => b.cantidad - a.cantidad).slice(0, 10);
+        return { periodo, top_productos: top };
+      } catch (err) { return { error: err.message }; }
+    }
+
+    if (name === 'ventasPorAuxiliar') {
+      try {
+        const periodo = args.periodo || 'hoy';
+        let condicion = period => {
+          if (periodo === 'hoy')    return "DATE(creado_en) = CURRENT_DATE";
+          if (periodo === 'semana') return "creado_en >= CURRENT_DATE - INTERVAL '7 days'";
+          if (periodo === 'mes')    return "creado_en >= CURRENT_DATE - INTERVAL '30 days'";
+          return "DATE(creado_en) = CURRENT_DATE";
+        };
+        const rows = await dbAsync.all(
+          `SELECT creado_por, COUNT(*) as total_pedidos, COALESCE(SUM(total),0) as total_ventas
+           FROM pedidos WHERE estado = 'pagado' AND ${condicion(periodo)}
+           GROUP BY creado_por ORDER BY total_ventas DESC`
+        );
+        return {
+          periodo,
+          por_auxiliar: rows.map(r => ({
+            auxiliar: r.creado_por || 'Sin registrar',
+            pedidos: parseInt(r.total_pedidos),
+            ventas: parseFloat(r.total_ventas)
+          }))
+        };
+      } catch (err) { return { error: err.message }; }
+    }
+
+    if (name === 'marcarProductoAgotado') {
+      try {
+        let res;
+        if (args.id) {
+          res = await dbAsync.run('UPDATE productos SET activo = 0, stock = 0 WHERE id = ?', [args.id]);
+        } else if (args.nombre) {
+          res = await dbAsync.run('UPDATE productos SET activo = 0, stock = 0 WHERE nombre ILIKE ?', [`%${args.nombre}%`]);
+        } else {
+          return { error: 'Se requiere id o nombre del producto' };
+        }
+        if (res.changes > 0) this.io.to('admin').emit('producto_actualizado', { id: args.id, stock: 0, activo: 0 });
+        return { success: true, changes: res.changes, mensaje: 'Producto marcado como agotado y desactivado' };
+      } catch (err) { return { error: err.message }; }
+    }
+
+    if (name === 'cambiarPrecio') {
+      try {
+        let res;
+        const nuevoPrecio = parseFloat(args.nuevo_precio);
+        if (isNaN(nuevoPrecio) || nuevoPrecio < 0) return { error: 'Precio inválido' };
+        if (args.id) {
+          res = await dbAsync.run('UPDATE productos SET precio = ? WHERE id = ?', [nuevoPrecio, args.id]);
+        } else if (args.nombre) {
+          res = await dbAsync.run('UPDATE productos SET precio = ? WHERE nombre ILIKE ?', [nuevoPrecio, `%${args.nombre}%`]);
+        } else {
+          return { error: 'Se requiere id o nombre del producto' };
+        }
+        return { success: true, changes: res.changes, nuevo_precio: nuevoPrecio };
+      } catch (err) { return { error: err.message }; }
+    }
+
     return { error: `Función desconocida: ${name}` };
   }
 
@@ -663,11 +842,17 @@ class WhatsAppBot {
 
     if (isMedia) {
       try {
-        console.log(`[WA Agent ${this.botType}] Descargando multimedia...`);
-        const buffer = await downloadMediaMessage(
-          message, 'buffer', {},
-          { logger: pino({ level: 'silent' }) }
-        );
+        const mediaType = imageMsg ? 'image' : 'audio';
+        const fileSize = imageMsg?.fileLength || audioMsg?.fileLength || 0;
+        const maxSize = MAX_MEDIA[mediaType] || MAX_MEDIA.default;
+        if (fileSize > maxSize) {
+          const msg = `❌ Archivo muy grande (${(fileSize/1024/1024).toFixed(1)}MB). Máx: ${(maxSize/1024/1024).toFixed(0)}MB`;
+          await this.client.sendMessage(remoteJid, { text: msg }, { quoted: message });
+          return;
+        }
+        console.log(`[WA Agent ${this.botType}] Descargando ${mediaType} (${(fileSize/1024).toFixed(0)}KB)...`);
+        const buffer = await downloadMediaMessage(message, 'buffer', {}, { logger: pino({ level: 'silent' }) });
+        if (!Buffer.isBuffer(buffer) || buffer.length === 0) throw new Error('Buffer vacío');
         const mimeType = imageMsg ? imageMsg.mimetype : audioMsg.mimetype;
         mediaPart = { inlineData: { data: buffer.toString('base64'), mimeType } };
       } catch (err) {
@@ -679,18 +864,21 @@ class WhatsAppBot {
     if (!body && !mediaPart) return;
 
     const senderNumber = remoteJid.split('@')[0];
-    
-    // --- Seguridad Admin ---
+
+    // --- Seguridad Admin: match EXACTO ---
     if (this.botType === 'admin') {
       const adminNumbersStr = await getConfig('admin_whatsapp_numbers') || '';
-      const authorizedNumbers = adminNumbersStr.split(',').map(n => n.trim().replace('+', '')).filter(Boolean);
-      
-      const isAuthorized = authorizedNumbers.some(n => senderNumber.endsWith(n) || n.endsWith(senderNumber));
-      
-      if (!isAuthorized) {
-        console.log(`[WA Agent admin] Mensaje ignorado. Número NO autorizado: ${senderNumber}`);
+      const authorizedNumbers = adminNumbersStr.split(',').map(n => n.trim().replace(/^\+/, '')).filter(Boolean);
+      if (!authorizedNumbers.includes(senderNumber)) {
+        console.log(`[WA Agent admin] Acceso denegado: ${senderNumber}`);
         return;
       }
+    }
+
+    // --- Rate limiting (solo clientes) ---
+    if (this.botType === 'client' && !checkRateLimit(senderNumber)) {
+      await this.client.sendMessage(remoteJid, { text: 'Estás escribiendo muy rápido. Espera un momento e intenta de nuevo.' }, { quoted: message });
+      return;
     }
 
     this.emitMessage({ type: 'in', sender: senderNumber, text: body || '[Imagen/Audio]', time: new Date().toLocaleTimeString() });
@@ -909,6 +1097,69 @@ class WhatsAppBot {
               },
               required: ['producto_id']
             }
+          },
+          {
+            name: 'consultarVentas',
+            description: 'Consulta ventas reales (pedidos pagados) + gastos + ganancia estimada para un período.',
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                periodo: { type: SchemaType.STRING, description: 'hoy | ayer | semana | mes' }
+              },
+              required: []
+            }
+          },
+          {
+            name: 'pedidosActivos',
+            description: 'Muestra pedidos pendientes y en preparación ahora mismo, con tiempo transcurrido y alertas de demora.',
+            parameters: { type: SchemaType.OBJECT, properties: {}, required: [] }
+          },
+          {
+            name: 'topProductos',
+            description: 'Los productos más vendidos en un período dado.',
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                periodo: { type: SchemaType.STRING, description: 'hoy | semana | mes' }
+              },
+              required: []
+            }
+          },
+          {
+            name: 'ventasPorAuxiliar',
+            description: 'Ventas desglosadas por cada auxiliar/mesera que creó pedidos.',
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                periodo: { type: SchemaType.STRING, description: 'hoy | semana | mes' }
+              },
+              required: []
+            }
+          },
+          {
+            name: 'marcarProductoAgotado',
+            description: 'Desactiva un producto y pone su stock en 0. Útil cuando se acaba algo en cocina.',
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                id: { type: SchemaType.INTEGER, description: 'ID del producto (opcional si se da nombre)' },
+                nombre: { type: SchemaType.STRING, description: 'Nombre del producto (opcional si se da ID)' }
+              },
+              required: []
+            }
+          },
+          {
+            name: 'cambiarPrecio',
+            description: 'Cambia el precio de un producto por nombre o ID.',
+            parameters: {
+              type: SchemaType.OBJECT,
+              properties: {
+                id: { type: SchemaType.INTEGER, description: 'ID del producto (opcional si se da nombre)' },
+                nombre: { type: SchemaType.STRING, description: 'Nombre del producto (opcional si se da ID)' },
+                nuevo_precio: { type: SchemaType.NUMBER, description: 'Nuevo precio de venta' }
+              },
+              required: ['nuevo_precio']
+            }
           }
         ]
       }];
@@ -916,10 +1167,13 @@ class WhatsAppBot {
       systemInstruction =
         'Eres el Gerente Asistente IA de Puro Sabor.\n' +
         'Ayudas al administrador a manejar el negocio. Tus capacidades son:\n' +
-        '1. GESTION DE INVENTARIOS: Puedes consultar y editar productos del MENU e INSUMOS. Los productos pueden tener variantes (ej. sabores). El inventario devuelto incluirá las variantes si existen.\n' +
-        '2. GESTION DE PRODUCTOS: Tienes acceso a las herramientas crearProducto y crearInsumo. SI TE PIDEN AGREGAR ALGO QUE NO EXISTE, USA ESTAS HERRAMIENTAS. NUNCA digas que no puedes crear productos.\n' +
-        '3. CAJA Y FINANZAS: Puedes registrar gastos (compras, salarios) y consultar las ventas de hoy.\n' +
-        '4. VISION E IMAGENES: Tienes visión computacional. Si el administrador te envía una FOTO (ej. de una factura, lista de compras o recibo), analízala, identifica los insumos y usa crearInsumo (si no existen) o actualizarInsumo (si existen). Extrae los precios y registrarGasto.\n' +
+        '1. GESTION DE INVENTARIOS: Consulta y edita productos del MENÚ e INSUMOS. Los productos pueden tener variantes.\n' +
+        '2. GESTION DE PRODUCTOS: Crea, edita, desactiva productos. Si te piden agregar algo que no existe, úsalas. NUNCA digas que no puedes crear productos.\n' +
+        '3. CAJA Y FINANZAS: Registra gastos, consulta ventas reales (consultarVentas), compara períodos.\n' +
+        '4. OPERACIÓN EN TIEMPO REAL: pedidosActivos te da los pedidos abiertos ahora mismo. topProductos y ventasPorAuxiliar dan inteligencia de negocio.\n' +
+        '5. PRECIOS RÁPIDOS: cambiarPrecio acepta nombre del producto, no necesitas el ID.\n' +
+        '6. AGOTADOS RÁPIDO: marcarProductoAgotado acepta nombre, lo desactiva al instante.\n' +
+        '7. VISION E IMAGENES: Si el administrador envía una FOTO (factura, lista de compras, recibo), analízala, identifica insumos y usa crearInsumo/actualizarInsumo. Extrae precios y registrarGasto.\n' +
         'REGLA: Confirma SIEMPRE con el usuario los montos y cambios antes de ejecutar acciones destructivas o registrar gastos.';
     } else {
       const dominio = await getConfig('dominio_base') || 'https://restaurantepurosabor.com';
@@ -1120,60 +1374,55 @@ class WhatsAppBot {
           let promoIdMatch = finalText.match(/\[SEND_PROMO:(\d+)\]/);
           if (promoIdMatch) {
             cleanText = finalText.replace(/\[SEND_PROMO:\d+\]/g, '').trim();
-            const promoId = promoIdMatch[1];
-            
-            const promoEntry = await new Promise(resolve => {
-              db.get('SELECT imagen_url, imagen_tipo FROM promociones WHERE id = ?', [promoId], (err, row) => resolve(row));
-            });
-
-            if (promoEntry && promoEntry.imagen_url) {
-              const absolutePath = require('path').join(__dirname, '..', promoEntry.imagen_url);
-              if (require('fs').existsSync(absolutePath)) {
-                let mediaPayload = {};
-                if (promoEntry.imagen_tipo === 'video') mediaPayload = { video: { url: absolutePath }, caption: cleanText };
-                else if (promoEntry.imagen_tipo === 'pdf') mediaPayload = { document: { url: absolutePath }, caption: cleanText };
-                else mediaPayload = { image: { url: absolutePath }, caption: cleanText };
-                
-                await this.client.sendMessage(remoteJid, mediaPayload, { quoted: message });
-                await guardarMensajeHistorial(senderNumber, 'model', cleanText || '(Promoción enviada)', this.botType);
-                this.emitMessage({ type: 'out', sender: 'Bot IA', text: cleanText || '(Promoción enviada)', time: new Date().toLocaleTimeString() });
-                
-                // Guardar analítica
-                await logChatbotInteraction(senderNumber, message.pushName || 'Cliente', 'promo_enviada', body, cleanText, { promo_id: promoId });
-                break;
+            const promoId = parseInt(promoIdMatch[1], 10);
+            if (!isNaN(promoId) && promoId > 0) {
+              const promoEntry = await new Promise(resolve => {
+                db.get('SELECT imagen_url, imagen_tipo FROM promociones WHERE id = ?', [promoId], (err, row) => resolve(row));
+              });
+              if (promoEntry && promoEntry.imagen_url) {
+                const _path = require('path'), _fs = require('fs');
+                const uploadsDir = _path.resolve(__dirname, '..', 'uploads');
+                const safePath = _path.resolve(uploadsDir, _path.basename(promoEntry.imagen_url));
+                if (safePath.startsWith(uploadsDir) && _fs.existsSync(safePath)) {
+                  let mediaPayload = {};
+                  if (promoEntry.imagen_tipo === 'video') mediaPayload = { video: { url: safePath }, caption: cleanText };
+                  else if (promoEntry.imagen_tipo === 'pdf') mediaPayload = { document: { url: safePath }, caption: cleanText };
+                  else mediaPayload = { image: { url: safePath }, caption: cleanText };
+                  await this.client.sendMessage(remoteJid, mediaPayload, { quoted: message });
+                  await guardarMensajeHistorial(senderNumber, 'model', cleanText || '(Promoción enviada)', this.botType);
+                  this.emitMessage({ type: 'out', sender: 'Bot IA', text: cleanText || '(Promoción enviada)', time: new Date().toLocaleTimeString() });
+                  await logChatbotInteraction(senderNumber, message.pushName || 'Cliente', 'promo_enviada', body, cleanText, { promo_id: promoId });
+                  break;
+                }
               }
             }
           }
-          
-          // B. Evaluar si tiene etiqueta de Base de Conocimientos (Fase 3)
+
+          // B. Evaluar si tiene etiqueta de Base de Conocimientos
           let mediaIdMatch = finalText.match(/\[SEND_MEDIA:(\d+)\]/);
           if (mediaIdMatch) {
             cleanText = finalText.replace(/\[SEND_MEDIA:\d+\]/g, '').trim();
-            const kbId = mediaIdMatch[1];
-            
-            // Buscar media_url en DB
-            const kbEntry = await new Promise(resolve => {
-              db.get('SELECT media_url, media_type FROM chatbots_kb WHERE id = ?', [kbId], (err, row) => resolve(row));
-            });
-
-            if (kbEntry && kbEntry.media_url) {
-              const absolutePath = require('path').join(__dirname, '..', kbEntry.media_url);
-              if (require('fs').existsSync(absolutePath)) {
-                let mediaPayload = {};
-                if (kbEntry.media_type === 'video') mediaPayload = { video: { url: absolutePath }, caption: cleanText };
-                else if (kbEntry.media_type === 'audio') mediaPayload = { audio: { url: absolutePath }, ptt: true };
-                else mediaPayload = { image: { url: absolutePath }, caption: cleanText };
-                
-                await this.client.sendMessage(remoteJid, mediaPayload, { quoted: message });
-                if (kbEntry.media_type === 'audio' && cleanText) {
-                  await this.client.sendMessage(remoteJid, { text: cleanText });
+            const kbId = parseInt(mediaIdMatch[1], 10);
+            if (!isNaN(kbId) && kbId > 0) {
+              const kbEntry = await new Promise(resolve => {
+                db.get('SELECT media_url, media_type FROM chatbots_kb WHERE id = ?', [kbId], (err, row) => resolve(row));
+              });
+              if (kbEntry && kbEntry.media_url) {
+                const _path = require('path'), _fs = require('fs');
+                const uploadsDir = _path.resolve(__dirname, '..', 'uploads');
+                const safePath = _path.resolve(uploadsDir, _path.basename(kbEntry.media_url));
+                if (safePath.startsWith(uploadsDir) && _fs.existsSync(safePath)) {
+                  let mediaPayload = {};
+                  if (kbEntry.media_type === 'video') mediaPayload = { video: { url: safePath }, caption: cleanText };
+                  else if (kbEntry.media_type === 'audio') mediaPayload = { audio: { url: safePath }, ptt: true };
+                  else mediaPayload = { image: { url: safePath }, caption: cleanText };
+                  await this.client.sendMessage(remoteJid, mediaPayload, { quoted: message });
+                  if (kbEntry.media_type === 'audio' && cleanText) await this.client.sendMessage(remoteJid, { text: cleanText });
+                  await guardarMensajeHistorial(senderNumber, 'model', cleanText || '(Multimedia enviado)', this.botType);
+                  this.emitMessage({ type: 'out', sender: 'Bot IA', text: cleanText || '(Multimedia enviado)', time: new Date().toLocaleTimeString() });
+                  await logChatbotInteraction(senderNumber, message.pushName || 'Cliente', 'respuesta_kb', body, cleanText, { kb_id: kbId });
+                  break;
                 }
-                await guardarMensajeHistorial(senderNumber, 'model', cleanText || '(Multimedia enviado)', this.botType);
-                this.emitMessage({ type: 'out', sender: 'Bot IA', text: cleanText || '(Multimedia enviado)', time: new Date().toLocaleTimeString() });
-                
-                // Guardar analítica
-                await logChatbotInteraction(senderNumber, message.pushName || 'Cliente', 'respuesta_kb', body, cleanText, { kb_id: kbId });
-                break;
               }
             }
           }
@@ -1203,9 +1452,9 @@ class WhatsAppBot {
       }
 
     } catch (err) {
-      console.error(`[WA Agent ${this.botType}] Error Gemini:`, err.message);
+      console.error(`[WA Agent ${this.botType}] Error Gemini:`, err.code || err.name, process.env.NODE_ENV !== 'production' ? err.message : '');
       if (this.botType === 'admin') {
-        await this.client.sendMessage(remoteJid, { text: `⚠️ Error IA: ${err.message}` }, { quoted: message });
+        await this.client.sendMessage(remoteJid, { text: '⚠️ Error procesando tu solicitud. Intenta de nuevo o revisa la configuración en el panel.' }, { quoted: message });
       }
     }
   }
@@ -1241,6 +1490,110 @@ module.exports = {
       clientBot.inicializarWhatsApp(),
       adminBot.inicializarWhatsApp()
     ]);
+
+    // ── Alertas proactivas de stock bajo (cada 30 min) ──────────
+    async function enviarAlertasStock() {
+      const bot = bots.admin;
+      if (!bot || bot.botStatus !== 'ready' || !bot.client) return;
+      try {
+        const adminNumbersStr = await getConfig('admin_whatsapp_numbers') || '';
+        const admins = adminNumbersStr.split(',').map(n => n.trim().replace(/^\+/, '')).filter(Boolean);
+        if (!admins.length) return;
+
+        // Productos con stock ≤ stock_minimo
+        const prodBajos = await dbAsync.all(
+          `SELECT nombre, stock, stock_minimo FROM productos WHERE activo = 1 AND stock_minimo > 0 AND stock <= stock_minimo`
+        );
+        // Insumos con cantidad ≤ stock_minimo
+        const insumoBajos = await dbAsync.all(
+          `SELECT nombre, cantidad, stock_minimo, unidad FROM insumos WHERE stock_minimo > 0 AND cantidad <= stock_minimo`
+        );
+
+        if (!prodBajos.length && !insumoBajos.length) return;
+
+        let msg = '⚠️ *Alerta de Stock Bajo — Puro Sabor*\n\n';
+        if (prodBajos.length) {
+          msg += '*Productos del menú:*\n' + prodBajos.map(p => `• ${p.nombre}: ${p.stock} unidades (mín: ${p.stock_minimo})`).join('\n') + '\n\n';
+        }
+        if (insumoBajos.length) {
+          msg += '*Insumos:*\n' + insumoBajos.map(i => `• ${i.nombre}: ${i.cantidad} ${i.unidad} (mín: ${i.stock_minimo})`).join('\n');
+        }
+        msg += '\n\n_Responde al bot admin para actualizar stock._';
+
+        for (const adminNum of admins) {
+          try { await bot.client.sendMessage(`${adminNum}@s.whatsapp.net`, { text: msg }); } catch(_) {}
+        }
+        console.log(`[WA Proactivo] Alerta de stock enviada a ${admins.length} admins`);
+      } catch (err) {
+        console.error('[WA Proactivo] Error en alerta de stock:', err.message);
+      }
+    }
+
+    // ── Resumen diario automático al cierre (23:30 hora Colombia) ─
+    async function programarResumenDiario() {
+      const now = new Date();
+      const colombia = new Date(now.getTime() - 5 * 3600_000);
+      const h = colombia.getUTCHours(), m = colombia.getUTCMinutes();
+      // Calcular ms hasta las 23:30 Colombia
+      const targetH = 23, targetM = 30;
+      let msHasta = ((targetH - h) * 60 + (targetM - m)) * 60_000;
+      if (msHasta <= 0) msHasta += 24 * 3600_000;
+
+      setTimeout(async function enviar() {
+        const bot = bots.admin;
+        if (bot && bot.botStatus === 'ready' && bot.client) {
+          try {
+            const adminNumbersStr = await getConfig('admin_whatsapp_numbers') || '';
+            const admins = adminNumbersStr.split(',').map(n => n.trim().replace(/^\+/, '')).filter(Boolean);
+
+            const ventas = await dbAsync.get(
+              `SELECT COUNT(*) as total_pedidos, COALESCE(SUM(total),0) as ingresos
+               FROM pedidos WHERE estado = 'pagado' AND DATE(creado_en) = CURRENT_DATE`
+            );
+            const gastos = await dbAsync.get(
+              `SELECT COALESCE(SUM(monto),0) as gastos FROM caja_registros
+               WHERE tipo = 'gasto' AND DATE(fecha) = CURRENT_DATE`
+            );
+            // Top 3 productos del día
+            const pedidosDia = await dbAsync.all(
+              `SELECT items_json FROM pedidos WHERE estado = 'pagado' AND DATE(creado_en) = CURRENT_DATE`
+            );
+            const conteo = {};
+            for (const p of pedidosDia) {
+              try { JSON.parse(p.items_json || '[]').forEach(i => { conteo[i.nombre] = (conteo[i.nombre] || 0) + i.cantidad; }); } catch(_) {}
+            }
+            const top3 = Object.entries(conteo).sort((a,b) => b[1]-a[1]).slice(0,3).map(([n,c]) => `• ${n} (×${c})`).join('\n');
+
+            const ingresos = parseFloat(ventas?.ingresos || 0);
+            const totalGastos = parseFloat(gastos?.gastos || 0);
+            const msg = `🌙 *Resumen del Día — Puro Sabor*\n\n` +
+              `📦 Pedidos atendidos: ${ventas?.total_pedidos || 0}\n` +
+              `💰 Ingresos: $${ingresos.toLocaleString('es-CO')}\n` +
+              `💸 Gastos: $${totalGastos.toLocaleString('es-CO')}\n` +
+              `📊 Ganancia estimada: $${(ingresos - totalGastos).toLocaleString('es-CO')}\n` +
+              (top3 ? `\n🏆 *Top productos:*\n${top3}` : '') +
+              `\n\n_Buen trabajo hoy. ¡Hasta mañana! 🔥_`;
+
+            for (const adminNum of admins) {
+              try { await bot.client.sendMessage(`${adminNum}@s.whatsapp.net`, { text: msg }); } catch(_) {}
+            }
+            console.log('[WA Proactivo] Resumen diario enviado');
+          } catch (err) {
+            console.error('[WA Proactivo] Error en resumen diario:', err.message);
+          }
+        }
+        // Reprogramar para el día siguiente
+        setTimeout(enviar, 24 * 3600_000);
+      }, msHasta);
+      console.log(`[WA Proactivo] Resumen diario programado en ${Math.round(msHasta/60000)} minutos`);
+    }
+
+    // Iniciar alertas y resumen (con delay de 2 min para que el bot esté listo)
+    setTimeout(() => {
+      enviarAlertasStock();
+      setInterval(enviarAlertasStock, 30 * 60_000);
+      programarResumenDiario();
+    }, 2 * 60_000);
   },
   guardarMensajeHistorial,
   notificarPedidoMesaAdmin: async (mesaNumero, items, total) => {
