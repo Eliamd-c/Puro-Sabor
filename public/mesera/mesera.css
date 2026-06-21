@@ -357,7 +357,9 @@ html, body {
 .order-total { font-size: 18px; font-weight: 900; margin-top: 4px; }
 
 /* TIMER */
-.order-timer { font-family: 'Outfit', monospace; font-size: 18px; font-weight: 900; }
+.order-timer-wrap { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.order-timer-label { font-size: 10px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.order-timer { font-family: 'Outfit', monospace; font-size: 22px; font-weight: 900; line-height: 1; }
 .timer-ok { color: var(--success); }
 .timer-overdue { color: #e74c3c; animation: timerPulse 1s infinite; }
 @keyframes timerPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
@@ -641,7 +643,8 @@ html, body {
   .order-type-icon { font-size: 11px; }
   .order-card-meta { font-size: 11px; gap: 6px; }
   .order-total { font-size: 15px; }
-  .order-timer { font-size: 15px; }
+  .order-timer { font-size: 17px; }
+  .order-timer-label { font-size: 9px; }
   .order-item-row { font-size: 11px; }
   .order-actions { margin-top: 8px; padding-top: 8px; }
   .btn-action { padding: 6px 10px; font-size: 11px; }

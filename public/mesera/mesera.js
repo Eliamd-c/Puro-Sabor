@@ -766,7 +766,7 @@
             ${p.direccion_domicilio ? `<div class="order-address">📍 ${p.direccion_domicilio}</div>` : ''}
           </div>
           <div class="order-card-right">
-            ${p.estado === 'pendiente' ? `<div class="order-timer" data-created="${p.creado_en}">--:--</div>` : ''}
+            ${['pendiente','preparando'].includes(p.estado) ? `<div class="order-timer-wrap"><span class="order-timer-label">⏱ Entrega</span><div class="order-timer" data-created="${p.creado_en}">20:00</div></div>` : ''}
             <div class="order-total">$${parseFloat(p.total).toLocaleString('es-CO')}</div>
           </div>
         </div>
