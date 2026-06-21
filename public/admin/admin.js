@@ -95,10 +95,10 @@ class AdminApp {
   switchPage(page) {
     this.currentPage = page;
     document.querySelectorAll('.page-content').forEach(p => p.classList.remove('active'));
-    document.querySelector(`[data-page="${page}"]`).classList.add('active');
+    document.querySelector(`.page-content[data-page="${page}"]`).classList.add('active');
 
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-    document.querySelector(`[data-page="${page}"]`).classList.add('active');
+    document.querySelector(`.nav-item[data-page="${page}"]`).classList.add('active');
 
     const titles = {
       dashboard: { title: 'Dashboard', subtitle: 'Control y auditoría de pedidos' },
@@ -127,35 +127,48 @@ class AdminApp {
     window.location.reload();
   }
 
+  // ─── AUTH HEADER / 401 HANDLER ──────────────────────────────
+  authH() {
+    return { 'Authorization': `Bearer ${this.token}`, 'Content-Type': 'application/json' };
+  }
+
+  handleUnauthorized() {
+    this.showToast('⚠️ Sesión expirada, ingresa de nuevo');
+    localStorage.removeItem('puro_sabor_admin_token');
+    setTimeout(() => window.location.reload(), 1500);
+  }
+
   // ─── DATA LOADING ────────────────────────────────────────────
   async loadData() {
     try {
-      const res = await fetch('/api/pedidos', {
-        headers: { 'Authorization': `Bearer ${this.token}` }
-      });
-      const data = await res.json();
-      this.allPedidos = data.data || [];
+      const [resPedidos, resHistorial] = await Promise.all([
+        fetch('/api/pedidos', { headers: this.authH() }),
+        fetch('/api/pedidos/historial', { headers: this.authH() })
+      ]);
+
+      if (resPedidos.status === 401 || resHistorial.status === 401) {
+        this.handleUnauthorized();
+        return;
+      }
+
+      const dataPedidos = await resPedidos.json();
+      const dataHistorial = await resHistorial.json();
+
+      this.allPedidos = dataPedidos.data || [];
+      this.allHistorial = dataHistorial.data || [];
+
       this.renderDashboard();
-      this.renderPedidosTable();
+      if (this.currentPage === 'pedidos') this.renderPedidosTable();
+      if (this.currentPage === 'auditoria') this.renderAuditoria();
+      if (this.currentPage === 'dashboard') setTimeout(() => this.renderCharts(), 100);
     } catch (error) {
-      console.error('Error loading pedidos:', error);
+      console.error('Error loading data:', error);
+      this.showToast('❌ Error de conexión al cargar datos');
     }
 
     try {
-      const res = await fetch('/api/pedidos/historial', {
-        headers: { 'Authorization': `Bearer ${this.token}` }
-      });
-      const data = await res.json();
-      this.allHistorial = data.data || [];
-      this.renderAuditoria();
-    } catch (error) {
-      console.error('Error loading historial:', error);
-    }
-
-    try {
-      const res = await fetch('/api/pedidos/reportes', {
-        headers: { 'Authorization': `Bearer ${this.token}` }
-      });
+      const res = await fetch('/api/pedidos/reportes', { headers: this.authH() });
+      if (res.status === 401) { this.handleUnauthorized(); return; }
       const data = await res.json();
       this.renderReportes(data.data || {});
     } catch (error) {
@@ -435,10 +448,20 @@ class AdminApp {
 
   // ─── SOCKET.IO ────────────────────────────────────────────────
   setupSocketIO() {
-    this.socket = io();
+    this.socket = io({ transports: ['websocket', 'polling'] });
 
     this.socket.on('connect', () => {
-      this.socket.emit('join', { role: 'admin' });
+      this.socket.emit('unirse_admin');
+    });
+
+    this.socket.on('disconnect', () => {
+      this.showToast('⚠️ Conexión perdida, reconectando…');
+    });
+
+    this.socket.on('reconnect', () => {
+      this.socket.emit('unirse_admin');
+      this.loadData();
+      this.showToast('✓ Reconectado');
     });
 
     this.socket.on('nuevo_pedido', (data) => {
@@ -447,16 +470,22 @@ class AdminApp {
     });
 
     this.socket.on('pedido_estado_actualizado', (data) => {
-      const p = this.allPedidos.find(pd => pd.id === data.id);
+      const p = this.allPedidos.find(pd => pd.id === parseInt(data.id));
       if (p) {
         p.estado = data.estado;
         this.renderDashboard();
-        this.renderPedidosTable();
+        if (this.currentPage === 'pedidos') this.renderPedidosTable();
       }
     });
 
-    this.socket.on('pedido_actualizado', (data) => {
+    this.socket.on('pedido_actualizado', () => {
       this.loadData();
+    });
+
+    this.socket.on('pedido_eliminado', (data) => {
+      this.allPedidos = this.allPedidos.filter(p => p.id !== parseInt(data.id));
+      this.renderDashboard();
+      if (this.currentPage === 'pedidos') this.renderPedidosTable();
     });
   }
 

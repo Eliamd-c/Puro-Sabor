@@ -300,10 +300,11 @@ router.put('/:id', verificarJWT, validate(editarPedidoSchema), async (req, res, 
 
     // Registrar en el historial si hay cambios
     if (Object.keys(camposAnteriores).length > 0) {
+      const usuarioNombre = req.admin?.nombre || req.admin?.usuario || 'Sistema';
       await dbAsync.run(
         `INSERT INTO pedidos_historial (pedido_id, tipo_cambio, campos_anteriores, campos_nuevos, usuario_nombre)
-         VALUES (?, 'edicion', ?, ?, 'Mesera')`,
-        [id, JSON.stringify(camposAnteriores), JSON.stringify(camposNuevos)]
+         VALUES (?, 'edicion', ?, ?, ?)`,
+        [id, JSON.stringify(camposAnteriores), JSON.stringify(camposNuevos), usuarioNombre]
       );
     }
 

@@ -136,6 +136,10 @@
     try {
       socket = io({ transports: ['websocket', 'polling'] });
       socket.on('connect', () => socket.emit('unirse_admin'));
+      socket.on('reconnect', () => {
+        socket.emit('unirse_admin');
+        loadPedidos();
+      });
       socket.on('nuevo_pedido', () => {
         playNotificationSound();
         showBanner('🔔 ¡Nuevo pedido recibido!');
@@ -147,12 +151,13 @@
           showBanner('🍽 ¡Pedido listo para entregar!');
         }
         loadPedidos();
-        // Actualiza estado de mesas si el modal está abierto
         if (modalMesa.style.display === 'flex') {
           renderMesasModal();
         }
       });
+      socket.on('pedido_actualizado', () => loadPedidos());
       socket.on('pedido_flags_actualizado', () => loadPedidos());
+      socket.on('pedido_eliminado', () => loadPedidos());
     } catch (e) {
       console.warn('Socket.IO no disponible:', e);
     }
@@ -285,9 +290,19 @@
     }
   }
 
+  function handleUnauthorized() {
+    showToast('⚠️ Sesión expirada, vuelve a ingresar');
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+    token = null;
+    userData = null;
+    setTimeout(() => showLogin(), 1500);
+  }
+
   async function loadPedidos() {
     try {
       const res = await fetch(API.pedidos, { headers: authH() });
+      if (res.status === 401) { handleUnauthorized(); return; }
       const data = await res.json();
       if (data.success) {
         pedidos = data.data || [];
@@ -831,12 +846,18 @@
   // ─── API ACTIONS ───────────────────────────────────────────
   async function updateFlags(id, flags) {
     try {
-      await fetch(API.flags(id), {
+      const res = await fetch(API.flags(id), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', ...authH() },
         body: JSON.stringify(flags)
       });
-    } catch (e) { console.error(e); }
+      if (res.status === 401) { handleUnauthorized(); return; }
+      const data = await res.json();
+      if (!data.success) showToast(`❌ Error al actualizar flags: ${data.error || 'Error desconocido'}`);
+    } catch (e) {
+      console.error(e);
+      showToast('❌ Error de conexión');
+    }
   }
 
   async function updateEstado(id, estado, metodo_pago) {
@@ -848,12 +869,18 @@
         headers: { 'Content-Type': 'application/json', ...authH() },
         body: JSON.stringify(body)
       });
+      if (res.status === 401) { handleUnauthorized(); return; }
       const data = await res.json();
       if (data.success) {
         showToast(`✅ Pedido #${id} → ${estado}`);
         loadPedidos();
+      } else {
+        showToast(`❌ Error: ${data.error || 'No se pudo actualizar el estado'}`);
       }
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+      showToast('❌ Error de conexión al cambiar estado');
+    }
   }
 
   // ─── PAYMENT MODAL (Calculadora de Cambio) ────────────────
