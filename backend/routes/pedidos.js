@@ -126,43 +126,70 @@ router.put('/:id/estado', verificarJWT, validate(actualizarEstadoSchema), async 
     params.push(id);
     await dbAsync.run(`UPDATE pedidos SET ${updates.join(', ')} WHERE id = ?`, params);
 
-    // Auto-deduct stock when order is completed (pagado)
+    // Auto-deduct stock + insumos (receta) cuando el pedido se marca PAGADO.
+    // Todo dentro de una transacción: si algo falla, se revierte completo.
     if (estado === 'pagado' && pedido.estado !== 'pagado') {
       try {
         const items = JSON.parse(pedido.items_json || '[]');
-        for (const item of items) {
-          await dbAsync.run(
-            `UPDATE productos SET stock = stock - ? WHERE id = ? AND stock >= ?`,
-            [item.cantidad, item.id, item.cantidad]
-          );
-          await dbAsync.run(
-            `INSERT INTO movimientos_inventario (producto_id, cantidad_cambio, razon, pedido_id)
-             VALUES (?, ?, 'venta', ?)`,
-            [item.id, -item.cantidad, id]
-          );
-        }
+        await dbAsync.withTransaction(async (tx) => {
+          for (const item of items) {
+            // 1. Descontar stock del producto
+            await tx.run(
+              `UPDATE productos SET stock = stock - ? WHERE id = ? AND stock >= ?`,
+              [item.cantidad, item.id, item.cantidad]
+            );
+            await tx.run(
+              `INSERT INTO movimientos_inventario (producto_id, cantidad_cambio, razon, pedido_id)
+               VALUES (?, ?, 'venta', ?)`,
+              [item.id, -item.cantidad, id]
+            );
+            // 2. Descontar insumos según la receta del producto (si tiene)
+            const recetas = await tx.all(
+              `SELECT insumo_id, cantidad_usada FROM recetas WHERE producto_id = ?`,
+              [item.id]
+            );
+            for (const r of recetas) {
+              await tx.run(
+                `UPDATE insumos SET cantidad = GREATEST(0, cantidad - ?) WHERE id = ?`,
+                [r.cantidad_usada * item.cantidad, r.insumo_id]
+              );
+            }
+          }
+        });
       } catch (e) {
-        console.error('Error deducting stock:', e);
+        console.error('Error deducting stock (transacción revertida):', e.message);
       }
     }
 
-    // Restore stock if order is cancelled
+    // Restaurar stock + insumos si un pedido PAGADO se cancela (también atómico)
     if (estado === 'cancelado' && pedido.estado === 'pagado') {
       try {
         const items = JSON.parse(pedido.items_json || '[]');
-        for (const item of items) {
-          await dbAsync.run(
-            `UPDATE productos SET stock = stock + ? WHERE id = ?`,
-            [item.cantidad, item.id]
-          );
-          await dbAsync.run(
-            `INSERT INTO movimientos_inventario (producto_id, cantidad_cambio, razon, pedido_id)
-             VALUES (?, ?, 'cancelacion', ?)`,
-            [item.id, item.cantidad, id]
-          );
-        }
+        await dbAsync.withTransaction(async (tx) => {
+          for (const item of items) {
+            await tx.run(
+              `UPDATE productos SET stock = stock + ? WHERE id = ?`,
+              [item.cantidad, item.id]
+            );
+            await tx.run(
+              `INSERT INTO movimientos_inventario (producto_id, cantidad_cambio, razon, pedido_id)
+               VALUES (?, ?, 'cancelacion', ?)`,
+              [item.id, item.cantidad, id]
+            );
+            const recetas = await tx.all(
+              `SELECT insumo_id, cantidad_usada FROM recetas WHERE producto_id = ?`,
+              [item.id]
+            );
+            for (const r of recetas) {
+              await tx.run(
+                `UPDATE insumos SET cantidad = cantidad + ? WHERE id = ?`,
+                [r.cantidad_usada * item.cantidad, r.insumo_id]
+              );
+            }
+          }
+        });
       } catch (e) {
-        console.error('Error restoring stock:', e);
+        console.error('Error restoring stock (transacción revertida):', e.message);
       }
     }
 

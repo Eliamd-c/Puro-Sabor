@@ -121,6 +121,57 @@ const db = {
   }
 };
 
+/**
+ * Ejecuta una serie de operaciones dentro de UNA transacción atómica.
+ * Si cualquier paso falla, se revierte TODO (ROLLBACK). Si todo sale bien, COMMIT.
+ *
+ * Uso:
+ *   await withTransaction(async (tx) => {
+ *     await tx.run('UPDATE ...', [...]);
+ *     const row = await tx.get('SELECT ...', [...]);
+ *   });
+ *
+ * El objeto `tx` ofrece run/get/all con la misma sintaxis de placeholders "?".
+ */
+async function withTransaction(work) {
+  const client = await pool.connect();
+  const tx = {
+    run: async (sql, params = []) => {
+      const pgSql = convertQueryToPg(sql);
+      const isInsert = pgSql.trim().toUpperCase().startsWith('INSERT');
+      const finalSql = isInsert ? `${pgSql} RETURNING *` : pgSql;
+      const result = await client.query(finalSql, params);
+      return {
+        changes: result.rowCount || 0,
+        lastID: isInsert && result.rows.length > 0 ? result.rows[0].id : null,
+        rows: result.rows
+      };
+    },
+    get: async (sql, params = []) => {
+      const result = await client.query(convertQueryToPg(sql), params);
+      return result.rows.length > 0 ? result.rows[0] : undefined;
+    },
+    all: async (sql, params = []) => {
+      const result = await client.query(convertQueryToPg(sql), params);
+      return result.rows;
+    }
+  };
+  try {
+    await client.query('BEGIN');
+    const out = await work(tx);
+    await client.query('COMMIT');
+    return out;
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+db.withTransaction = withTransaction;
+db.pool = pool;
+
 // --- CREACIÓN DE TABLAS (MIGRACIÓN A POSTGRESQL) ---
 async function inicializarTablas() {
   try {
@@ -434,6 +485,16 @@ async function inicializarTablas() {
     await pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS nombre_cliente VARCHAR(255)`);
     await pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
     await pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS creado_por VARCHAR(255) DEFAULT ''`);
+
+    // Migración de DINERO: REAL (float) → NUMERIC(12,2) para evitar errores de redondeo.
+    // Idempotente: si ya es NUMERIC, es prácticamente un no-op. Envuelto por si falla no rompe el arranque.
+    try {
+      await pool.query(`ALTER TABLE productos ALTER COLUMN precio TYPE NUMERIC(12,2) USING ROUND(precio::numeric, 2)`);
+      await pool.query(`ALTER TABLE pedidos ALTER COLUMN total TYPE NUMERIC(12,2) USING ROUND(total::numeric, 2)`);
+      console.log('✅ Columnas de dinero verificadas como NUMERIC(12,2).');
+    } catch (e) {
+      console.error('[DB] Migración money NUMERIC (no crítico):', e.message);
+    }
 
     // Agregar columna viendo si no existe (migracion segura)
     await pool.query(`ALTER TABLE mesas ADD COLUMN IF NOT EXISTS viendo INTEGER DEFAULT 0`);

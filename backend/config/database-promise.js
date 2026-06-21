@@ -11,7 +11,8 @@ const dbAsync = {
     });
   },
   get: util.promisify(db.get.bind(db)),
-  all: util.promisify(db.all.bind(db))
+  all: util.promisify(db.all.bind(db)),
+  withTransaction: (work) => db.withTransaction(work)
 };
 
 module.exports = dbAsync;
