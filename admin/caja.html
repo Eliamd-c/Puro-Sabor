@@ -70,16 +70,29 @@
           <h2>Caja del Día y Finanzas</h2>
           <p>Controla los ingresos por ventas y los gastos de insumos del día.</p>
         </div>
-        <button class="btn-primary" id="btn-open-add-registro">
-          <span>➕ Registrar Gasto/Ingreso Manual</span>
-        </button>
+        <div style="display:flex; gap:10px;">
+          <button class="btn-secondary" id="btn-cierre-caja">
+            <span>🧾 Cierre de Caja</span>
+          </button>
+          <button class="btn-primary" id="btn-open-add-registro">
+            <span>➕ Registrar Gasto/Ingreso Manual</span>
+          </button>
+        </div>
       </div>
 
       <!-- Grid de Indicadores KPI -->
       <section class="kpi-grid animate-fade-in-up" style="animation-delay: 0.1s;">
         <div class="kpi-card" style="border-left: 4px solid var(--success);">
           <div>
-            <p class="kpi-info-label">Ingresos de Hoy</p>
+            <p class="kpi-info-label">Ventas de Hoy (pedidos)</p>
+            <h3 class="kpi-info-value" id="kpi-ventas" style="color: var(--success);">$0</h3>
+          </div>
+          <span class="kpi-icon">🍽️</span>
+        </div>
+
+        <div class="kpi-card" style="border-left: 4px solid var(--success);">
+          <div>
+            <p class="kpi-info-label">Ingresos Totales</p>
             <h3 class="kpi-info-value" id="kpi-ingresos">$0</h3>
           </div>
           <span class="kpi-icon">📈</span>
@@ -100,6 +113,15 @@
           </div>
           <span class="kpi-icon" style="opacity: 0.8;">💰</span>
         </div>
+      </section>
+
+      <!-- Panel de Cierre de Caja (Reporte Z) -->
+      <section id="cierre-panel" class="table-container animate-fade-in-up" style="display:none; margin-bottom:20px; padding:20px;">
+        <div class="table-header-bar" style="display:flex; justify-content:space-between; align-items:center;">
+          <h3>🧾 Cierre de Caja — <span id="cierre-fecha">hoy</span></h3>
+          <button class="btn-icon" id="btn-close-cierre" title="Cerrar" style="font-size:18px;">✕</button>
+        </div>
+        <div id="cierre-content" style="padding-top:12px;"></div>
       </section>
 
       <!-- Tabla de Registros -->

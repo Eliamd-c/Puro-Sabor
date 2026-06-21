@@ -19,6 +19,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const dataReg = await resRegistros.json();
 
       if (dataKpi.success) {
+        const ventasEl = document.getElementById('kpi-ventas');
+        if (ventasEl) ventasEl.textContent = `$${(dataKpi.data.ventas || 0).toLocaleString()}`;
         document.getElementById('kpi-ingresos').textContent = `$${dataKpi.data.ingresos.toLocaleString()}`;
         document.getElementById('kpi-gastos').textContent = `$${dataKpi.data.gastos.toLocaleString()}`;
         document.getElementById('kpi-balance').textContent = `$${dataKpi.data.balance.toLocaleString()}`;
@@ -147,6 +149,78 @@ document.addEventListener('DOMContentLoaded', () => {
       alert('Error de conexión');
     }
   });
+
+  // ── Cierre de Caja (Reporte Z) ──────────────────────────────
+  const btnCierre = document.getElementById('btn-cierre-caja');
+  const cierrePanel = document.getElementById('cierre-panel');
+  const btnCloseCierre = document.getElementById('btn-close-cierre');
+
+  const metodoNombres = {
+    efectivo: '💵 Efectivo', nequi: '📱 Nequi', daviplata: '📱 Daviplata',
+    transferencia: '🏦 Transferencia', sin_especificar: '❓ Sin especificar'
+  };
+
+  async function cargarCierre() {
+    try {
+      const token = localStorage.getItem('puro_sabor_admin_token');
+      const res = await fetch('/api/caja/cierre', { headers: { 'Authorization': `Bearer ${token}` } });
+      const data = await res.json();
+      if (!data.success) { alert('Error al generar el cierre'); return; }
+      const d = data.data;
+
+      const metodosHtml = (d.ventas_por_metodo || []).length
+        ? d.ventas_por_metodo.map(m =>
+            `<div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #eee;">
+               <span>${metodoNombres[m.metodo] || m.metodo} <small style="color:#888;">(${m.pedidos})</small></span>
+               <strong>$${m.monto.toLocaleString()}</strong>
+             </div>`).join('')
+        : '<p style="color:#888;">Sin ventas registradas.</p>';
+
+      const gastosHtml = (d.gastos_por_categoria || []).length
+        ? d.gastos_por_categoria.map(g =>
+            `<div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #eee;">
+               <span>${g.categoria}</span>
+               <strong style="color:var(--danger);">- $${g.monto.toLocaleString()}</strong>
+             </div>`).join('')
+        : '<p style="color:#888;">Sin gastos registrados.</p>';
+
+      document.getElementById('cierre-fecha').textContent = d.fecha === 'hoy' ? 'Hoy' : d.fecha;
+      document.getElementById('cierre-content').innerHTML = `
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:20px;">
+          <div>
+            <h4 style="margin-bottom:8px;">Ventas por método de pago</h4>
+            ${metodosHtml}
+            <div style="display:flex; justify-content:space-between; padding:10px 0; margin-top:6px; border-top:2px solid #333;">
+              <strong>Total ventas (${d.num_pedidos} pedidos)</strong>
+              <strong style="color:var(--success);">$${d.total_ventas.toLocaleString()}</strong>
+            </div>
+            <p style="color:#888; font-size:13px; margin-top:4px;">Ticket promedio: $${d.ticket_promedio.toLocaleString()}</p>
+          </div>
+          <div>
+            <h4 style="margin-bottom:8px;">Gastos por categoría</h4>
+            ${gastosHtml}
+            <div style="display:flex; justify-content:space-between; padding:10px 0; margin-top:6px; border-top:2px solid #333;">
+              <strong>Total gastos</strong>
+              <strong style="color:var(--danger);">- $${d.total_gastos.toLocaleString()}</strong>
+            </div>
+            ${d.ingresos_manuales ? `<p style="color:#888; font-size:13px; margin-top:4px;">+ Otros ingresos manuales: $${d.ingresos_manuales.toLocaleString()}</p>` : ''}
+          </div>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px; padding:16px; background:#f8f9fa; border-radius:10px;">
+          <strong style="font-size:18px;">BALANCE DEL DÍA</strong>
+          <strong style="font-size:24px; color:${d.balance >= 0 ? 'var(--success)' : 'var(--danger)'};">$${d.balance.toLocaleString()}</strong>
+        </div>
+      `;
+      cierrePanel.style.display = 'block';
+      cierrePanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (e) {
+      console.error(e);
+      alert('Error de conexión al generar el cierre');
+    }
+  }
+
+  if (btnCierre) btnCierre.addEventListener('click', cargarCierre);
+  if (btnCloseCierre) btnCloseCierre.addEventListener('click', () => { cierrePanel.style.display = 'none'; });
 
   fetchCaja();
 });
