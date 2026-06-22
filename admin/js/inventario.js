@@ -417,6 +417,8 @@ document.addEventListener('DOMContentLoaded', () => {
       socket.on('whatsapp_admin_status', (data) => {
         console.log('[Socket] WhatsApp Status recibido:', data);
         updateAdminBotUI(data.status, data.qr, data.error);
+        if (data.status === 'ready' || data.status === 'disabled') stopStatusPolling();
+        else if (data.status === 'qr' && !data.qr) startStatusPolling(); // QR pendiente, seguir polling
       });
 
 
@@ -462,12 +464,36 @@ document.addEventListener('DOMContentLoaded', () => {
     btnLogout: document.getElementById('btn-logout-admin')
   };
 
+  let _statusPollTimer = null;
+
+  function startStatusPolling() {
+    if (_statusPollTimer) return;
+    _statusPollTimer = setInterval(async () => {
+      try {
+        const res = await fetch('/api/chatbots/admin/status', { headers: { 'Authorization': `Bearer ${token}` } });
+        const data = await res.json();
+        if (data.success) {
+          updateAdminBotUI(data.status, data.qr);
+          if (data.status === 'ready' || data.status === 'disabled') stopStatusPolling();
+        }
+      } catch (_) {}
+    }, 3000);
+  }
+
+  function stopStatusPolling() {
+    if (_statusPollTimer) { clearInterval(_statusPollTimer); _statusPollTimer = null; }
+  }
+
   async function loadAdminBotStatus() {
     try {
       const res = await fetch(`/api/chatbots/admin/status`, { headers: { 'Authorization': `Bearer ${token}` } });
       const data = await res.json();
       if (data.success) {
         updateAdminBotUI(data.status, data.qr);
+        // Si está inicializando o esperando QR, arrancar polling para no perder el evento
+        if (data.status === 'loading' || data.status === 'qr' || data.status === 'disconnected') {
+          startStatusPolling();
+        }
       }
     } catch (err) {
       console.error('Error loading admin bot status:', err);
@@ -509,8 +535,11 @@ document.addEventListener('DOMContentLoaded', () => {
   if (botAdmin.btnReconnect) {
     botAdmin.btnReconnect.addEventListener('click', async () => {
       botAdmin.btnReconnect.disabled = true;
+      stopStatusPolling();
+      updateAdminBotUI('loading');
       try {
         await fetch(`/api/chatbots/admin/reconnect`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+        startStatusPolling();
       } catch (err) {
         console.error('Error reconnecting', err);
       }

@@ -43,6 +43,10 @@ router.post('/:type/reconnect', verificarJWT, async (req, res, next) => {
     const activeKey = type === 'client' ? 'whatsapp_bot_active' : 'whatsapp_admin_bot_active';
     await configService.setConfig(activeKey, '1');
     
+    // Forzar reset de estado atascado antes de reiniciar
+    bot.isReconnecting = false;
+    await bot.releaseLockDB().catch(() => {});
+
     // Reiniciar
     bot.inicializarWhatsApp().catch(err => {
       console.error(`[WA Route ${type}] Error al reconectar el bot:`, err.message);

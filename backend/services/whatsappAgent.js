@@ -454,7 +454,8 @@ class WhatsAppBot {
           if (statusCode === DisconnectReason.loggedOut) {
             try {
               await this.clearSupabaseAuth();
-              console.log(`[WA Agent ${this.botType}] Sesión cerrada remotamente. Auth limpiada.`);
+              await this.releaseLockDB().catch(() => {});
+              console.log(`[WA Agent ${this.botType}] Sesión cerrada remotamente. Auth limpiada. Reintentando para nuevo QR...`);
             } catch(e) {
               console.error(`[WA Agent ${this.botType}] Error limpiando auth:`, e.message);
             }
@@ -463,10 +464,9 @@ class WhatsAppBot {
           this.botStatus = 'disconnected';
           this.latestQrDataUrl = null;
           this.emitStatus({ error: lastDisconnect?.error?.message });
-          
-          if (shouldReconnect) {
-            setTimeout(() => this.inicializarWhatsApp(), 3000);
-          }
+
+          // Siempre reintentar — si fue loggedOut el auth ya fue limpiado → generará QR nuevo
+          setTimeout(() => this.inicializarWhatsApp(), 3000);
         } else if (connection === 'open') {
           console.log(`[WA Agent ${this.botType}] Conectado y listo.`);
           this.botStatus = 'ready';
@@ -490,7 +490,10 @@ class WhatsAppBot {
     } catch (err) {
       console.error(`[WA Agent ${this.botType}] Error fatal:`, err.message);
       this.botStatus = 'disconnected';
+      this.isReconnecting = false;
+      await this.releaseLockDB().catch(() => {});
       this.emitStatus({ error: err.message });
+      setTimeout(() => this.inicializarWhatsApp(), 5000);
     }
   }
 
