@@ -122,6 +122,21 @@ io.on('connection', (socket) => {
   socket.on('unirse_admin', () => {
     socket.join('admin');
     console.log(`[Socket] Admin conectado: ${socket.id}`);
+
+    // Enviar estado actual de los bots a este nuevo admin (no depender de que
+    // el evento se emita justo cuando el socket ya está conectado)
+    try {
+      const waAgent = require('./services/whatsappAgent');
+      ['client', 'admin'].forEach(type => {
+        const bot = waAgent.getBot(type, io);
+        if (bot) {
+          socket.emit(`whatsapp_${type}_status`, {
+            status: bot.botStatus,
+            qr: bot.latestQrDataUrl
+          });
+        }
+      });
+    } catch (_) {}
   });
 
   // ── Actualizar carrito (alguien agregó/quitó un item) ──
