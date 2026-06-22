@@ -4,9 +4,18 @@
 
 document.addEventListener('DOMContentLoaded', () => {
   // --- VARIABLES DE ESTADO ---
-  const token = localStorage.getItem('puro_sabor_admin_token');
-  const adminUser = JSON.parse(localStorage.getItem('puro_sabor_admin_user'));
-  
+  function getCookie(name) {
+    const cookies = document.cookie.split(';');
+    for (let c of cookies) {
+      const [k, v] = c.trim().split('=');
+      if (k === name) return v;
+    }
+    return null;
+  }
+
+  const token = localStorage.getItem('puro_sabor_admin_token') || getCookie('puro_sabor_admin_token');
+  const adminUser = JSON.parse(localStorage.getItem('puro_sabor_admin_user') || 'null');
+
   let productos = [];
   let socket = null;
 
