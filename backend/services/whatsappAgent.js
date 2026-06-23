@@ -439,7 +439,7 @@ class WhatsAppBot {
         auth: state,
         printQRInTerminal: false,
         logger: pino({ level: 'silent' }),
-        browser: Browsers.macOS('Desktop'),
+        browser: ['Ubuntu', 'Chrome', '20.0.04'],
         syncFullHistory: false
       });
 
