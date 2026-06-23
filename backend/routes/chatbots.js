@@ -94,9 +94,16 @@ router.post('/:type/force-qr', verificarJWT, async (req, res, next) => {
 
     console.log(`[WA Route ${type}] Forzando limpieza de credenciales y nuevo QR...`);
 
-    // 1. Limpiar auth completamente
-    await bot.clearSupabaseAuth();
-    console.log(`[WA Route ${type}] Auth limpiado.`);
+    // Responder inmediatamente
+    res.json({
+      success: true,
+      message: 'Limpiando auth y generando nuevo QR en 5-10 segundos...'
+    });
+
+    // 1. Limpiar auth en background
+    bot.clearSupabaseAuth().catch(err => {
+      console.error(`[WA Route ${type}] Error limpiando auth:`, err.message);
+    });
 
     // 2. Reset estado del bot
     bot.isReconnecting = false;
@@ -106,21 +113,22 @@ router.post('/:type/force-qr', verificarJWT, async (req, res, next) => {
 
     // 3. Habilitar el bot
     const activeKey = type === 'client' ? 'whatsapp_bot_active' : 'whatsapp_admin_bot_active';
-    await configService.setConfig(activeKey, '1');
+    await configService.setConfig(activeKey, '1').catch(err => {
+      console.error(`[WA Route ${type}] Error habilitando bot:`, err.message);
+    });
 
     // 4. Inicializar inmediatamente
     setTimeout(() => {
       bot.inicializarWhatsApp().catch(err => {
         console.error(`[WA Route ${type}] Error forzando QR:`, err.message);
       });
-    }, 500);
-
-    res.json({
-      success: true,
-      message: 'Auth limpiado. Generando nuevo QR en 5-10 segundos...'
-    });
+    }, 1000);
   } catch (err) {
-    next(err);
+    console.error(`[WA Route] Error en force-qr:`, err.message);
+    res.status(500).json({
+      success: false,
+      message: 'Error limpiando auth: ' + err.message
+    });
   }
 });
 
