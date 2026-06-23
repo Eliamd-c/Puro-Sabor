@@ -476,17 +476,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let _statusPollTimer = null;
 
   function startStatusPolling() {
-    if (_statusPollTimer) return;
-    _statusPollTimer = setInterval(async () => {
-      try {
-        const res = await fetch('/api/chatbots/admin/status', { headers: { 'Authorization': `Bearer ${token}` } });
-        const data = await res.json();
-        if (data.success) {
-          updateAdminBotUI(data.status, data.qr);
-          if (data.status === 'ready' || data.status === 'disabled') stopStatusPolling();
-        }
-      } catch (_) {}
-    }, 3000);
+    // Polling deshabilitado para evitar conflictos en entornos multi-proceso (cluster).
+    // El frontend ahora dependerá exclusivamente de los eventos de Socket.io (whatsapp_admin_status).
   }
 
   function stopStatusPolling() {
