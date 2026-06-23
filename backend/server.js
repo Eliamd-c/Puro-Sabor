@@ -188,11 +188,60 @@ io.on('connection', (socket) => {
 // Guardar io en la app para usarlo en las rutas
 app.set('io', io);
 
+// ── Limpiar locks expirados al iniciar ────────────────────────────────────────
+async function limpiarLocksExpirados() {
+  try {
+    const ahora = Date.now();
+    const ttl = 30000; // 30 segundos (debe coincidir con LOCK_TTL_MS en whatsappAgent.js)
+    const hace30s = new Date(ahora - ttl);
+
+    const res = await dbAsync.all(
+      `SELECT key, value, updated_at FROM wa_auth
+       WHERE key LIKE $1 AND updated_at < $2`,
+      ['%lock_pid%', hace30s]
+    );
+
+    if (res && res.length > 0) {
+      console.log(`[Startup] Encontrados ${res.length} locks expirados, limpiando...`);
+      await dbAsync.run(
+        `DELETE FROM wa_auth WHERE key LIKE $1 AND updated_at < $2`,
+        ['%lock_pid%', hace30s]
+      );
+      console.log('[Startup] ✅ Locks expirados eliminados');
+    }
+  } catch (err) {
+    console.error('[Startup] Error limpiando locks:', err.message);
+  }
+}
+
+// Ejecutar limpieza al iniciar
+limpiarLocksExpirados();
+
 // ── Inicializar WhatsApp Agent Dual ───────────────────────────────────────────
 const waAgent = require('./services/whatsappAgent');
 waAgent.inicializarTodos(io).catch(err => {
   console.error('[Server] Error al iniciar los agentes de WhatsApp:', err.message);
 });
+
+// ── Job automático: limpiar locks cada hora ────────────────────────────────────
+setInterval(async () => {
+  try {
+    const ahora = Date.now();
+    const ttl = 30000;
+    const hace30s = new Date(ahora - ttl);
+
+    const deleted = await dbAsync.run(
+      `DELETE FROM wa_auth WHERE key LIKE $1 AND updated_at < $2`,
+      ['%lock_pid%', hace30s]
+    );
+
+    if (deleted.changes > 0) {
+      console.log(`[Housekeeping] Limpiados ${deleted.changes} locks expirados`);
+    }
+  } catch (err) {
+    console.error('[Housekeeping] Error limpiando locks:', err.message);
+  }
+}, 60 * 60 * 1000); // Cada hora
 
 // ── Timeout automático: revisar mesas con +2h de inactividad ──────────────
 const db = require('./config/database');

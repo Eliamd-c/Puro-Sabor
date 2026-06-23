@@ -32,6 +32,30 @@ router.get('/:type/status', verificarJWT, (req, res) => {
   });
 });
 
+// POST /api/chatbots/emergency/clean-locks (limpiar locks manualmente)
+router.post('/emergency/clean-locks', verificarJWT, async (req, res, next) => {
+  try {
+    const ahora = Date.now();
+    const ttl = 30000; // 30 segundos
+    const hace30s = new Date(ahora - ttl);
+
+    const result = await dbAsync.run(
+      `DELETE FROM wa_auth WHERE key LIKE $1 AND updated_at < $2`,
+      ['%lock_pid%', hace30s]
+    );
+
+    res.json({
+      success: true,
+      message: `Limpios ${result.changes} locks expirados`,
+      changes: result.changes
+    });
+
+    console.log(`[Manual] Admin limpió ${result.changes} locks expirados`);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // POST /api/chatbots/:type/reconnect
 router.post('/:type/reconnect', verificarJWT, async (req, res, next) => {
   try {

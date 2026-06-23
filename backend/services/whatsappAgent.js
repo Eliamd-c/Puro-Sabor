@@ -320,25 +320,40 @@ class WhatsAppBot {
 
   async tryAcquireLockDB() {
     const myPid = process.pid.toString();
-    const now = new Date();
-    const expiry = new Date(now.getTime() - this.LOCK_TTL_MS);
+    const now = Date.now();
+    const expiry = now - this.LOCK_TTL_MS;
 
-    const res = await pgPool.query('SELECT value, updated_at FROM wa_auth WHERE key = $1', [this.LOCK_KEY]);
+    try {
+      const res = await pgPool.query('SELECT value, updated_at FROM wa_auth WHERE key = $1', [this.LOCK_KEY]);
 
-    if (res.rows.length > 0) {
-      const lockPid = res.rows[0].value;
-      const lockTime = new Date(res.rows[0].updated_at);
-      if (lockPid !== myPid && lockTime > expiry) {
-        return false;
+      if (res.rows.length > 0) {
+        const lockPid = res.rows[0].value;
+        const lockTime = new Date(res.rows[0].updated_at).getTime();
+
+        // Si el lock es de otro proceso Y no ha expirado, no adquirir
+        if (lockPid !== myPid && lockTime > expiry) {
+          console.log(`[WA Lock] Lock bloqueado por proceso ${lockPid}, expira en ${Math.round((lockTime - expiry) / 1000)}s`);
+          return false;
+        }
+
+        // Lock expirado o es nuestro, permitir retomar
+        if (lockTime <= expiry) {
+          console.log(`[WA Lock] Lock anterior expirado (${Math.round((now - lockTime) / 1000)}s atrás), reacquiriendo...`);
+        }
       }
-    }
 
-    await pgPool.query(
-      `INSERT INTO wa_auth (key, value, updated_at) VALUES ($1, $2, NOW())
-       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
-      [this.LOCK_KEY, myPid]
-    );
-    return true;
+      // Adquirir o renovar el lock
+      await pgPool.query(
+        `INSERT INTO wa_auth (key, value, updated_at) VALUES ($1, $2, NOW())
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+        [this.LOCK_KEY, myPid]
+      );
+      console.log(`[WA Lock] Lock adquirido por proceso ${myPid}`);
+      return true;
+    } catch (err) {
+      console.error(`[WA Lock] Error adquiriendo lock:`, err.message);
+      return false;
+    }
   }
 
   async releaseLockDB() {
