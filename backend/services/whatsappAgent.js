@@ -1,6 +1,8 @@
-const { makeWASocket, DisconnectReason, Browsers, downloadMediaMessage, initAuthCreds, BufferJSON } = require('@whiskeysockets/baileys');
+const { makeWASocket, DisconnectReason, Browsers, downloadMediaMessage, initAuthCreds, BufferJSON, useMultiFileAuthState } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const qrcode = require('qrcode');
+const fs = require('fs');
+const path = require('path');
 const { GoogleGenerativeAI, SchemaType } = require('@google/generative-ai');
 const db = require('../config/database');
 const dbAsync = require('../config/database-promise');
@@ -258,65 +260,7 @@ class WhatsAppBot {
     this.LOCK_TTL_MS = 30000;
   }
 
-  async useSupabaseAuthState() {
-    const prefix = `${this.botType}_`;
-    
-    async function readData(key) {
-      try {
-        const res = await pgPool.query('SELECT value FROM wa_auth WHERE key = $1', [prefix + key]);
-        if (res.rows.length === 0) return null;
-        return JSON.parse(res.rows[0].value, BufferJSON.reviver);
-      } catch {
-        return null;
-      }
-    }
 
-    async function writeData(key, value) {
-      const serialized = JSON.stringify(value, BufferJSON.replacer);
-      await pgPool.query(
-        `INSERT INTO wa_auth (key, value, updated_at) VALUES ($1, $2, NOW())
-         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
-        [prefix + key, serialized]
-      );
-    }
-
-    async function removeData(key) {
-      await pgPool.query('DELETE FROM wa_auth WHERE key = $1', [prefix + key]);
-    }
-
-    const creds = (await readData('creds')) || initAuthCreds();
-
-    return {
-      state: {
-        creds,
-        keys: {
-          get: async (type, ids) => {
-            const data = {};
-            for (const id of ids) {
-              const val = await readData(`${type}-${id}`);
-              if (val) data[id] = val;
-            }
-            return data;
-          },
-          set: async (data) => {
-            for (const [type, typeData] of Object.entries(data)) {
-              for (const [id, val] of Object.entries(typeData)) {
-                const key = `${type}-${id}`;
-                if (val) {
-                  await writeData(key, val);
-                } else {
-                  await removeData(key);
-                }
-              }
-            }
-          }
-        }
-      },
-      saveCreds: async () => {
-        await writeData('creds', creds);
-      }
-    };
-  }
 
   async tryAcquireLockDB() {
     const myPid = process.pid.toString();
@@ -360,9 +304,16 @@ class WhatsAppBot {
     await pgPool.query('DELETE FROM wa_auth WHERE key = $1', [this.LOCK_KEY]);
   }
 
-  async clearSupabaseAuth() {
-    const prefix = `${this.botType}_`;
-    await pgPool.query("DELETE FROM wa_auth WHERE key LIKE $1 AND key != $2", [`${prefix}%`, this.LOCK_KEY]);
+  async clearLocalAuth() {
+    const authFolder = path.join(__dirname, '..', `auth_${this.botType}`);
+    try {
+      if (fs.existsSync(authFolder)) {
+        await fs.promises.rm(authFolder, { recursive: true, force: true });
+        console.log(`[WA Agent ${this.botType}] Carpeta de auth local eliminada.`);
+      }
+    } catch (err) {
+      console.error(`[WA Agent ${this.botType}] Error al borrar auth local:`, err);
+    }
   }
 
   emitStatus(extra = {}) {
@@ -433,7 +384,8 @@ class WhatsAppBot {
     this.emitStatus();
 
     try {
-      const { state, saveCreds } = await this.useSupabaseAuthState();
+      const authFolder = path.join(__dirname, '..', `auth_${this.botType}`);
+      const { state, saveCreds } = await useMultiFileAuthState(authFolder);
 
       this.client = makeWASocket({
         auth: state,
@@ -468,7 +420,7 @@ class WhatsAppBot {
           
           if (statusCode === DisconnectReason.loggedOut) {
             try {
-              await this.clearSupabaseAuth();
+              await this.clearLocalAuth();
               await this.releaseLockDB().catch(() => {});
               console.log(`[WA Agent ${this.botType}] Sesión cerrada remotamente. Auth limpiada. Reintentando para nuevo QR...`);
             } catch(e) {
@@ -1612,7 +1564,7 @@ class WhatsAppBot {
       try { await this.client.logout(); } catch (e) {}
     }
     try {
-      await this.clearSupabaseAuth();
+      await this.clearLocalAuth();
       await this.releaseLockDB();
     } catch (e) {}
     this.botStatus = 'disconnected';

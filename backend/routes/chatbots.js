@@ -101,7 +101,7 @@ router.post('/:type/force-qr', verificarJWT, async (req, res, next) => {
     });
 
     // 1. Limpiar auth en background
-    bot.clearSupabaseAuth().catch(err => {
+    bot.clearLocalAuth().catch(err => {
       console.error(`[WA Route ${type}] Error limpiando auth:`, err.message);
     });
 
