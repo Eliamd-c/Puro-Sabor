@@ -58,32 +58,62 @@ router.post('/emergency/clean-locks', verificarJWT, async (req, res, next) => {
 
 // POST /api/chatbots/:type/reconnect
 router.post('/:type/reconnect', verificarJWT, async (req, res, next) => {
+  const { type } = req.params;
   try {
-    const type = req.params.type;
-    const io = req.app.get('io');
-    const bot = waAgent.getBot(type, io);
+    const bot = waAgent.getBot(type, req.app.get('io'));
+    if (!bot) return res.status(404).json({ success: false, message: 'Bot no encontrado' });
 
-    // Marcar activo en BD según el tipo
-    const activeKey = type === 'client' ? 'whatsapp_bot_active' : 'whatsapp_admin_bot_active';
-    await configService.setConfig(activeKey, '1');
-
-    // Forzar reset de estado atascado antes de reiniciar
     bot.isReconnecting = false;
+    bot.botStatus = 'disconnected';
+    bot.latestQrDataUrl = null;
     await bot.releaseLockDB().catch(() => {});
+    
+    setTimeout(() => {
+      bot.inicializarWhatsApp().catch(() => {});
+    }, 1000);
 
-    // Reiniciar
-    bot.inicializarWhatsApp().catch(err => {
-      console.error(`[WA Route ${type}] Error al reconectar el bot:`, err.message);
-    });
-
-    res.json({
-      success: true,
-      message: 'Se ha solicitado la reconexión de WhatsApp.'
-    });
+    res.json({ success: true, message: 'Reconexión iniciada' });
   } catch (err) {
     next(err);
   }
 });
+
+// GET /api/chatbots/diagnose
+router.get('/diagnose', async (req, res) => {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const dbAsync = require('../config/database-promise');
+    const { Pool } = require('pg');
+    const pgPool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+
+    const authAdminFolder = path.join(__dirname, '..', 'auth_admin');
+    const authAdminExists = fs.existsSync(authAdminFolder);
+    const authAdminFiles = authAdminExists ? fs.readdirSync(authAdminFolder) : [];
+
+    const authClientFolder = path.join(__dirname, '..', 'auth_client');
+    const authClientExists = fs.existsSync(authClientFolder);
+    const authClientFiles = authClientExists ? fs.readdirSync(authClientFolder) : [];
+
+    const dbLocks = await pgPool.query("SELECT * FROM wa_auth WHERE key LIKE '%lock%'");
+
+    res.json({
+      processId: process.pid,
+      adminBotState: waAgent.getBot('admin', req.app.get('io'))?.botStatus,
+      clientBotState: waAgent.getBot('client', req.app.get('io'))?.botStatus,
+      fs: {
+        authAdminExists,
+        authAdminFilesCount: authAdminFiles.length,
+        authClientExists,
+        authClientFilesCount: authClientFiles.length
+      },
+      dbLocks: dbLocks.rows
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 
 // POST /api/chatbots/:type/force-qr (limpiar auth y forzar nuevo QR)
 router.post('/:type/force-qr', verificarJWT, async (req, res, next) => {
