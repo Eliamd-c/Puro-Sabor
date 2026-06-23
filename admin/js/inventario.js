@@ -556,6 +556,36 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  const btnForceQr = document.getElementById('btn-force-qr-admin');
+  if (btnForceQr) {
+    btnForceQr.addEventListener('click', async () => {
+      if (!confirm('⚠️ Esto limpiará todas las credenciales guardadas y generará un nuevo QR.\n\n¿Continuar?')) return;
+      btnForceQr.disabled = true;
+      btnForceQr.textContent = '⏳ Procesando...';
+      stopStatusPolling();
+      updateAdminBotUI('loading');
+      try {
+        const res = await fetch('/api/chatbots/admin/force-qr', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert('✅ ' + data.message);
+          startStatusPolling();
+        } else {
+          alert('❌ Error: ' + data.message);
+        }
+      } catch (err) {
+        console.error('Error force-qr', err);
+        alert('❌ Error al forzar QR');
+      } finally {
+        btnForceQr.disabled = false;
+        btnForceQr.textContent = '⚡ Forzar QR';
+      }
+    });
+  }
+
   if (botAdmin.btnLogout) {
     botAdmin.btnLogout.addEventListener('click', async () => {
       if (!confirm(`¿Estás seguro de desvincular el Bot ADMINISTRATIVO?`)) return;

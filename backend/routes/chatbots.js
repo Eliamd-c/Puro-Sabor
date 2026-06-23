@@ -62,11 +62,11 @@ router.post('/:type/reconnect', verificarJWT, async (req, res, next) => {
     const type = req.params.type;
     const io = req.app.get('io');
     const bot = waAgent.getBot(type, io);
-    
+
     // Marcar activo en BD según el tipo
     const activeKey = type === 'client' ? 'whatsapp_bot_active' : 'whatsapp_admin_bot_active';
     await configService.setConfig(activeKey, '1');
-    
+
     // Forzar reset de estado atascado antes de reiniciar
     bot.isReconnecting = false;
     await bot.releaseLockDB().catch(() => {});
@@ -79,6 +79,45 @@ router.post('/:type/reconnect', verificarJWT, async (req, res, next) => {
     res.json({
       success: true,
       message: 'Se ha solicitado la reconexión de WhatsApp.'
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/chatbots/:type/force-qr (limpiar auth y forzar nuevo QR)
+router.post('/:type/force-qr', verificarJWT, async (req, res, next) => {
+  try {
+    const type = req.params.type;
+    const io = req.app.get('io');
+    const bot = waAgent.getBot(type, io);
+
+    console.log(`[WA Route ${type}] Forzando limpieza de credenciales y nuevo QR...`);
+
+    // 1. Limpiar auth completamente
+    await bot.clearSupabaseAuth();
+    console.log(`[WA Route ${type}] Auth limpiado.`);
+
+    // 2. Reset estado del bot
+    bot.isReconnecting = false;
+    bot.botStatus = 'disconnected';
+    bot.latestQrDataUrl = null;
+    await bot.releaseLockDB().catch(() => {});
+
+    // 3. Habilitar el bot
+    const activeKey = type === 'client' ? 'whatsapp_bot_active' : 'whatsapp_admin_bot_active';
+    await configService.setConfig(activeKey, '1');
+
+    // 4. Inicializar inmediatamente
+    setTimeout(() => {
+      bot.inicializarWhatsApp().catch(err => {
+        console.error(`[WA Route ${type}] Error forzando QR:`, err.message);
+      });
+    }, 500);
+
+    res.json({
+      success: true,
+      message: 'Auth limpiado. Generando nuevo QR en 5-10 segundos...'
     });
   } catch (err) {
     next(err);
