@@ -1,17 +1,17 @@
 document.addEventListener('DOMContentLoaded', () => {
-  const token = localStorage.getItem('puro_sabor_admin_token') || getCookie('puro_sabor_admin_token');
-  if (!token) {
-    window.location.href = '/admin/';
-    return;
-  }
-
   function getCookie(name) {
     const cookies = document.cookie.split(';');
     for (let c of cookies) {
       const [k, v] = c.trim().split('=');
-      if (k === name) return v;
+      if (k === name) return decodeURIComponent(v);
     }
     return null;
+  }
+
+  const token = localStorage.getItem('puro_sabor_admin_token') || getCookie('authToken');
+  if (!token) {
+    window.location.href = '/admin/';
+    return;
   }
 
   const authHeaders = {
