@@ -214,4 +214,50 @@ router.get('/health/compression', (req, res) => {
   }
 });
 
+/**
+ * GET /health/cache
+ *
+ * Cache statistics and health
+ * Shows L1/L2 cache hit rates and performance metrics
+ */
+router.get('/health/cache', async (req, res) => {
+  try {
+    const { getInstance: getCacheManager } = require('../utils/cacheManager');
+    const cache = getCacheManager();
+
+    const stats = cache.getStats();
+    const health = await cache.healthCheck();
+
+    res.json({
+      status: 'ok',
+      cache: {
+        health,
+        performance: {
+          totalRequests: stats.totalRequests,
+          cacheHits: stats.hits,
+          cacheMisses: stats.misses,
+          hitRate: stats.hitRate,
+          distribution: stats.distribution,
+          timing: {
+            l1RedisMsAvg: stats.timing.l1AvgMs,
+            l2MemoryMsAvg: stats.timing.l2AvgMs,
+            l3DatabaseMsAvg: stats.timing.l3AvgMs
+          }
+        },
+        memory: {
+          cachedKeys: stats.memory.cacheKeys,
+          maxKeys: stats.memory.maxKeys,
+          ...stats.memory.stats
+        }
+      }
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: 'error',
+      error: 'Cache stats unavailable',
+      message: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+});
+
 module.exports = router;

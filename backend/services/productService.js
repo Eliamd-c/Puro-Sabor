@@ -1,8 +1,7 @@
 const dbAsync = require('../config/database-promise');
 const AppError = require('../errors/AppError');
-const cacheService = require('./cacheService');
-
-const CACHE_KEY = 'productos_activos';
+const { getInstance: getCacheManager } = require('../utils/cacheManager');
+const cacheConfig = require('../config/cache-config');
 
 class ProductService {
   /**
@@ -62,23 +61,27 @@ class ProductService {
   }
 
   async getAll() {
-    // 1. Intentar obtener del caché
-    const cached = cacheService.get(CACHE_KEY);
-    if (cached) {
-      return cached;
+    const cache = getCacheManager();
+    const cacheKey = `${cacheConfig.PREFIXES.PRODUCTS}:all`;
+    const ttl = cacheConfig.PRODUCTS_TTL;
+
+    // 1. Try cache first (L1 Redis + L2 Memory)
+    const cached = await cache.get(cacheKey, ttl);
+    if (cached.value !== null) {
+      return cached.value;
     }
 
-    // 2. Si no hay caché, buscar en DB
+    // 2. Query database if cache miss
     const productos = await dbAsync.all(`
       SELECT p.*,
              (SELECT json_agg(json_build_object('id', v.id, 'nombre', v.nombre, 'stock', v.stock, 'imagen_url', v.imagen_url))
               FROM producto_variantes v WHERE v.producto_id = p.id) as variantes
-      FROM productos p 
+      FROM productos p
       WHERE p.activo = 1
     `);
 
-    // 3. Guardar en caché
-    cacheService.set(CACHE_KEY, productos);
+    // 3. Populate cache for next requests
+    await cache.set(cacheKey, productos, ttl);
 
     return productos;
   }
@@ -131,8 +134,12 @@ class ProductService {
       }
     }
 
-    cacheService.del(CACHE_KEY); // Invalidar caché
-    
+    // Invalidate product caches
+    const cache = getCacheManager();
+    await cache.clearPrefix(cacheConfig.PREFIXES.PRODUCTS);
+    await cache.clearPrefix(cacheConfig.PREFIXES.MENU);
+    await cache.publishInvalidation(cacheConfig.EVENTS.PRODUCTS_UPDATED);
+
     return await dbAsync.get('SELECT * FROM productos WHERE id = ?', [newProductId]);
   }
 
@@ -179,14 +186,24 @@ class ProductService {
       await dbAsync.run(`DELETE FROM producto_variantes WHERE producto_id = ?`, [id]);
     }
 
-    cacheService.del(CACHE_KEY); // Invalidar caché
-    
+    // Invalidate product caches
+    const cache = getCacheManager();
+    await cache.clearPrefix(cacheConfig.PREFIXES.PRODUCTS);
+    await cache.clearPrefix(cacheConfig.PREFIXES.MENU);
+    await cache.publishInvalidation(cacheConfig.EVENTS.PRODUCTS_UPDATED);
+
     return await dbAsync.get('SELECT * FROM productos WHERE id = ?', [id]);
   }
 
   async delete(id) {
     await dbAsync.run('DELETE FROM productos WHERE id = ?', [id]);
-    cacheService.del(CACHE_KEY); // Invalidar caché
+
+    // Invalidate product caches
+    const cache = getCacheManager();
+    await cache.clearPrefix(cacheConfig.PREFIXES.PRODUCTS);
+    await cache.clearPrefix(cacheConfig.PREFIXES.MENU);
+    await cache.publishInvalidation(cacheConfig.EVENTS.PRODUCTS_UPDATED);
+
     return true;
   }
   async updateStock(id, stock) {
@@ -195,7 +212,13 @@ class ProductService {
       `UPDATE productos SET stock = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
       [stockLimpio, id]
     );
-    cacheService.del(CACHE_KEY); // Invalidar caché
+
+    // Invalidate related caches
+    const cache = getCacheManager();
+    await cache.clearPrefix(cacheConfig.PREFIXES.PRODUCTS);
+    await cache.clearPrefix(cacheConfig.PREFIXES.INVENTORY);
+    await cache.publishInvalidation(cacheConfig.EVENTS.INVENTORY_UPDATED);
+
     return await dbAsync.get('SELECT * FROM productos WHERE id = ?', [id]);
   }
 
@@ -205,7 +228,13 @@ class ProductService {
       `UPDATE producto_variantes SET stock = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
       [stockLimpio, id]
     );
-    cacheService.del(CACHE_KEY); // Invalidar caché
+
+    // Invalidate related caches
+    const cache = getCacheManager();
+    await cache.clearPrefix(cacheConfig.PREFIXES.PRODUCTS);
+    await cache.clearPrefix(cacheConfig.PREFIXES.INVENTORY);
+    await cache.publishInvalidation(cacheConfig.EVENTS.INVENTORY_UPDATED);
+
     return true;
   }
 }
