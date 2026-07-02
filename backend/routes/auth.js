@@ -15,9 +15,11 @@ router.post('/login', loginLimiter, validate(schemas.loginSchema), async (req, r
     const result = await authService.login(usuario, password);
     
     // Cookie configurable para mayor comodidad
+    // Note: secure flag only if HTTPS is properly configured
     res.cookie('authToken', result.token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: process.env.NODE_ENV === 'production' && process.env.FORCE_SECURE_COOKIES !== 'false',
+      sameSite: 'Lax',
       maxAge: 24 * 60 * 60 * 1000 // 24 horas
     });
 
