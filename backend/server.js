@@ -295,10 +295,11 @@ app.use(cors({
   optionsSuccessStatus: 200
 }));
 
-// FASE 3.2: Response Compression - Gzip + Brotli + Optimization
+// FASE 3.2: Response Compression - Gzip + Optimization
+// Note: Brotli middleware disabled (was interfering with Set-Cookie headers)
 const compressionMiddleware = require('./middleware/compression');
-app.use(compressionMiddleware.gzip());       // Gzip (all browsers)
-app.use(compressionMiddleware.brotli());     // Brotli (modern browsers, better ratio)
+app.use(compressionMiddleware.gzip());       // Gzip (all browsers, stable)
+// app.use(compressionMiddleware.brotli());  // Brotli disabled - was breaking cookies
 app.use(compressionMiddleware.optimize());   // Remove unnecessary fields
 app.use(compressionMiddleware.stats());      // Track compression metrics
 
