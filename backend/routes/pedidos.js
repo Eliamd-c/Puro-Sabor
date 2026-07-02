@@ -4,27 +4,59 @@ const dbAsync = require('../config/database-promise');
 const { verificarJWT } = require('../middleware/auth');
 const Joi = require('joi');
 const validate = require('../middleware/validate');
+const { normalizePagination, buildOffsetPaginatedResponse } = require('../utils/paginationHelper');
 
-// ─── GET /api/pedidos — Listar todos los pedidos ────────────────────────────
+// ─── GET /api/pedidos — Listar todos los pedidos (con paginación) ────────────
 router.get('/', verificarJWT, async (req, res, next) => {
   try {
-    const query = `
-      SELECT p.*
-      FROM pedidos p
-      ORDER BY p.creado_en DESC
-      LIMIT 100
-    `;
-    const pedidos = await dbAsync.all(query);
+    // FASE 3.4: Pagination with validation
+    const { page, limit, offset } = normalizePagination(req.query.page, req.query.limit);
+    const estado = req.query.estado || null; // Optional filter
 
+    // Get total count
+    let countQuery = 'SELECT COUNT(*) as total FROM pedidos';
+    const countParams = [];
+
+    if (estado) {
+      countQuery += ' WHERE estado = ?';
+      countParams.push(estado);
+    }
+
+    const countResult = await dbAsync.get(countQuery, countParams);
+    const total = countResult.total || 0;
+
+    // Get paginated data
+    let dataQuery = 'SELECT p.* FROM pedidos p';
+    const dataParams = [];
+
+    if (estado) {
+      dataQuery += ' WHERE p.estado = ?';
+      dataParams.push(estado);
+    }
+
+    dataQuery += ' ORDER BY p.creado_en DESC LIMIT ? OFFSET ?';
+    dataParams.push(limit, offset);
+
+    const pedidos = await dbAsync.all(dataQuery, dataParams);
+
+    // Parse JSON items
     const procesados = pedidos.map(p => {
       let items = [];
       try {
         items = JSON.parse(p.items_json || '[]');
-      } catch (e) {}
+      } catch (e) {
+        console.warn('Error parsing items_json for order', p.id);
+      }
       return { ...p, items };
     });
 
-    res.json({ success: true, data: procesados });
+    // Build paginated response
+    const paginatedResponse = buildOffsetPaginatedResponse(procesados, page, limit, total);
+
+    res.json({
+      success: true,
+      ...paginatedResponse
+    });
   } catch (error) {
     next(error);
   }

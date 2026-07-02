@@ -6,6 +6,7 @@ const schemas = require('../schemas');
 const { verificarJWT } = require('../middleware/auth');
 const { upload, handleMulterError, optimizeImage, handleImageUpload } = require('../middleware/imageUpload');
 const { cacheMiddleware, invalidateCachePattern } = require('../middleware/cache');
+const { normalizePagination, buildOffsetPaginatedResponse } = require('../utils/paginationHelper');
 
 /**
  * @swagger
@@ -50,8 +51,8 @@ const { cacheMiddleware, invalidateCachePattern } = require('../middleware/cache
  */
 router.get('/', async (req, res, next) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
+    // FASE 3.4: Pagination with validation
+    const { page, limit, offset } = normalizePagination(req.query.page, req.query.limit);
     const categoria_id = req.query.categoria_id ? parseInt(req.query.categoria_id) : null;
     const search = req.query.search || '';
 
@@ -62,7 +63,15 @@ router.get('/', async (req, res, next) => {
 
     res.json({
       success: true,
-      ...result
+      ...result,
+      // Ensure consistent pagination format
+      pagination: {
+        page: result.pagination.page,
+        limit: result.pagination.limit,
+        total: result.pagination.total,
+        pages: result.pagination.pages,
+        hasMore: page < result.pagination.pages
+      }
     });
   } catch (error) {
     next(error);

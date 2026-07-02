@@ -314,6 +314,10 @@ app.use('/uploads', express.static(uploadsPath));
 const xss = require('xss-clean');
 app.use(xss());
 
+// FASE 3.4: Pagination middleware
+const { paginationMiddleware } = require('./utils/paginationHelper');
+app.use(paginationMiddleware);
+
 app.use((req, res, next) => {
   req.cookies = {};
   const cookieHeader = req.headers.cookie;
