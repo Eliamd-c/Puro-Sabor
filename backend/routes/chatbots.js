@@ -56,6 +56,62 @@ router.post('/emergency/clean-locks', verificarJWT, async (req, res, next) => {
   }
 });
 
+// POST /api/chatbots/:type/hard-reset (limpiar auth local y BD completamente)
+router.post('/:type/hard-reset', verificarJWT, async (req, res, next) => {
+  try {
+    const type = req.params.type;
+    const io = req.app.get('io');
+    const bot = waAgent.getBot(type, io);
+    const path = require('path');
+    const fs = require('fs');
+
+    console.log(`[WA Route ${type}] Iniciando HARD RESET...`);
+
+    // 1. Limpiar carpeta de autenticación local
+    const authFolder = path.join(__dirname, '..', `auth_${type}`);
+    if (fs.existsSync(authFolder)) {
+      fs.rmSync(authFolder, { recursive: true, force: true });
+      console.log(`[WA Route ${type}] Carpeta ${authFolder} eliminada`);
+    }
+
+    // 2. Limpiar BD
+    await dbAsync.run(
+      `DELETE FROM wa_auth WHERE key LIKE $1`,
+      [`${type}_%`]
+    );
+    console.log(`[WA Route ${type}] Credenciales en BD limpiadas`);
+
+    // 3. Reset estado del bot
+    bot.isReconnecting = false;
+    bot.botStatus = 'disconnected';
+    bot.latestQrDataUrl = null;
+    await bot.releaseLockDB().catch(() => {});
+
+    // 4. Habilitar bot
+    const activeKey = type === 'client' ? 'whatsapp_bot_active' : 'whatsapp_admin_bot_active';
+    await configService.setConfig(activeKey, '1');
+
+    res.json({
+      success: true,
+      message: 'Hard reset completado. El QR se generará en 10 segundos.'
+    });
+
+    // 5. Inicializar inmediatamente
+    setTimeout(() => {
+      console.log(`[WA Route ${type}] Iniciando bot después de hard reset...`);
+      bot.inicializarWhatsApp().catch(err => {
+        console.error(`[WA Route ${type}] Error después de hard reset:`, err.message);
+      });
+    }, 1000);
+  } catch (err) {
+    console.error(`[WA Route] Error en hard-reset:`, err.message);
+    res.status(500).json({
+      success: false,
+      message: 'Error: ' + err.message
+    });
+  }
+});
+
 // POST /api/chatbots/:type/reconnect
 router.post('/:type/reconnect', verificarJWT, async (req, res, next) => {
   const { type } = req.params;
