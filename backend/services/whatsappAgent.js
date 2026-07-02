@@ -7,6 +7,11 @@ const { GoogleGenerativeAI, SchemaType } = require('@google/generative-ai');
 const db = require('../config/database');
 const dbAsync = require('../config/database-promise');
 const { Pool } = require('pg');
+const adminAuthService = require('./adminAuthService');
+const mediaService = require('./mediaService');
+const { checkRateLimit, globalDownloadQueue, isLargeFile, formatBytes } = require('./rateLimitService');
+const { executeWithValidation, validateFunctionParams } = require('./functionValidator');
+const { DatabaseError, NetworkError, asyncWrapper, normalizeError } = require('../utils/errorHandler');
 require('dotenv').config({ path: require('path').join(__dirname, '..', '..', '.env') });
 
 const pgPool = new Pool({
@@ -899,20 +904,46 @@ class WhatsAppBot {
 
     const senderNumber = remoteJid.split('@')[0];
 
-    // --- Seguridad Admin: match EXACTO ---
+    // --- Seguridad Admin: Validación E.164 + Whitelist (FASE 1.2) ---
     if (this.botType === 'admin') {
-      const adminNumbersStr = await getConfig('admin_whatsapp_numbers') || '';
-      const authorizedNumbers = adminNumbersStr.split(',').map(n => n.trim().replace(/^\+/, '')).filter(Boolean);
-      if (!authorizedNumbers.includes(senderNumber)) {
-        console.log(`[WA Agent admin] Acceso denegado: ${senderNumber}`);
+      // Normalizar número a formato E.164
+      const normalizedNumber = adminAuthService.validateE164Format(senderNumber);
+
+      if (!normalizedNumber.valid) {
+        console.log(`[WA Agent admin] Formato inválido: ${senderNumber} (${normalizedNumber.error})`);
+        await adminAuthService.logAccessAttempt(senderNumber, 'invalid_format', normalizedNumber.error);
         return;
       }
+
+      // Verificar whitelist
+      const isAuthorized = await adminAuthService.isAdminNumberAuthorized(normalizedNumber.normalized);
+      if (!isAuthorized) {
+        console.log(`[WA Agent admin] Acceso denegado: ${normalizedNumber.normalized}`);
+        await adminAuthService.logAccessAttempt(normalizedNumber.normalized, 'denied', 'Número no en whitelist');
+        return;
+      }
+
+      console.log(`[WA Agent admin] ✅ Acceso autorizado: ${normalizedNumber.normalized}`);
+      await adminAuthService.logAccessAttempt(normalizedNumber.normalized, 'authorized', 'Acceso permitido');
     }
 
-    // --- Rate limiting (solo clientes) ---
-    if (this.botType === 'client' && !checkRateLimit(senderNumber)) {
-      await this.client.sendMessage(remoteJid, { text: 'Estás escribiendo muy rápido. Espera un momento e intenta de nuevo.' }, { quoted: message });
+    // --- Rate Limiting Mejorado (FASE 1.4) ---
+    const userType = this.botType === 'admin' ? 'admin' : 'client';
+    const rateLimitCheck = checkRateLimit(senderNumber, 'messages', userType);
+
+    if (!rateLimitCheck.allowed) {
+      const resetSecs = Math.ceil(rateLimitCheck.resetIn / 1000);
+      const limMsg = userType === 'admin'
+        ? `Límite de admin: 30 mensajes/min. Reinicia en ${resetSecs}s`
+        : `Límite alcanzado (10 mensajes/min). Reinicia en ${resetSecs}s`;
+
+      console.log(`[WA Agent ${userType}] Rate limit excedido para ${senderNumber}: ${limMsg}`);
+      await this.client.sendMessage(remoteJid, { text: limMsg }, { quoted: message });
       return;
+    }
+
+    if (rateLimitCheck.remaining <= 2) {
+      console.log(`[WA Agent ${userType}] ⚠️  ${senderNumber} casi alcanza límite (${rateLimitCheck.remaining} restantes)`);
     }
 
     this.emitMessage({ type: 'in', sender: senderNumber, text: body || '[Imagen/Audio]', time: new Date().toLocaleTimeString() });
@@ -1450,26 +1481,56 @@ class WhatsAppBot {
 
           let cleanText = finalText;
 
-          // Etiqueta de imagen del menú
+          // Etiqueta de imagen del menú (FASE 1.4 - Streaming + Rate Limiting)
           if (finalText.includes('[SEND_MENU]')) {
             cleanText = finalText.replace(/\[SEND_MENU\]/g, '').trim();
             const menuImg = await getConfig('bot_menu_imagen_url');
             if (menuImg) {
-              const _path = require('path'), _fs = require('fs');
-              const uploadsDir = _path.resolve(__dirname, '..', 'uploads');
-              const safePath = _path.resolve(uploadsDir, _path.basename(menuImg));
-              if (safePath.startsWith(uploadsDir) && _fs.existsSync(safePath)) {
-                await this.client.sendMessage(remoteJid, { image: { url: safePath }, caption: cleanText || '📋 Nuestro menú' }, { quoted: message });
-                await guardarMensajeHistorial(senderNumber, 'model', cleanText || '(Menú enviado)', this.botType);
-                this.emitMessage({ type: 'out', sender: 'Bot IA', text: cleanText || '(Menú enviado)', time: new Date().toLocaleTimeString() });
-                await logChatbotInteraction(senderNumber, message.pushName || 'Cliente', 'menu_enviado', body, cleanText);
-                break;
+              // Validar acceso y path
+              const mediaValidation = mediaService.getSecureMediaPath(menuImg, 'image/jpeg', 'menu');
+              if (mediaValidation.valid) {
+                try {
+                  // Rate limit para media
+                  const mediaRateLimit = checkRateLimit(senderNumber, 'media', userType);
+                  if (!mediaRateLimit.allowed) {
+                    await this.client.sendMessage(remoteJid, { text: '⏳ Demasiadas descargas. Espera un momento.' }, { quoted: message });
+                    break;
+                  }
+
+                  // Detectar si archivo es grande
+                  const fileInfo = isLargeFile(mediaValidation.cleanPath);
+                  if (fileInfo.isLarge) {
+                    console.log(`[WA Agent menu] Archivo grande detectado: ${fileInfo.sizeFormatted}`);
+                  }
+
+                  // Usar queue para descarga con streaming
+                  const imageData = await globalDownloadQueue.download(
+                    mediaValidation.cleanPath,
+                    (progressPercent, totalSize, bytesRead) => {
+                      if (progressPercent % 25 === 0) {
+                        console.log(`[WA Agent menu] Descargando: ${progressPercent}% (${formatBytes(bytesRead)}/${formatBytes(totalSize)})`);
+                      }
+                    }
+                  );
+
+                  await this.client.sendMessage(remoteJid, { image: imageData, caption: cleanText || '📋 Nuestro menú' }, { quoted: message });
+                  await guardarMensajeHistorial(senderNumber, 'model', cleanText || '(Menú enviado)', this.botType);
+                  this.emitMessage({ type: 'out', sender: 'Bot IA', text: cleanText || '(Menú enviado)', time: new Date().toLocaleTimeString() });
+                  await logChatbotInteraction(senderNumber, message.pushName || 'Cliente', 'menu_enviado', body, cleanText);
+                  await mediaService.whitelistMedia(mediaValidation.cleanPath, menuImg, 'menu');
+                  break;
+                } catch (err) {
+                  console.error(`[WA Agent menu] Error: ${err.message}`);
+                  await this.client.sendMessage(remoteJid, { text: `❌ Error enviando menú: ${err.message}` }, { quoted: message });
+                }
+              } else {
+                console.error(`[WA Agent] Media validation failed (menú):`, mediaValidation.error);
               }
             }
-            // Sin imagen configurada: continuar con texto normal (incluye el link en el prompt)
+            // Sin imagen configurada: continuar con texto normal
           }
 
-          // A. Evaluar si tiene etiqueta de Promoción
+          // A. Evaluar si tiene etiqueta de Promoción (FASE 1.4 - Streaming + Rate Limiting)
           let promoIdMatch = finalText.match(/\[SEND_PROMO:(\d+)\]/);
           if (promoIdMatch) {
             cleanText = finalText.replace(/\[SEND_PROMO:\d+\]/g, '').trim();
@@ -1479,25 +1540,56 @@ class WhatsAppBot {
                 db.get('SELECT imagen_url, imagen_tipo FROM promociones WHERE id = ?', [promoId], (err, row) => resolve(row));
               });
               if (promoEntry && promoEntry.imagen_url) {
-                const _path = require('path'), _fs = require('fs');
-                const uploadsDir = _path.resolve(__dirname, '..', 'uploads');
-                const safePath = _path.resolve(uploadsDir, _path.basename(promoEntry.imagen_url));
-                if (safePath.startsWith(uploadsDir) && _fs.existsSync(safePath)) {
-                  let mediaPayload = {};
-                  if (promoEntry.imagen_tipo === 'video') mediaPayload = { video: { url: safePath }, caption: cleanText };
-                  else if (promoEntry.imagen_tipo === 'pdf') mediaPayload = { document: { url: safePath }, caption: cleanText };
-                  else mediaPayload = { image: { url: safePath }, caption: cleanText };
-                  await this.client.sendMessage(remoteJid, mediaPayload, { quoted: message });
-                  await guardarMensajeHistorial(senderNumber, 'model', cleanText || '(Promoción enviada)', this.botType);
-                  this.emitMessage({ type: 'out', sender: 'Bot IA', text: cleanText || '(Promoción enviada)', time: new Date().toLocaleTimeString() });
-                  await logChatbotInteraction(senderNumber, message.pushName || 'Cliente', 'promo_enviada', body, cleanText, { promo_id: promoId });
-                  break;
+                // Validar acceso y path
+                const mediaValidation = mediaService.getSecureMediaPath(promoEntry.imagen_url, promoEntry.imagen_tipo, 'promo');
+                if (mediaValidation.valid) {
+                  try {
+                    // Rate limit para media
+                    const mediaRateLimit = checkRateLimit(senderNumber, 'media', userType);
+                    if (!mediaRateLimit.allowed) {
+                      await this.client.sendMessage(remoteJid, { text: '⏳ Demasiadas descargas. Espera un momento.' }, { quoted: message });
+                      break;
+                    }
+
+                    // Detectar si archivo es grande
+                    const fileInfo = isLargeFile(mediaValidation.cleanPath);
+                    if (fileInfo.isLarge) {
+                      console.log(`[WA Agent promo] Archivo grande: ${fileInfo.sizeFormatted}`);
+                    }
+
+                    // Usar queue para descarga con streaming
+                    const mediaData = await globalDownloadQueue.download(
+                      mediaValidation.cleanPath,
+                      (progressPercent, totalSize, bytesRead) => {
+                        if (progressPercent % 25 === 0) {
+                          console.log(`[WA Agent promo] Descargando: ${progressPercent}% (${formatBytes(bytesRead)}/${formatBytes(totalSize)})`);
+                        }
+                      }
+                    );
+
+                    let mediaPayload = {};
+                    if (mediaValidation.mimeType === 'video/mp4') mediaPayload = { video: { buffer: mediaData }, caption: cleanText };
+                    else if (mediaValidation.mimeType === 'application/pdf') mediaPayload = { document: { buffer: mediaData }, caption: cleanText };
+                    else mediaPayload = { image: { buffer: mediaData }, caption: cleanText };
+
+                    await this.client.sendMessage(remoteJid, mediaPayload, { quoted: message });
+                    await guardarMensajeHistorial(senderNumber, 'model', cleanText || '(Promoción enviada)', this.botType);
+                    this.emitMessage({ type: 'out', sender: 'Bot IA', text: cleanText || '(Promoción enviada)', time: new Date().toLocaleTimeString() });
+                    await logChatbotInteraction(senderNumber, message.pushName || 'Cliente', 'promo_enviada', body, cleanText, { promo_id: promoId });
+                    await mediaService.whitelistMedia(mediaValidation.cleanPath, promoEntry.imagen_url, 'promo');
+                    break;
+                  } catch (err) {
+                    console.error(`[WA Agent promo] Error: ${err.message}`);
+                    await this.client.sendMessage(remoteJid, { text: `❌ Error enviando promoción: ${err.message}` }, { quoted: message });
+                  }
+                } else {
+                  console.error(`[WA Agent] Media validation failed (promo ${promoId}):`, mediaValidation.error);
                 }
               }
             }
           }
 
-          // B. Evaluar si tiene etiqueta de Base de Conocimientos
+          // B. Evaluar si tiene etiqueta de Base de Conocimientos (FASE 1.4 - Streaming + Rate Limiting)
           let mediaIdMatch = finalText.match(/\[SEND_MEDIA:(\d+)\]/);
           if (mediaIdMatch) {
             cleanText = finalText.replace(/\[SEND_MEDIA:\d+\]/g, '').trim();
@@ -1507,20 +1599,51 @@ class WhatsAppBot {
                 db.get('SELECT media_url, media_type FROM chatbots_kb WHERE id = ?', [kbId], (err, row) => resolve(row));
               });
               if (kbEntry && kbEntry.media_url) {
-                const _path = require('path'), _fs = require('fs');
-                const uploadsDir = _path.resolve(__dirname, '..', 'uploads');
-                const safePath = _path.resolve(uploadsDir, _path.basename(kbEntry.media_url));
-                if (safePath.startsWith(uploadsDir) && _fs.existsSync(safePath)) {
-                  let mediaPayload = {};
-                  if (kbEntry.media_type === 'video') mediaPayload = { video: { url: safePath }, caption: cleanText };
-                  else if (kbEntry.media_type === 'audio') mediaPayload = { audio: { url: safePath }, ptt: true };
-                  else mediaPayload = { image: { url: safePath }, caption: cleanText };
-                  await this.client.sendMessage(remoteJid, mediaPayload, { quoted: message });
-                  if (kbEntry.media_type === 'audio' && cleanText) await this.client.sendMessage(remoteJid, { text: cleanText });
-                  await guardarMensajeHistorial(senderNumber, 'model', cleanText || '(Multimedia enviado)', this.botType);
-                  this.emitMessage({ type: 'out', sender: 'Bot IA', text: cleanText || '(Multimedia enviado)', time: new Date().toLocaleTimeString() });
-                  await logChatbotInteraction(senderNumber, message.pushName || 'Cliente', 'respuesta_kb', body, cleanText, { kb_id: kbId });
-                  break;
+                // Validar acceso y path
+                const mediaValidation = mediaService.getSecureMediaPath(kbEntry.media_url, kbEntry.media_type, 'kb');
+                if (mediaValidation.valid) {
+                  try {
+                    // Rate limit para media
+                    const mediaRateLimit = checkRateLimit(senderNumber, 'media', userType);
+                    if (!mediaRateLimit.allowed) {
+                      await this.client.sendMessage(remoteJid, { text: '⏳ Demasiadas descargas. Espera un momento.' }, { quoted: message });
+                      break;
+                    }
+
+                    // Detectar si archivo es grande
+                    const fileInfo = isLargeFile(mediaValidation.cleanPath);
+                    if (fileInfo.isLarge) {
+                      console.log(`[WA Agent kb] Archivo grande: ${fileInfo.sizeFormatted}`);
+                    }
+
+                    // Usar queue para descarga con streaming
+                    const mediaData = await globalDownloadQueue.download(
+                      mediaValidation.cleanPath,
+                      (progressPercent, totalSize, bytesRead) => {
+                        if (progressPercent % 25 === 0) {
+                          console.log(`[WA Agent kb] Descargando: ${progressPercent}% (${formatBytes(bytesRead)}/${formatBytes(totalSize)})`);
+                        }
+                      }
+                    );
+
+                    let mediaPayload = {};
+                    if (mediaValidation.mimeType === 'video/mp4') mediaPayload = { video: { buffer: mediaData }, caption: cleanText };
+                    else if (mediaValidation.mimeType.startsWith('audio/')) mediaPayload = { audio: { buffer: mediaData }, ptt: true };
+                    else mediaPayload = { image: { buffer: mediaData }, caption: cleanText };
+
+                    await this.client.sendMessage(remoteJid, mediaPayload, { quoted: message });
+                    if (mediaValidation.mimeType.startsWith('audio/') && cleanText) await this.client.sendMessage(remoteJid, { text: cleanText });
+                    await guardarMensajeHistorial(senderNumber, 'model', cleanText || '(Multimedia enviado)', this.botType);
+                    this.emitMessage({ type: 'out', sender: 'Bot IA', text: cleanText || '(Multimedia enviado)', time: new Date().toLocaleTimeString() });
+                    await logChatbotInteraction(senderNumber, message.pushName || 'Cliente', 'respuesta_kb', body, cleanText, { kb_id: kbId });
+                    await mediaService.whitelistMedia(mediaValidation.cleanPath, kbEntry.media_url, 'kb');
+                    break;
+                  } catch (err) {
+                    console.error(`[WA Agent kb] Error: ${err.message}`);
+                    await this.client.sendMessage(remoteJid, { text: `❌ Error enviando multimedia: ${err.message}` }, { quoted: message });
+                  }
+                } else {
+                  console.error(`[WA Agent] Media validation failed (KB ${kbId}):`, mediaValidation.error);
                 }
               }
             }
@@ -1542,10 +1665,22 @@ class WhatsAppBot {
 
         const toolResponseParts = [];
         for (const call of functionCalls) {
-          const functionResult = await this.ejecutarFuncion(call.name, call.args);
-          toolResponseParts.push({
-            functionResponse: { name: call.name, response: { output: functionResult } }
-          });
+          const functionResult = await executeWithValidation(
+            call.name,
+            call.args,
+            async (validParams) => await this.ejecutarFuncion(call.name, validParams)
+          );
+
+          if (!functionResult.success) {
+            console.error(`[Function ${call.name}] Validation failed:`, functionResult.error);
+            toolResponseParts.push({
+              functionResponse: { name: call.name, response: { output: { error: functionResult.error } } }
+            });
+          } else {
+            toolResponseParts.push({
+              functionResponse: { name: call.name, response: { output: functionResult.result } }
+            });
+          }
         }
         result = await chat.sendMessage(toolResponseParts);
       }

@@ -1,46 +1,71 @@
 const logger = require('../config/logger');
 const fs = require('fs');
 const path = require('path');
+const { normalizeError, ErrorLogger } = require('../utils/errorHandler');
 
+/**
+ * Enhanced Error Handler Middleware
+ * Handles all error types with proper logging, retry info, and structured JSON
+ */
 const errorHandler = (err, req, res, next) => {
-  err.statusCode = err.statusCode || 500;
+  // Normalize error to AppError
+  const error = normalizeError(err);
 
-  // Log estructurado
-  logger.error({
-    timestamp: new Date().toISOString(),
+  // Structured logging with context
+  const errorContext = {
     method: req.method,
     url: req.url,
-    statusCode: err.statusCode,
-    message: err.message,
-    stack: err.stack,
-    userId: req.admin?.id
-  });
-
-  // DEBUG: escribir errores 500 a archivo dedicado (sin spam de WhatsApp)
-  if (err.statusCode === 500) {
-    try {
-      const linea = `[${new Date().toISOString()}] ${req.method} ${req.url}\n${err.message}\n${err.stack}\n\n`;
-      fs.appendFileSync(path.join(__dirname, '..', '..', 'logs', 'errores500.log'), linea);
-    } catch (e) { /* ignore */ }
-  }
-  
-  const response = {
-    success: false,
-    message: err.statusCode === 500 ? 'Error interno del servidor' : err.message
+    ip: req.ip,
+    userAgent: req.get('user-agent'),
+    userId: req.admin?.id,
+    recoverable: error.recoverable
   };
 
-  if (process.env.NODE_ENV === 'development') {
-    response.stack = err.stack;
-    response.message = err.message; // always show actual error message in dev
+  ErrorLogger.log(error, errorContext);
+
+  // Write 500 errors to dedicated log file
+  if (error.statusCode >= 500) {
+    try {
+      const logDir = path.join(__dirname, '..', '..', 'logs');
+      if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+
+      const linea = `[${new Date().toISOString()}] ${error.constructor.name}\n` +
+        `${req.method} ${req.url}\n` +
+        `Message: ${error.message}\n` +
+        `${error.stack}\n\n`;
+
+      fs.appendFileSync(path.join(logDir, 'errores500.log'), linea);
+    } catch (e) { /* ignore file write errors */ }
   }
 
-  // DEBUG TEMPORAL: exponer error real con header secreto (?debug=puro2026)
-  if (req.query.debug === 'puro2026' || req.headers['x-debug'] === 'puro2026') {
-    response.realMessage = err.message;
-    response.stack = err.stack;
+  // Prepare response
+  const response = {
+    success: false,
+    error: {
+      name: error.constructor.name,
+      message: error.statusCode === 500 ? 'Error interno del servidor' : error.message,
+      statusCode: error.statusCode,
+      recoverable: error.recoverable,
+      ...(error.recoverable && { retryAfter: ErrorLogger.getRetryDelay(error) })
+    }
+  };
+
+  // Include context in development
+  if (process.env.NODE_ENV === 'development') {
+    response.error.context = error.context;
+    response.error.stack = error.stack;
   }
-  
-  res.status(err.statusCode).json(response);
+
+  // Debug mode (with secret header)
+  if (req.query.debug === 'puro2026' || req.headers['x-debug'] === 'puro2026') {
+    response.debug = {
+      message: error.message,
+      stack: error.stack,
+      context: error.context
+    };
+  }
+
+  res.status(error.statusCode).json(response);
 };
 
 module.exports = errorHandler;

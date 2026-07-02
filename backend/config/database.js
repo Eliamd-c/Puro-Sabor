@@ -1,4 +1,5 @@
-const { Pool, types } = require('pg');
+const { types } = require('pg');
+const PoolManager = require('./database-pool');
 require('dotenv').config();
 
 // IMPORTANTE: node-postgres devuelve las columnas NUMERIC/DECIMAL como TEXTO por defecto
@@ -8,17 +9,37 @@ require('dotenv').config();
 // OID 1700 = NUMERIC.
 types.setTypeParser(1700, (val) => (val === null ? null : parseFloat(val)));
 
-// Configuración del Pool de PostgreSQL conectado a Supabase
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+// Configuración del Pool de PostgreSQL conectado a Supabase con retry logic
+// ⚠️  SECURITY: rejectUnauthorized debe ser true en producción para evitar MITM attacks
+const isProduction = process.env.NODE_ENV === 'production' || process.env.HOSTINGER_MODE === 'true';
+
+// Inicializar PoolManager con config
+const poolManager = new PoolManager(process.env.DATABASE_URL, {
+  minConnections: 2,
+  maxConnections: 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
+  statementTimeoutMillis: 30000,
+  healthCheckFrequency: 30000,
+  sslRejectUnauthorized: isProduction
 });
 
-// Un error en un cliente ocioso NO debe tumbar todo el servidor.
-// El Pool descarta el cliente roto y crea uno nuevo en la siguiente query.
-pool.on('error', (err) => {
-  console.error('[DB] Error en cliente ocioso de PostgreSQL (recuperable):', err.message);
-});
+// Wrapper para mantener compatibilidad
+let pool = null;
+let poolInitialized = false;
+
+const initializePool = async () => {
+  if (poolInitialized) return pool;
+  try {
+    pool = await poolManager.initialize();
+    poolInitialized = true;
+    console.log('[DB] ✅ Pool initialized with retry logic and health checks');
+    return pool;
+  } catch (err) {
+    console.error('[DB] ❌ Failed to initialize pool:', err.message);
+    throw err;
+  }
+};
 
 console.log('Conectado a la base de datos PostgreSQL (Supabase).');
 
@@ -483,6 +504,81 @@ async function inicializarTablas() {
       )
     `);
 
+    // 22. Tabla Whitelist de Números Admin (FASE 1.2)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS admin_whitelist (
+        id SERIAL PRIMARY KEY,
+        numero VARCHAR(20) NOT NULL UNIQUE,
+        activo INTEGER DEFAULT 1,
+        autorizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // 23. Tabla Auditoría de Intentos de Acceso Admin (FASE 1.2)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS admin_whitelist_logs (
+        id SERIAL PRIMARY KEY,
+        numero VARCHAR(20) NOT NULL,
+        status VARCHAR(50) NOT NULL,
+        reason VARCHAR(255),
+        metadata TEXT,
+        creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Crear índices para auditoría
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_admin_whitelist_logs_numero
+      ON admin_whitelist_logs(numero, creado_en DESC)
+    `);
+
+    // 24. Tabla Media Whitelist para auditoría de archivos (FASE 1.3)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS media_whitelist (
+        id SERIAL PRIMARY KEY,
+        filename VARCHAR(255) NOT NULL,
+        file_hash VARCHAR(64) NOT NULL UNIQUE,
+        file_size BIGINT,
+        source VARCHAR(50),
+        whitelisted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        accessed_count INTEGER DEFAULT 0,
+        last_accessed TIMESTAMP
+      )
+    `);
+
+    // Crear índices para media whitelist
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_media_whitelist_hash
+      ON media_whitelist(file_hash)
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_media_whitelist_source
+      ON media_whitelist(source, whitelisted_at DESC)
+    `);
+
+    // 25. Tabla Function Call Audit para seguridad (FASE 1.5)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS function_call_audit (
+        id SERIAL PRIMARY KEY,
+        function_name VARCHAR(100) NOT NULL,
+        params_json TEXT,
+        valid INTEGER DEFAULT 1,
+        error TEXT,
+        called_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Crear índices para auditoría de funciones
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_function_call_audit_name
+      ON function_call_audit(function_name, called_at DESC)
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_function_call_audit_valid
+      ON function_call_audit(valid, called_at DESC)
+    `);
+
     // Columnas nuevas en pedidos para features de mesera
     await pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS tipo_pedido VARCHAR(20) DEFAULT 'local'`);
     await pool.query(`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS direccion_domicilio TEXT`);
@@ -665,5 +761,10 @@ function sembrarDatosIniciales() {
 
 // Inicializar la estructura
 inicializarTablas();
+
+// Exportar pool initialization functions
+db.initializePool = initializePool;
+db.getPool = getPool;
+db.getPoolManager = () => poolManager;
 
 module.exports = db;

@@ -7,6 +7,13 @@ const db = require('../config/database');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const {
+  asyncWrapper,
+  normalizeError,
+  DatabaseError,
+  ValidationError,
+  errorMiddleware
+} = require('../utils/errorHandler');
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -731,6 +738,145 @@ router.get('/analytics', verificarJWT, async (req, res, next) => {
         preguntas_frecuentes: preguntasFrecuentes,
         satisfaccion: 95
       }
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ===== ADMIN AUTHORIZATION (FASE 1.2) =====
+const adminAuthService = require('../services/adminAuthService');
+
+// POST /api/chatbots/admin/authorize-number/initiate
+// Inicia proceso 2FA: valida número y envía OTP
+router.post('/admin/authorize-number/initiate', verificarJWT, async (req, res, next) => {
+  try {
+    const { number } = req.body;
+    if (!number) {
+      return res.status(400).json({
+        success: false,
+        error: 'Número de teléfono requerido'
+      });
+    }
+
+    // 1. Validar formato E.164
+    const validation = adminAuthService.validateE164Format(number);
+    if (!validation.valid) {
+      await adminAuthService.logAccessAttempt(number, 'invalid_format', validation.error);
+      return res.status(400).json({
+        success: false,
+        error: validation.error
+      });
+    }
+
+    // 2. Iniciar 2FA
+    const result = await adminAuthService.initiate2FA(validation.normalized);
+    if (!result.success) {
+      return res.status(500).json(result);
+    }
+
+    res.json({
+      success: true,
+      message: result.message,
+      number: validation.normalized
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/chatbots/admin/authorize-number/verify
+// Verifica código OTP y autoriza número
+router.post('/admin/authorize-number/verify', verificarJWT, async (req, res, next) => {
+  try {
+    const { number, code } = req.body;
+    if (!number || !code) {
+      return res.status(400).json({
+        success: false,
+        error: 'Número y código OTP requeridos'
+      });
+    }
+
+    // 1. Validar formato
+    const validation = adminAuthService.validateE164Format(number);
+    if (!validation.valid) {
+      return res.status(400).json({
+        success: false,
+        error: validation.error
+      });
+    }
+
+    // 2. Verificar OTP
+    const result = await adminAuthService.verify2FA(validation.normalized, code);
+    if (!result.success) {
+      return res.status(401).json(result);
+    }
+
+    res.json({
+      success: true,
+      message: result.message,
+      number: validation.normalized
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/chatbots/admin/whitelist
+// Lista números autorizados
+router.get('/admin/whitelist', verificarJWT, async (req, res, next) => {
+  try {
+    const rows = await new Promise((resolve, reject) => {
+      db.all(
+        `SELECT numero, autorizado_en, activo FROM admin_whitelist ORDER BY autorizado_en DESC`,
+        [],
+        (err, rows) => err ? reject(err) : resolve(rows || [])
+      );
+    });
+
+    res.json({
+      success: true,
+      data: rows
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/chatbots/admin/whitelist/:number
+// Revoca acceso a un número
+router.delete('/admin/whitelist/:number', verificarJWT, async (req, res, next) => {
+  try {
+    const { number } = req.params;
+
+    // Validar formato
+    const validation = adminAuthService.validateE164Format(number);
+    if (!validation.valid) {
+      return res.status(400).json({
+        success: false,
+        error: validation.error
+      });
+    }
+
+    // Revocar acceso
+    const result = await adminAuthService.revokeAdminAccess(validation.normalized);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/chatbots/admin/whitelist/logs
+// Ver historial de intentos de acceso
+router.get('/admin/whitelist/logs', verificarJWT, async (req, res, next) => {
+  try {
+    const { number, limit = 100 } = req.query;
+
+    const logs = await adminAuthService.getAccessLog(number, parseInt(limit));
+
+    res.json({
+      success: true,
+      data: logs
     });
   } catch (err) {
     next(err);

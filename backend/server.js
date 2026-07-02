@@ -11,7 +11,16 @@ const swaggerUi = require('swagger-ui-express');
 const swaggerSpecs = require('./config/swagger');
 
 const logger = require('./config/logger');
+const db = require('./config/database');
 const dbAsync = require('./config/database-promise');
+const { runAllTests: testSSL } = require('./config/test-db-ssl');
+const redisClient = require('./config/redis-client');
+const clusterSync = require('./utils/clusterSync');
+const gracefulShutdownManager = require('./utils/gracefulShutdown');
+const EventEmitter = require('events');
+
+// Global event emitter for cluster events
+global.eventEmitter = new EventEmitter();
 
 // Override console to capture logs into winston
 const originalLog = console.log;
@@ -56,11 +65,15 @@ const io = new Server(server, {
 });
 
 // Configurar Postgres Adapter para sincronizar sockets entre múltiples procesos de Node en Hostinger
+// ⚠️  SECURITY: rejectUnauthorized debe ser true en producción para evitar MITM attacks
 if (env.DATABASE_URL) {
   try {
+    const isProduction = env.NODE_ENV === 'production' || env.HOSTINGER_MODE === 'true';
     const socketPool = new Pool({
       connectionString: env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false }
+      ssl: isProduction
+        ? { rejectUnauthorized: true }
+        : { rejectUnauthorized: false }
     });
     
     // Crear tabla automáticamente si no existe para el adapter
@@ -345,15 +358,26 @@ app.get('/api-docs', swaggerUi.setup(swaggerSpecs, {
   }
 }));
 
-// ── Healthcheck (para monitoreo / uptime) ──────────────────────────────────
-app.get('/health', async (req, res) => {
-  try {
-    await dbAsync.get('SELECT 1 AS ok');
-    res.json({ status: 'ok', db: 'up', uptime: Math.round(process.uptime()), ts: new Date().toISOString() });
-  } catch (err) {
-    res.status(503).json({ status: 'degraded', db: 'down', error: err.message });
-  }
+// ── Health Checks (FASE 2.3) ──────────────────────────────────────────────
+const healthRoutes = require('./routes/health');
+const metricsCollector = require('./utils/metricsCollector');
+const alertService = require('./services/alertService');
+
+// Middleware to track request metrics
+app.use((req, res, next) => {
+  req.startTime = Date.now();
+  const originalSend = res.send;
+
+  res.send = function(data) {
+    const responseTime = Date.now() - req.startTime;
+    metricsCollector.recordRequest(req.method, req.path, res.statusCode, responseTime);
+    return originalSend.call(this, data);
+  };
+
+  next();
 });
+
+app.use('/', healthRoutes);
 
 // ── Rutas API ──────────────────────────────────────────────────────────────
 const authRoutes = require('./routes/auth');
@@ -451,42 +475,98 @@ const errorHandler = require('./middleware/errorHandler');
 app.use(errorHandler);
 
 // ── Iniciar servidor ───────────────────────────────────────────────────────
-server.listen(PORT, () => {
-  console.log(`==================================================`);
-  console.log(`🚀 SERVIDOR PURO SABOR ACTIVO`);
-  console.log(`👉 Menú Público:   http://localhost:${PORT}`);
-  console.log(`👉 Mesa (ejemplo): http://localhost:${PORT}/mesa/1`);
-  console.log(`👉 Mesa General:   http://localhost:${PORT}/mesa/general`);
-  console.log(`👉 Panel Admin:    http://localhost:${PORT}/admin`);
-  console.log(`👉 Panel Mesas:    http://localhost:${PORT}/admin/mesas`);
-  console.log(`==================================================`);
-});
+async function startServer() {
+  // 1. Inicializar connection pool con retry logic
+  console.log('\n[Server] Inicializando connection pool...\n');
+  try {
+    await db.initializePool();
+    console.log('[Server] ✅ Connection pool initialized successfully\n');
+  } catch (err) {
+    console.error('[Server] ❌ Failed to initialize connection pool:', err.message);
+    if (process.env.NODE_ENV === 'production') {
+      process.exit(1);
+    }
+  }
 
-// ── Apagado ordenado (graceful shutdown) ────────────────────────────────────
-let cerrando = false;
-function apagadoOrdenado(signal) {
-  if (cerrando) return;
-  cerrando = true;
-  console.log(`[Server] ${signal} recibido. Cerrando ordenadamente...`);
+  // 2. Inicializar Redis y cluster sync (FASE 2.4)
+  console.log('[Server] Inicializando Redis y cluster sync...\n');
+  try {
+    await redisClient.initialize();
+    await clusterSync.initialize();
+    console.log('[Server] ✅ Redis and cluster sync initialized\n');
+  } catch (err) {
+    console.warn('[Server] ⚠️ Redis initialization failed (cluster mode disabled):', err.message);
+    // Non-fatal - system can work without Redis but won't have cluster sync
+  }
 
-  // Dejar de aceptar nuevas conexiones HTTP y terminar las en curso
-  server.close(() => {
-    console.log('[Server] Servidor HTTP cerrado.');
-    try { io.close(); } catch (_) {}
-    process.exit(0);
+  // 3. Ejecutar validación SSL antes de iniciar
+  console.log('[Server] Ejecutando validación de SSL...\n');
+  try {
+    const sslValid = await testSSL();
+    if (!sslValid && process.env.NODE_ENV === 'production') {
+      console.error('[Server] ❌ FATAL: Validación SSL falló en producción. No iniciando servidor.');
+      process.exit(1);
+    }
+  } catch (err) {
+    console.error('[Server] ❌ Error durante validación SSL:', err.message);
+    if (process.env.NODE_ENV === 'production') {
+      process.exit(1);
+    }
+  }
+
+  server.listen(PORT, () => {
+    console.log(`==================================================`);
+    console.log(`🚀 SERVIDOR PURO SABOR ACTIVO`);
+    console.log(`👉 Menú Público:   http://localhost:${PORT}`);
+    console.log(`👉 Mesa (ejemplo): http://localhost:${PORT}/mesa/1`);
+    console.log(`👉 Mesa General:   http://localhost:${PORT}/mesa/general`);
+    console.log(`👉 Panel Admin:    http://localhost:${PORT}/admin`);
+    console.log(`👉 Panel Mesas:    http://localhost:${PORT}/admin/mesas`);
+    console.log(`==================================================`);
+
+    // Initialize graceful shutdown (FASE 2.5)
+    gracefulShutdownManager.initialize(server, io);
+
+    // Start periodic health checks (FASE 2.3)
+    startHealthCheckInterval();
   });
-
-  // Si algo queda colgado, forzar salida a los 15s
-  setTimeout(() => {
-    console.error('[Server] Cierre forzado tras timeout.');
-    process.exit(1);
-  }, 15000).unref();
 }
 
-process.on('SIGTERM', () => apagadoOrdenado('SIGTERM'));
-process.on('SIGINT', () => apagadoOrdenado('SIGINT'));
+/**
+ * Start periodic health checks every 30 seconds
+ */
+function startHealthCheckInterval() {
+  const healthCheckIntervalMs = 30000; // 30 seconds
 
-// Evitar que una promesa rechazada sin manejar tumbe el proceso
-process.on('unhandledRejection', (reason) => {
-  console.error('[Server] Promesa rechazada sin manejar:', reason?.message || reason);
+  const checkHealth = async () => {
+    try {
+      const waAgent = require('./services/whatsappAgent');
+      const adminBot = waAgent.getBot('admin');
+      const clientBot = waAgent.getBot('client');
+
+      // Update WhatsApp bot status
+      metricsCollector.updateWhatsAppStatus('admin', adminBot?.botStatus || 'disconnected');
+      metricsCollector.updateWhatsAppStatus('client', clientBot?.botStatus || 'disconnected');
+
+      // Get health snapshot
+      const db = require('./config/database');
+      const poolManager = db.getPoolManager?.();
+      const health = metricsCollector.getHealthSnapshot(poolManager);
+
+      // Check alerts
+      await alertService.checkAndAlert(health, metricsCollector.metrics);
+    } catch (err) {
+      console.error('[HealthCheck] Error during periodic check:', err.message);
+    }
+  };
+
+  // Run immediately, then every 30 seconds
+  checkHealth();
+  setInterval(checkHealth, healthCheckIntervalMs);
+  console.log('[HealthCheck] Periodic health checks started (every 30s)');
+}
+
+startServer().catch(err => {
+  console.error('[Server] Error fatal al iniciar:', err);
+  process.exit(1);
 });
