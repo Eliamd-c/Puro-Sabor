@@ -260,4 +260,107 @@ router.get('/health/cache', async (req, res) => {
   }
 });
 
+/**
+ * GET /health/performance
+ *
+ * FASE 3.5: Query performance monitoring
+ * Shows slow queries, percentiles, N+1 patterns, and health score
+ */
+router.get('/health/performance', (req, res) => {
+  try {
+    const { getInstance: getQueryMonitor } = require('../utils/queryMonitor');
+    const monitor = getQueryMonitor();
+
+    const report = monitor.getPerformanceReport();
+
+    res.json({
+      status: 'ok',
+      performance: {
+        timestamp: report.timestamp,
+        healthScore: report.healthScore,
+        queries: {
+          total: report.summary.totalQueries,
+          avgTimeMs: parseFloat(report.summary.averageTimeMs),
+          slowCount: report.summary.slowQueries,
+          verySlowCount: report.summary.verySlowQueries,
+          slowQueryRate: report.summary.slowQueryRate,
+          percentiles: report.percentiles,
+          byType: report.summary.byType
+        },
+        slowestQueries: report.slowestQueries.slice(0, 5),
+        n1Patterns: report.n1Patterns,
+        recommendations: report.recommendations
+      }
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: 'error',
+      error: 'Performance stats unavailable',
+      message: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+});
+
+/**
+ * GET /health/performance/queries
+ *
+ * Detailed query history (last 50 queries)
+ */
+router.get('/health/performance/queries', (req, res) => {
+  try {
+    const { getInstance: getQueryMonitor } = require('../utils/queryMonitor');
+    const monitor = getQueryMonitor();
+
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+    const recentQueries = monitor.getRecentQueries(limit);
+
+    res.json({
+      status: 'ok',
+      queries: {
+        count: recentQueries.length,
+        data: recentQueries
+      }
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: 'error',
+      error: 'Query history unavailable',
+      message: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+});
+
+/**
+ * POST /health/performance/reset
+ *
+ * Reset performance statistics (admin only)
+ */
+router.post('/health/performance/reset', (req, res) => {
+  try {
+    // In production, you'd check authentication here
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).json({
+        status: 'error',
+        error: 'Not allowed in production'
+      });
+    }
+
+    const { getInstance: getQueryMonitor } = require('../utils/queryMonitor');
+    const monitor = getQueryMonitor();
+
+    monitor.reset();
+
+    res.json({
+      status: 'ok',
+      message: 'Performance statistics reset'
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: 'error',
+      error: 'Failed to reset statistics',
+      message: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+});
+
 module.exports = router;

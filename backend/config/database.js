@@ -72,6 +72,15 @@ function convertQueryToPg(sql) {
 
 // Wrapper (Adaptador) para que las rutas existentes diseñadas para SQLite (db.run, db.get, db.all) 
 // funcionen directamente con el Pool de PostgreSQL sin tener que reescribir cientos de líneas.
+// FASE 3.5: Query monitoring
+let queryMonitor = null;
+try {
+  const { getInstance } = require('../utils/queryMonitor');
+  queryMonitor = getInstance();
+} catch (e) {
+  console.warn('[DB] Query monitor not available:', e.message);
+}
+
 const db = {
   run: function(sql, params, callback) {
     if (typeof params === 'function') {
@@ -79,13 +88,19 @@ const db = {
       params = [];
     }
     const pgSql = convertQueryToPg(sql);
-    
+
     // Si es un INSERT, PostgreSQL necesita "RETURNING *" para emular el "this.lastID" de SQLite.
     // Usamos * en lugar de id porque hay tablas (como config) que no tienen columna id.
     const isInsert = pgSql.trim().toUpperCase().startsWith('INSERT');
     const finalSql = isInsert ? `${pgSql} RETURNING *` : pgSql;
 
+    const startTime = Date.now();
     pool.query(finalSql, params, (err, result) => {
+      const duration = Date.now() - startTime;
+      if (queryMonitor) {
+        queryMonitor.recordQuery(sql, duration, !err, err?.message);
+      }
+
       if (err) {
         if (callback) callback(err);
         return;
@@ -97,14 +112,20 @@ const db = {
       if (callback) callback.call(context, null);
     });
   },
-  
+
   get: function(sql, params, callback) {
     if (typeof params === 'function') {
       callback = params;
       params = [];
     }
     const pgSql = convertQueryToPg(sql);
+    const startTime = Date.now();
     pool.query(pgSql, params, (err, result) => {
+      const duration = Date.now() - startTime;
+      if (queryMonitor) {
+        queryMonitor.recordQuery(sql, duration, !err, err?.message);
+      }
+
       if (err) {
         if (callback) callback(err);
         return;
@@ -112,14 +133,20 @@ const db = {
       if (callback) callback(null, result.rows.length > 0 ? result.rows[0] : undefined);
     });
   },
-  
+
   all: function(sql, params, callback) {
     if (typeof params === 'function') {
       callback = params;
       params = [];
     }
     const pgSql = convertQueryToPg(sql);
+    const startTime = Date.now();
     pool.query(pgSql, params, (err, result) => {
+      const duration = Date.now() - startTime;
+      if (queryMonitor) {
+        queryMonitor.recordQuery(sql, duration, !err, err?.message);
+      }
+
       if (err) {
         if (callback) callback(err);
         return;
