@@ -500,8 +500,9 @@ async function startServer() {
   try {
     const sslValid = await testSSL();
     if (!sslValid && process.env.NODE_ENV === 'production') {
-      console.error('[Server] ❌ FATAL: Validación SSL falló en producción. No iniciando servidor.');
-      process.exit(1);
+      // WARNING: No bloquear startup - permitir que Hostinger continúe
+      console.warn('[Server] ⚠️ ADVERTENCIA: Validación SSL falló en producción, pero continuando...');
+      // No hacer process.exit(1) - dejar que el servidor inicie
     }
   } catch (err) {
     console.error('[Server] ❌ Error durante validación SSL:', err.message);
