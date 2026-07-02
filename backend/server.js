@@ -3,6 +3,7 @@ const env = require('./config/env');
 
 const express = require('express');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
@@ -306,6 +307,9 @@ app.use(compressionMiddleware.stats());      // Track compression metrics
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Cookie parser middleware - REQUIRED for res.cookie() to work
+app.use(cookieParser());
+
 const uploadsPath = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsPath)) {
   fs.mkdirSync(uploadsPath, { recursive: true });
@@ -318,20 +322,6 @@ app.use(xss());
 // FASE 3.4: Pagination middleware
 const { paginationMiddleware } = require('./utils/paginationHelper');
 app.use(paginationMiddleware);
-
-app.use((req, res, next) => {
-  req.cookies = {};
-  const cookieHeader = req.headers.cookie;
-  if (cookieHeader) {
-    cookieHeader.split(';').forEach(cookie => {
-      const parts = cookie.split('=');
-      if (parts.length >= 2) {
-        req.cookies[parts[0].trim()] = parts.slice(1).join('=').trim();
-      }
-    });
-  }
-  next();
-});
 
 app.use((req, res, next) => {
   logger.info({ method: req.method, url: req.url });
