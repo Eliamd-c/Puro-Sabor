@@ -23,18 +23,7 @@ const pgPool = new Pool({
   connectionTimeoutMillis: 5000
 });
 
-// ── Rate limiting en memoria (10 msg/min por número) ───────────
-const _rateLimits = new Map();
-const RATE_MAX = 10, RATE_WINDOW = 60_000;
-function checkRateLimit(num) {
-  const now = Date.now();
-  let entry = _rateLimits.get(num);
-  if (!entry || now > entry.reset) { _rateLimits.set(num, { count: 1, reset: now + RATE_WINDOW }); return true; }
-  if (entry.count >= RATE_MAX) return false;
-  entry.count++;
-  return true;
-}
-setInterval(() => { const now = Date.now(); for (const [k, v] of _rateLimits) if (now > v.reset + RATE_WINDOW) _rateLimits.delete(k); }, 3_600_000);
+// Note: Rate limiting is handled by rateLimitService (imported above)
 
 // ── Límites de tamaño de media ──────────────────────────────────
 const MAX_MEDIA = { image: 5 * 1024 * 1024, audio: 10 * 1024 * 1024, default: 5 * 1024 * 1024 };

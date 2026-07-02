@@ -709,7 +709,87 @@ async function crearIndices() {
       ON chatbot_logs(fecha DESC)
     `);
 
-    console.log('✅ Índices verificados/creados en Postgres.');
+    // ── FASE 3.1: Additional indexes for critical queries ────────────────────
+
+    // 13. Composite index for user orders lookup (very frequent)
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_pedidos_numero_cliente_fecha
+      ON pedidos(numero_cliente, creado_en DESC)
+    `);
+
+    // 14. Composite index for pending orders by status
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_pedidos_numero_estado
+      ON pedidos(numero_cliente, estado, creado_en DESC)
+    `);
+
+    // 15. Index for order status tracking
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_pedidos_estado_fecha
+      ON pedidos(estado, creado_en DESC)
+    `);
+
+    // 16. Composite index for active products by category
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_productos_categoria_activo
+      ON productos(categoria_id, activo, stock DESC)
+    `);
+
+    // 17. Index for fast active product retrieval
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_productos_activo_stock
+      ON productos(activo, stock DESC)
+    `);
+
+    // 18. Index for product name search
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_productos_nombre
+      ON productos(nombre)
+    `);
+
+    // 19. Index for fast mensajes historial lookup by user
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_mensajes_historial_numero_fecha
+      ON mensajes_historial(numero_cliente, creado_en DESC)
+    `);
+
+    // 20. Index for message role-based queries
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_mensajes_historial_role
+      ON mensajes_historial(role, creado_en DESC)
+    `);
+
+    // 21. Index for admin whitelist lookup
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_admin_whitelist_numero
+      ON admin_whitelist(numero)
+    `);
+
+    // 22. Index for admin whitelist audit trail
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_admin_whitelist_logs_numero
+      ON admin_whitelist_logs(numero, creado_en DESC)
+    `);
+
+    // 23. Index for cash registry by date (financial reports)
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_caja_registros_tipo_fecha
+      ON caja_registros(tipo, fecha DESC)
+    `);
+
+    // 24. Index for inventory lookup
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_insumos_nombre
+      ON insumos(nombre)
+    `);
+
+    // 25. Index for low stock alerts
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_insumos_stock_bajo
+      ON insumos(stock, stock_minimo)
+    `);
+
+    console.log('✅ Índices verificados/creados en Postgres (25 total).');
   } catch (e) {
     console.error('Error al crear índices en Postgres:', e);
   }
@@ -759,8 +839,16 @@ function sembrarDatosIniciales() {
   });
 }
 
-// Inicializar la estructura
-inicializarTablas();
+// Inicializar la estructura (deferred, non-blocking)
+// Tables will be created when pool initializes, not on module load
+if (pool) {
+  inicializarTablas().catch(err => {
+    console.warn('[DB] Non-critical: Table initialization deferred until pool ready:', err.message);
+  });
+}
+
+// Get pool function
+const getPool = () => pool;
 
 // Exportar pool initialization functions
 db.initializePool = initializePool;

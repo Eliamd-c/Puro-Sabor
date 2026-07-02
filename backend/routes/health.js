@@ -181,4 +181,37 @@ router.post('/health/record-metric', (req, res) => {
   }
 });
 
+/**
+ * GET /health/compression
+ *
+ * Compression statistics and metrics
+ * Shows compression performance data
+ */
+router.get('/health/compression', (req, res) => {
+  try {
+    const compressionMiddleware = require('../middleware/compression');
+    const stats = compressionMiddleware.getStats();
+
+    res.json({
+      status: 'ok',
+      compression: {
+        ...stats,
+        configuration: {
+          gzipLevel: compressionMiddleware.GZIP_LEVEL,
+          brotliLevel: compressionMiddleware.BROTLI_LEVEL,
+          minSize: `${compressionMiddleware.MIN_SIZE} bytes`,
+          compressibleTypes: compressionMiddleware.COMPRESSIBLE_TYPES.length,
+          skippedTypes: compressionMiddleware.SKIP_COMPRESSION.length
+        }
+      }
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: 'error',
+      error: 'Compression stats unavailable',
+      message: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+});
+
 module.exports = router;

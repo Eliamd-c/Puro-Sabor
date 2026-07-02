@@ -257,7 +257,6 @@ setInterval(async () => {
 }, 60 * 60 * 1000); // Cada hora
 
 // ── Timeout automático: revisar mesas con +2h de inactividad ──────────────
-const db = require('./config/database');
 setInterval(() => {
   db.get("SELECT value FROM config WHERE key = 'mesas_timeout_horas'", [], (err, row) => {
     const horas = row ? parseInt(row.value) : 2;
@@ -296,19 +295,12 @@ app.use(cors({
   optionsSuccessStatus: 200
 }));
 
-// Compresión Gzip para reducir tamaño de respuestas
-const compression = require('compression');
-app.use(compression({
-  filter: (req, res) => {
-    // No comprimir si el cliente lo rechaza
-    if (req.headers['x-no-compression']) {
-      return false;
-    }
-    // Usar el filter default (comprime basado en Content-Type)
-    return compression.filter(req, res);
-  },
-  level: 6 // Nivel 6: buen balance entre velocidad y compresión
-}));
+// FASE 3.2: Response Compression - Gzip + Brotli + Optimization
+const compressionMiddleware = require('./middleware/compression');
+app.use(compressionMiddleware.gzip());       // Gzip (all browsers)
+app.use(compressionMiddleware.brotli());     // Brotli (modern browsers, better ratio)
+app.use(compressionMiddleware.optimize());   // Remove unnecessary fields
+app.use(compressionMiddleware.stats());      // Track compression metrics
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
