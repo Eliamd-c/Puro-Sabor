@@ -14,10 +14,14 @@ const { executeWithValidation, validateFunctionParams } = require('./functionVal
 const { DatabaseError, NetworkError, asyncWrapper, normalizeError } = require('../utils/errorHandler');
 require('dotenv').config({ path: require('path').join(__dirname, '..', '..', '.env') });
 
+// NOTA SSL: el certificado del pooler de Supabase está firmado por la CA propia
+// de Supabase; con rejectUnauthorized: true (sin esa CA) la conexión siempre
+// falla ("self-signed certificate in certificate chain"), lo que rompía los
+// locks de WhatsApp. Ver SUPABASE_CA_CERT para verificación completa.
 const pgPool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production'
-    ? { rejectUnauthorized: true }
+  ssl: process.env.SUPABASE_CA_CERT
+    ? { rejectUnauthorized: true, ca: process.env.SUPABASE_CA_CERT }
     : { rejectUnauthorized: false },
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000

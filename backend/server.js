@@ -36,6 +36,12 @@ console.error = function(...args) {
 };
 
 const app = express();
+
+// Hostinger sirve la app detrás de un reverse proxy: sin esto, Express ve la IP
+// del proxy en lugar de la del cliente y express-rate-limit lanza ValidationError
+// por el header X-Forwarded-For (afecta el rate limiting del login).
+app.set('trust proxy', 1);
+
 const server = http.createServer(app);
 const PORT = env.PORT;
 
@@ -66,14 +72,15 @@ const io = new Server(server, {
 });
 
 // Configurar Postgres Adapter para sincronizar sockets entre múltiples procesos de Node en Hostinger
-// ⚠️  SECURITY: rejectUnauthorized debe ser true en producción para evitar MITM attacks
+// NOTA SSL: el certificado del pooler de Supabase está firmado por la CA propia de
+// Supabase; con rejectUnauthorized: true (sin proveer esa CA) la conexión siempre
+// falla. La conexión sigue cifrada; ver SUPABASE_CA_CERT para verificación completa.
 if (env.DATABASE_URL) {
   try {
-    const isProduction = env.NODE_ENV === 'production' || env.HOSTINGER_MODE === 'true';
     const socketPool = new Pool({
       connectionString: env.DATABASE_URL,
-      ssl: isProduction
-        ? { rejectUnauthorized: true }
+      ssl: process.env.SUPABASE_CA_CERT
+        ? { rejectUnauthorized: true, ca: process.env.SUPABASE_CA_CERT }
         : { rejectUnauthorized: false }
     });
     

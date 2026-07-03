@@ -54,10 +54,12 @@ async function validateSSLConfiguration() {
   // Test 4: Intentar conectar CON SSL (debe funcionar siempre)
   console.log('[SSL Test] Verificando conexión CON SSL...');
   try {
+    // Misma configuración SSL que el pool real: verificación estricta solo
+    // cuando se provee el certificado CA de Supabase (SUPABASE_CA_CERT).
     const testPoolWithSSL = new Pool({
       connectionString: process.env.DATABASE_URL,
-      ssl: isProduction
-        ? { rejectUnauthorized: true }
+      ssl: process.env.SUPABASE_CA_CERT
+        ? { rejectUnauthorized: true, ca: process.env.SUPABASE_CA_CERT }
         : { rejectUnauthorized: false },
       connectionTimeoutMillis: 5000
     });

@@ -21,7 +21,13 @@ class PoolManager {
       idleTimeoutMillis: options.idleTimeoutMillis || 30000,
       connectionTimeoutMillis: options.connectionTimeoutMillis || 5000,
       statementTimeoutMillis: options.statementTimeoutMillis || 30000,
-      application_name: 'puro-sabor-whatsapp-bot'
+      application_name: 'puro-sabor-whatsapp-bot',
+      // Supabase requiere TLS. Sin el certificado CA de Supabase, la
+      // verificación estricta falla ("self-signed certificate in chain"),
+      // así que solo se activa cuando se provee sslCA.
+      ssl: options.sslCA
+        ? { rejectUnauthorized: true, ca: options.sslCA }
+        : { rejectUnauthorized: false }
     };
 
     this.pool = null;

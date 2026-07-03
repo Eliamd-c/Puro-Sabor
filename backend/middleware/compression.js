@@ -245,6 +245,9 @@ function optimizeObject(obj) {
   const optimized = {};
 
   // Fields to ALWAYS exclude (internal, security)
+  // NOTE: 'token' must NOT be excluded — the login endpoint legitimately
+  // returns the JWT in the response body and the client stores it in
+  // localStorage. Excluding it broke authentication entirely.
   const EXCLUDE_FIELDS = [
     'password',
     'password_hash',
@@ -253,8 +256,6 @@ function optimizeObject(obj) {
     'secret',
     'api_key',
     'private_key',
-    'token',
-    'refresh_token',
     '__v',        // Mongoose version
     '_id'         // Mongo ID if not primary key
   ];

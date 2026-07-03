@@ -10,8 +10,13 @@ require('dotenv').config();
 types.setTypeParser(1700, (val) => (val === null ? null : parseFloat(val)));
 
 // Configuración del Pool de PostgreSQL conectado a Supabase con retry logic
-// ⚠️  SECURITY: rejectUnauthorized debe ser true en producción para evitar MITM attacks
-const isProduction = process.env.NODE_ENV === 'production' || process.env.HOSTINGER_MODE === 'true';
+// NOTA SSL: El pooler de Supabase usa un certificado firmado por la CA propia de
+// Supabase, que Node.js no incluye. Con rejectUnauthorized: true la conexión
+// SIEMPRE falla ("self-signed certificate in certificate chain"). La conexión
+// sigue cifrada (TLS) con rejectUnauthorized: false; solo se omite la
+// verificación de CA. Para verificación completa, definir SUPABASE_CA_CERT
+// con el certificado CA de Supabase.
+const supabaseCA = process.env.SUPABASE_CA_CERT;
 
 // Inicializar PoolManager con config
 const poolManager = new PoolManager(process.env.DATABASE_URL, {
@@ -21,7 +26,8 @@ const poolManager = new PoolManager(process.env.DATABASE_URL, {
   connectionTimeoutMillis: 5000,
   statementTimeoutMillis: 30000,
   healthCheckFrequency: 30000,
-  sslRejectUnauthorized: isProduction
+  sslRejectUnauthorized: Boolean(supabaseCA),
+  sslCA: supabaseCA || undefined
 });
 
 // Wrapper para mantener compatibilidad
