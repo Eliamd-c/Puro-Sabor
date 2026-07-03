@@ -13,6 +13,7 @@ const { checkRateLimit, globalDownloadQueue, isLargeFile, formatBytes } = requir
 const { executeWithValidation, validateFunctionParams } = require('./functionValidator');
 const { DatabaseError, NetworkError, asyncWrapper, normalizeError } = require('../utils/errorHandler');
 const waMonitor = require('../utils/waMonitor');
+const { OpenAIChat } = require('./openaiAdapter');
 require('dotenv').config({ path: require('path').join(__dirname, '..', '..', '.env') });
 
 // NOTA SSL: el certificado del pooler de Supabase está firmado por la CA propia
@@ -1454,11 +1455,13 @@ class WhatsAppBot {
 
     if (body) await guardarMensajeHistorial(senderNumber, 'user', body, this.botType);
 
-    // Prioridad: variable de entorno primero. Antes era config-first y una key
-    // vieja/inválida guardada en la BD (panel) opacaba la key nueva del .env.
+    // Proveedor de IA: si hay key de OpenAI (ChatGPT) se usa esa; si no, Gemini.
+    // Prioridad env-first: una key vieja/inválida guardada en la BD (panel)
+    // no debe opacar la key nueva del .env.
+    const openaiKey = process.env.OPENAI_API_KEY || await getConfig('openai_api_key');
     const apiKey = process.env.GEMINI_API_KEY || await getConfig('gemini_api_key');
-    if (!apiKey) {
-      waMonitor.trace(this.botType, 'gemini', 'error', senderNumber, 'SIN RESPUESTA IA: falta la API Key de Gemini (ni en config ni en GEMINI_API_KEY)');
+    if (!openaiKey && !apiKey) {
+      waMonitor.trace(this.botType, 'gemini', 'error', senderNumber, 'SIN RESPUESTA IA: no hay API Key ni de OpenAI (OPENAI_API_KEY) ni de Gemini (GEMINI_API_KEY)');
       if (this.botType === 'admin') {
         await this.client.sendMessage(remoteJid, { text: '🚨 Error: API Key no configurada.' }, { quoted: message });
       }
@@ -1466,7 +1469,6 @@ class WhatsAppBot {
     }
 
     try {
-      const genAI = new GoogleGenerativeAI(apiKey);
       const historialPrevio = await obtenerHistorial(senderNumber, this.botType, 15);
       
       // Filtrar mensajes automáticos de ausencia para que no confundan a Gemini en el historial
@@ -1504,18 +1506,30 @@ class WhatsAppBot {
           historialGemini.push({ role: 'model', parts: [{ text: 'Entendido.' }] });
       }
 
-      const modelConfig = { model: 'gemini-2.5-flash', systemInstruction };
-      if (tools && tools.length > 0) modelConfig.tools = tools;
-      const model = genAI.getGenerativeModel(modelConfig);
-
-      const chat = model.startChat({ history: historialGemini });
+      // Crear la sesión de chat según el proveedor disponible.
+      // El adaptador de OpenAI imita la interfaz del chat de Gemini
+      // (sendMessage → response.functionCalls()/text()), así el resto
+      // del flujo no cambia.
+      let chat;
+      let iaLabel;
+      if (openaiKey) {
+        chat = new OpenAIChat(openaiKey, { systemInstruction, tools, history: historialGemini });
+        iaLabel = 'OpenAI gpt-4o-mini';
+      } else {
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const modelConfig = { model: 'gemini-2.5-flash', systemInstruction };
+        if (tools && tools.length > 0) modelConfig.tools = tools;
+        const model = genAI.getGenerativeModel(modelConfig);
+        chat = model.startChat({ history: historialGemini });
+        iaLabel = 'Gemini 2.5 Flash';
+      }
 
       let contentParts = [];
       if (mediaPart) contentParts.push(mediaPart);
       if (body) contentParts.push(body);
 
       this.emitMessage({ type: 'system', sender: 'Sistema', text: '🤖 Procesando...', time: new Date().toLocaleTimeString() });
-      waMonitor.trace(this.botType, 'gemini', 'info', senderNumber, `Consultando IA (historial: ${historialGemini.length} msgs${mediaPart ? ', con media' : ''})`);
+      waMonitor.trace(this.botType, 'gemini', 'info', senderNumber, `Consultando IA [${iaLabel}] (historial: ${historialGemini.length} msgs${mediaPart ? ', con media' : ''})`);
 
       let result = await chat.sendMessage(contentParts);
       let iteraciones = 0;

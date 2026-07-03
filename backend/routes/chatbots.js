@@ -50,7 +50,7 @@ router.get('/monitor', verificarJWT, async (req, res) => {
     const cfgRows = await new Promise((resolve) => {
       db.all(
         `SELECT key, value FROM config WHERE key IN
-         ('admin_whatsapp_numbers', 'whatsapp_bot_active', 'whatsapp_admin_bot_active', 'bot_horario_activo', 'gemini_api_key')`,
+         ('admin_whatsapp_numbers', 'whatsapp_bot_active', 'whatsapp_admin_bot_active', 'bot_horario_activo', 'gemini_api_key', 'openai_api_key')`,
         [],
         (err, rows) => resolve(rows || [])
       );
@@ -68,6 +68,12 @@ router.get('/monitor', verificarJWT, async (req, res) => {
         botClienteActivo: cfg.whatsapp_bot_active !== '0',
         botAdminActivo: cfg.whatsapp_admin_bot_active !== '0',
         horarioActivo: cfg.bot_horario_activo === '1',
+        // El bot usa OpenAI si hay key; si no, Gemini (env tiene prioridad sobre config)
+        proveedorIA: (process.env.OPENAI_API_KEY || cfg.openai_api_key)
+          ? 'OpenAI (ChatGPT) ✅'
+          : ((process.env.GEMINI_API_KEY || cfg.gemini_api_key)
+            ? 'Gemini ✅'
+            : 'NINGUNO ❌ (la IA no responderá)'),
         geminiApiKey: (cfg.gemini_api_key || process.env.GEMINI_API_KEY) ? 'configurada ✅' : 'FALTA ❌ (la IA no responderá)'
       },
       eventos: waMonitor.getEvents({

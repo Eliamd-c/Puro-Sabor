@@ -131,7 +131,7 @@
         <div class="card"><h3>Bot Admin</h3><div class="valor"><span class="pill ${esc(b.admin.status)}">${esc(b.admin.status)}</span></div></div>
         <div class="card"><h3>Bot Cliente</h3><div class="valor"><span class="pill ${esc(b.client.status)}">${esc(b.client.status)}</span></div></div>
         <div class="card"><h3>Números autorizados (admin)</h3><div class="valor" style="font-size:13px">${esc(c.numerosAutorizados)}</div></div>
-        <div class="card"><h3>API Key Gemini</h3><div class="valor" style="font-size:13px">${esc(c.geminiApiKey)}</div></div>
+        <div class="card"><h3>Proveedor IA</h3><div class="valor" style="font-size:13px">${esc(c.proveedorIA || c.geminiApiKey)}</div></div>
         <div class="card"><h3>Horario bot cliente</h3><div class="valor" style="font-size:13px">${c.horarioActivo ? 'Restricción de horario ACTIVA' : 'Sin restricción de horario'}</div></div>
         <div class="card"><h3>Proceso Node</h3><div class="valor" style="font-size:13px">PID ${esc(data.proceso)}</div></div>`;
     }
