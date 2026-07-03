@@ -13,17 +13,6 @@ router.post('/login', loginLimiter, validate(schemas.loginSchema), async (req, r
   try {
     const { usuario, password } = req.validatedBody;
     const result = await authService.login(usuario, password);
-    
-    // Cookie configurable para mayor comodidad
-    // IMPORTANT: Remove secure flag if SSL is not working on Hostinger
-    // This allows cookies to be stored in browsers even without valid HTTPS
-    res.cookie('authToken', result.token, {
-      httpOnly: false,  // Allow JS access temporarily to debug cookie issues
-      secure: false,    // Disable secure flag - SSL certificate issue on Hostinger
-      sameSite: 'Lax',
-      maxAge: 24 * 60 * 60 * 1000, // 24 horas
-      path: '/'         // Ensure cookie is sent for all paths
-    });
 
     res.json({
       success: true,
