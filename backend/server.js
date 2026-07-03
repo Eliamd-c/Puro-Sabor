@@ -212,23 +212,18 @@ app.set('io', io);
 // ── Limpiar locks expirados al iniciar ────────────────────────────────────────
 async function limpiarLocksExpirados() {
   try {
-    const ahora = Date.now();
-    const ttl = 30000; // 30 segundos (debe coincidir con LOCK_TTL_MS en whatsappAgent.js)
-    const hace30s = new Date(ahora - ttl);
-
-    const res = await dbAsync.all(
-      `SELECT key, value, updated_at FROM wa_auth
-       WHERE key LIKE $1 AND updated_at < $2`,
-      ['%lock_pid%', hace30s]
+    // La edad del lock se calcula DENTRO de Postgres (NOW() - updated_at).
+    // Comparar updated_at contra el reloj de Node mezclaba el reloj de
+    // Supabase con el de Hostinger: con cualquier skew/zona horaria esta
+    // limpieza borraba locks ACTIVOS y desataba robo de sesión en bucle.
+    const res = await dbAsync.run(
+      `DELETE FROM wa_auth
+       WHERE key LIKE $1 AND updated_at < NOW() - INTERVAL '30 seconds'`,
+      ['%lock_pid%']
     );
 
-    if (res && res.length > 0) {
-      console.log(`[Startup] Encontrados ${res.length} locks expirados, limpiando...`);
-      await dbAsync.run(
-        `DELETE FROM wa_auth WHERE key LIKE $1 AND updated_at < $2`,
-        ['%lock_pid%', hace30s]
-      );
-      console.log('[Startup] ✅ Locks expirados eliminados');
+    if (res && res.changes > 0) {
+      console.log(`[Startup] ✅ ${res.changes} locks expirados eliminados`);
     }
   } catch (err) {
     console.error('[Startup] Error limpiando locks:', err.message);
@@ -247,13 +242,11 @@ waAgent.inicializarTodos(io).catch(err => {
 // ── Job automático: limpiar locks cada hora ────────────────────────────────────
 setInterval(async () => {
   try {
-    const ahora = Date.now();
-    const ttl = 30000;
-    const hace30s = new Date(ahora - ttl);
-
+    // Edad calculada dentro de Postgres — ver nota en limpiarLocksExpirados()
     const deleted = await dbAsync.run(
-      `DELETE FROM wa_auth WHERE key LIKE $1 AND updated_at < $2`,
-      ['%lock_pid%', hace30s]
+      `DELETE FROM wa_auth
+       WHERE key LIKE $1 AND updated_at < NOW() - INTERVAL '30 seconds'`,
+      ['%lock_pid%']
     );
 
     if (deleted.changes > 0) {

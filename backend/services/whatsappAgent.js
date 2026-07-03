@@ -314,25 +314,32 @@ class WhatsAppBot {
 
   async tryAcquireLockDB() {
     const myPid = process.pid.toString();
-    const now = Date.now();
-    const expiry = now - this.LOCK_TTL_MS;
 
     try {
-      const res = await pgPool.query('SELECT value, updated_at FROM wa_auth WHERE key = $1', [this.LOCK_KEY]);
+      // IMPORTANTE: la edad del lock se calcula DENTRO de Postgres (NOW() -
+      // updated_at). Antes se comparaba updated_at (reloj de Supabase) contra
+      // Date.now() (reloj de Hostinger): cualquier diferencia de zona horaria
+      // o skew hacía que los locks parecieran expirados al instante y los
+      // procesos se los robaran en bucle (conexión/desconexión infinita).
+      const res = await pgPool.query(
+        `SELECT value, EXTRACT(EPOCH FROM (NOW() - updated_at)) AS age_seconds
+         FROM wa_auth WHERE key = $1`,
+        [this.LOCK_KEY]
+      );
 
       if (res.rows.length > 0) {
         const lockPid = res.rows[0].value;
-        const lockTime = new Date(res.rows[0].updated_at).getTime();
+        const ageMs = parseFloat(res.rows[0].age_seconds) * 1000;
 
         // Si el lock es de otro proceso Y no ha expirado, no adquirir
-        if (lockPid !== myPid && lockTime > expiry) {
-          console.log(`[WA Lock] Lock bloqueado por proceso ${lockPid}, expira en ${Math.round((lockTime - expiry) / 1000)}s`);
+        if (lockPid !== myPid && ageMs < this.LOCK_TTL_MS) {
+          console.log(`[WA Lock] Lock bloqueado por proceso ${lockPid}, expira en ${Math.round((this.LOCK_TTL_MS - ageMs) / 1000)}s`);
           return false;
         }
 
         // Lock expirado o es nuestro, permitir retomar
-        if (lockTime <= expiry) {
-          console.log(`[WA Lock] Lock anterior expirado (${Math.round((now - lockTime) / 1000)}s atrás), reacquiriendo...`);
+        if (ageMs >= this.LOCK_TTL_MS) {
+          console.log(`[WA Lock] Lock anterior expirado (${Math.round(ageMs / 1000)}s atrás), reacquiriendo...`);
         }
       }
 
