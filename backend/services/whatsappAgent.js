@@ -256,6 +256,39 @@ class WhatsAppBot {
     this.isReconnecting = false;
     this.LOCK_KEY = `whatsapp_lock_pid_${this.botType}`;
     this.LOCK_TTL_MS = 30000;
+    this.lockHeartbeat = null;
+  }
+
+  /**
+   * Renueva el lock periódicamente mientras este proceso controle el bot.
+   * Sin esto, el lock "expira" a los 30s aunque el bot siga conectado, y otro
+   * proceso del cluster lo toma, se conecta con la MISMA sesión (carpeta auth
+   * compartida) y WhatsApp cierra la sesión por conflicto → bucle de QR.
+   */
+  startLockHeartbeat() {
+    this.stopLockHeartbeat();
+    const myPid = process.pid.toString();
+    this.lockHeartbeat = setInterval(async () => {
+      try {
+        const res = await pgPool.query(
+          `UPDATE wa_auth SET updated_at = NOW() WHERE key = $1 AND value = $2`,
+          [this.LOCK_KEY, myPid]
+        );
+        if (res.rowCount === 0) {
+          console.warn(`[WA Lock ${this.botType}] ⚠️ Lock perdido (otro proceso lo tomó)`);
+        }
+      } catch (err) {
+        console.error(`[WA Lock ${this.botType}] Error renovando lock:`, err.message);
+      }
+    }, Math.floor(this.LOCK_TTL_MS / 3)); // cada 10s, TTL 30s
+    if (this.lockHeartbeat.unref) this.lockHeartbeat.unref();
+  }
+
+  stopLockHeartbeat() {
+    if (this.lockHeartbeat) {
+      clearInterval(this.lockHeartbeat);
+      this.lockHeartbeat = null;
+    }
   }
 
 
@@ -291,6 +324,7 @@ class WhatsAppBot {
         [this.LOCK_KEY, myPid]
       );
       console.log(`[WA Lock] Lock adquirido por proceso ${myPid}`);
+      this.startLockHeartbeat();
       return true;
     } catch (err) {
       console.error(`[WA Lock] Error adquiriendo lock:`, err.message);
@@ -299,6 +333,7 @@ class WhatsAppBot {
   }
 
   async releaseLockDB() {
+    this.stopLockHeartbeat();
     await pgPool.query('DELETE FROM wa_auth WHERE key = $1', [this.LOCK_KEY]);
   }
 
