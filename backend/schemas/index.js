@@ -2,7 +2,10 @@ const Joi = require('joi');
 
 module.exports = {
   loginSchema: Joi.object({
-    usuario: Joi.string().alphanum().min(3).max(30).required(),
+    usuario: Joi.string().pattern(/^[a-zA-Z0-9_.-]+$/).min(3).max(30).required()
+      .messages({
+        'string.pattern.base': 'El usuario solo puede contener letras, números, guiones, puntos y guiones bajos'
+      }),
     password: Joi.string().min(8).required()
       .messages({
         'string.min': 'La contraseña debe tener al menos 8 caracteres'
