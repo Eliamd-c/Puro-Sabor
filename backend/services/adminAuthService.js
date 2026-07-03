@@ -8,7 +8,10 @@
  * - Whitelist de números administrativos
  */
 
-const db = require('../config/database');
+// IMPORTANTE: usar la versión con promesas. El módulo '../config/database'
+// es de estilo callback: llamarlo con `await` devuelve undefined siempre,
+// lo que hacía que isAdminNumberAuthorized() jamás autorizara a nadie.
+const db = require('../config/database-promise');
 const crypto = require('crypto');
 
 // Cache temporal de OTP codes {number: {code, expires, attempts}}
@@ -45,9 +48,20 @@ function validateE164Format(number) {
     cleaned = '+57' + cleaned.substring(1);
   }
 
-  // Si no empieza con +, agregar +57 (asume Colombia)
+  // Si no empieza con +, decidir según el contenido:
+  // WhatsApp entrega los números YA con código de país (ej: 573133288298).
+  // Anteponer +57 a ciegas duplicaba el código: +57573133288298.
   if (!cleaned.startsWith('+')) {
-    cleaned = '+57' + cleaned;
+    if (cleaned.startsWith('57') && cleaned.length === 12) {
+      // Ya trae el código de Colombia (57 + 10 dígitos): solo falta el +
+      cleaned = '+' + cleaned;
+    } else if (cleaned.length === 10) {
+      // Número local de 10 dígitos: anteponer código de Colombia
+      cleaned = '+57' + cleaned;
+    } else {
+      // Cualquier otro caso: asumir que ya trae código de país
+      cleaned = '+' + cleaned;
+    }
   }
 
   // E.164 regex: +1-999 dígitos (máximo 15 dígitos después del +)
@@ -99,18 +113,52 @@ async function logAccessAttempt(number, status, reason, metadata = null) {
 }
 
 /**
- * Verifica si número está en whitelist admin
+ * Compara dos números por sus últimos 10 dígitos (línea local en Colombia),
+ * ignorando +, código de país y formato. Evita falsos negativos por
+ * diferencias de normalización ("+573133288298" vs "573133288298").
+ */
+function sameNumber(a, b) {
+  const da = String(a).replace(/\D/g, '');
+  const db_ = String(b).replace(/\D/g, '');
+  if (da.length < 10 || db_.length < 10) return da === db_;
+  return da.slice(-10) === db_.slice(-10);
+}
+
+/**
+ * Verifica si número está autorizado como admin.
+ *
+ * Fuentes de autorización (cualquiera de las dos vale):
+ * 1. config.admin_whatsapp_numbers — la lista que el admin gestiona desde el
+ *    panel de Inventario ("Números Autorizados"). Es la fuente principal.
+ * 2. admin_whitelist — tabla del flujo 2FA (FASE 1.2).
  *
  * @param {string} number - Número a verificar (debe estar normalizado)
  * @returns {Promise<boolean>}
  */
 async function isAdminNumberAuthorized(number) {
   try {
-    const row = await db.get(
-      `SELECT id FROM admin_whitelist WHERE numero = ? AND activo = 1`,
-      [number]
+    // 1) Lista del panel (config.admin_whatsapp_numbers)
+    const cfg = await db.get(
+      `SELECT value FROM config WHERE key = 'admin_whatsapp_numbers'`,
+      []
     );
-    return !!row;
+    if (cfg && cfg.value) {
+      const allowed = cfg.value.split(',').map(n => n.trim()).filter(Boolean);
+      if (allowed.some(n => sameNumber(n, number))) {
+        return true;
+      }
+    }
+
+    // 2) Whitelist 2FA (comparación flexible por últimos 10 dígitos)
+    const rows = await db.all(
+      `SELECT numero FROM admin_whitelist WHERE activo = 1`,
+      []
+    );
+    if (rows && rows.some(r => sameNumber(r.numero, number))) {
+      return true;
+    }
+
+    return false;
   } catch (err) {
     console.error('[Admin Auth] Error checking authorization:', err.message);
     return false;
