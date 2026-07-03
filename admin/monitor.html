@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Monitor WhatsApp — Puro Sabor</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0d1117; color: #e6edf3;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      padding: 16px; font-size: 14px;
+    }
+    h1 { font-size: 20px; margin-bottom: 4px; }
+    .sub { color: #8b949e; font-size: 13px; margin-bottom: 16px; }
+
+    .estado-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px; margin-bottom: 16px;
+    }
+    .card {
+      background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px;
+    }
+    .card h3 { font-size: 12px; text-transform: uppercase; color: #8b949e; margin-bottom: 6px; }
+    .card .valor { font-size: 15px; font-weight: 600; }
+    .pill { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; }
+    .pill.ready, .pill.ok { background: #1a3d2a; color: #3fb950; }
+    .pill.qr, .pill.warn, .pill.loading { background: #3d2e1a; color: #d29922; }
+    .pill.disconnected, .pill.error, .pill.disabled { background: #3d1a1a; color: #f85149; }
+
+    .filtros { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; align-items: center; }
+    .filtros button, .filtros select {
+      background: #21262d; color: #e6edf3; border: 1px solid #30363d;
+      border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 13px;
+    }
+    .filtros button.activo { background: #1f6feb; border-color: #1f6feb; }
+    .filtros .contador { color: #8b949e; font-size: 12px; margin-left: auto; }
+
+    #feed {
+      background: #010409; border: 1px solid #30363d; border-radius: 8px;
+      height: calc(100vh - 300px); min-height: 300px; overflow-y: auto;
+      font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 12.5px;
+      padding: 8px;
+    }
+    .evento {
+      padding: 5px 8px; border-left: 3px solid #30363d; margin-bottom: 3px;
+      display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline;
+      background: #0d1117; border-radius: 0 4px 4px 0;
+    }
+    .evento.info  { border-left-color: #388bfd; }
+    .evento.ok    { border-left-color: #3fb950; }
+    .evento.warn  { border-left-color: #d29922; background: #1c1a13; }
+    .evento.error { border-left-color: #f85149; background: #1e1315; }
+    .evento .hora { color: #8b949e; white-space: nowrap; }
+    .evento .bot { font-weight: 700; white-space: nowrap; }
+    .evento .bot.admin { color: #d2a8ff; }
+    .evento .bot.client { color: #79c0ff; }
+    .evento .etapa { color: #8b949e; white-space: nowrap; }
+    .evento .num { color: #ffa657; white-space: nowrap; }
+    .evento .detalle { flex: 1; min-width: 200px; }
+    .vacio { color: #8b949e; padding: 24px; text-align: center; }
+    a.volver { color: #58a6ff; text-decoration: none; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h1>📡 Monitor WhatsApp <span id="live" class="pill warn">conectando…</span></h1>
+  <p class="sub">Cada mensaje deja rastro en cada etapa: recibido → autorización → rate limit → IA → respuesta. Si el bot no responde, aquí dice exactamente por qué. <a class="volver" href="/admin/inventario.html">← Volver a Inventario</a></p>
+
+  <div class="estado-grid" id="estado"></div>
+
+  <div class="filtros">
+    <button data-bot="" class="activo">Todos</button>
+    <button data-bot="admin">Bot Admin</button>
+    <button data-bot="client">Bot Cliente</button>
+    <select id="filtro-nivel">
+      <option value="">Todos los niveles</option>
+      <option value="warn">Solo rechazos (warn)</option>
+      <option value="error">Solo errores</option>
+    </select>
+    <button id="btn-refrescar">🔄 Refrescar</button>
+    <span class="contador" id="contador"></span>
+  </div>
+
+  <div id="feed"><div class="vacio">Cargando eventos…</div></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const token = localStorage.getItem('puro_sabor_admin_token');
+    if (!token) window.location.href = '/admin/';
+
+    let filtroBot = '';
+    let eventos = [];
+
+    const feed = document.getElementById('feed');
+    const nivelSel = document.getElementById('filtro-nivel');
+
+    function esc(s) {
+      const d = document.createElement('div');
+      d.textContent = s == null ? '' : String(s);
+      return d.innerHTML;
+    }
+
+    function hora(ts) {
+      return new Date(ts).toLocaleTimeString('es-CO', { hour12: false, timeZone: 'America/Bogota' });
+    }
+
+    function render() {
+      const nivel = nivelSel.value;
+      const visibles = eventos.filter(e =>
+        (!filtroBot || e.bot === filtroBot) && (!nivel || e.level === nivel)
+      );
+      document.getElementById('contador').textContent = `${visibles.length} eventos`;
+      if (!visibles.length) {
+        feed.innerHTML = '<div class="vacio">Sin eventos aún. Envía un mensaje al bot y aparecerá aquí en vivo.</div>';
+        return;
+      }
+      feed.innerHTML = visibles.map(e => `
+        <div class="evento ${esc(e.level)}">
+          <span class="hora">${hora(e.ts)}</span>
+          <span class="bot ${esc(e.bot)}">${esc(e.bot)}</span>
+          <span class="etapa">[${esc(e.stage)}]</span>
+          ${e.sender ? `<span class="num">${esc(e.sender)}</span>` : ''}
+          <span class="detalle">${esc(e.detail)}</span>
+        </div>`).join('');
+    }
+
+    function renderEstado(data) {
+      const el = document.getElementById('estado');
+      const b = data.bots, c = data.config;
+      el.innerHTML = `
+        <div class="card"><h3>Bot Admin</h3><div class="valor"><span class="pill ${esc(b.admin.status)}">${esc(b.admin.status)}</span></div></div>
+        <div class="card"><h3>Bot Cliente</h3><div class="valor"><span class="pill ${esc(b.client.status)}">${esc(b.client.status)}</span></div></div>
+        <div class="card"><h3>Números autorizados (admin)</h3><div class="valor" style="font-size:13px">${esc(c.numerosAutorizados)}</div></div>
+        <div class="card"><h3>API Key Gemini</h3><div class="valor" style="font-size:13px">${esc(c.geminiApiKey)}</div></div>
+        <div class="card"><h3>Horario bot cliente</h3><div class="valor" style="font-size:13px">${c.horarioActivo ? 'Restricción de horario ACTIVA' : 'Sin restricción de horario'}</div></div>
+        <div class="card"><h3>Proceso Node</h3><div class="valor" style="font-size:13px">PID ${esc(data.proceso)}</div></div>`;
+    }
+
+    async function cargar() {
+      try {
+        const res = await fetch('/api/chatbots/monitor?limit=300', {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if (res.status === 401) { window.location.href = '/admin/'; return; }
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || 'error');
+        eventos = data.eventos; // ya vienen más nuevos primero
+        renderEstado(data);
+        render();
+      } catch (err) {
+        feed.innerHTML = '<div class="vacio">Error cargando el monitor: ' + esc(err.message) + '</div>';
+      }
+    }
+
+    // Filtros
+    document.querySelectorAll('.filtros button[data-bot]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.filtros button[data-bot]').forEach(x => x.classList.remove('activo'));
+        btn.classList.add('activo');
+        filtroBot = btn.dataset.bot;
+        render();
+      });
+    });
+    nivelSel.addEventListener('change', render);
+    document.getElementById('btn-refrescar').addEventListener('click', cargar);
+
+    // Live via Socket.IO
+    const socket = io();
+    const live = document.getElementById('live');
+    socket.on('connect', () => {
+      socket.emit('unirse_admin');
+      live.textContent = '● EN VIVO';
+      live.className = 'pill ok';
+    });
+    socket.on('disconnect', () => {
+      live.textContent = 'desconectado';
+      live.className = 'pill error';
+    });
+    socket.on('whatsapp_monitor_event', (ev) => {
+      eventos.unshift(ev);
+      if (eventos.length > 500) eventos.pop();
+      render();
+    });
+
+    cargar();
+    // Refrescar estado de tarjetas cada 60s (los eventos llegan por socket)
+    setInterval(cargar, 60000);
+  </script>
+</body>
+</html>

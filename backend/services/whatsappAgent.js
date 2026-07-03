@@ -12,6 +12,7 @@ const mediaService = require('./mediaService');
 const { checkRateLimit, globalDownloadQueue, isLargeFile, formatBytes } = require('./rateLimitService');
 const { executeWithValidation, validateFunctionParams } = require('./functionValidator');
 const { DatabaseError, NetworkError, asyncWrapper, normalizeError } = require('../utils/errorHandler');
+const waMonitor = require('../utils/waMonitor');
 require('dotenv').config({ path: require('path').join(__dirname, '..', '..', '.env') });
 
 // NOTA SSL: el certificado del pooler de Supabase está firmado por la CA propia
@@ -276,6 +277,7 @@ class WhatsAppBot {
         );
         if (res.rowCount === 0) {
           console.warn(`[WA Lock ${this.botType}] ⚠️ Lock perdido (otro proceso lo tomó)`);
+          waMonitor.trace(this.botType, 'lock', 'error', null, `Proceso ${myPid} perdió el lock (otro proceso lo tomó) — riesgo de conflicto de sesión`);
         }
       } catch (err) {
         console.error(`[WA Lock ${this.botType}] Error renovando lock:`, err.message);
@@ -437,6 +439,7 @@ class WhatsAppBot {
 
         if (qr) {
           console.log(`[WA Agent ${this.botType}] QR recibido.`);
+          waMonitor.trace(this.botType, 'conexion', 'info', null, 'QR generado, esperando escaneo');
           this.botStatus = 'qr';
           try {
             this.latestQrDataUrl = await qrcode.toDataURL(qr);
@@ -450,6 +453,8 @@ class WhatsAppBot {
           const statusCode = lastDisconnect?.error?.output?.statusCode;
           const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
           console.log(`[WA Agent ${this.botType}] Conexión cerrada. Reconectar:`, shouldReconnect, 'Razón:', lastDisconnect?.error?.message, 'Code:', statusCode);
+          waMonitor.trace(this.botType, 'conexion', statusCode === DisconnectReason.loggedOut ? 'error' : 'warn', null,
+            `Conexión cerrada (code ${statusCode || '?'}: ${lastDisconnect?.error?.message || 'sin detalle'}). ${statusCode === DisconnectReason.loggedOut ? 'Sesión deslogueada — se limpiará auth y pedirá QR nuevo' : 'Reintentando reconexión'}`);
           
           if (statusCode === DisconnectReason.loggedOut) {
             try {
@@ -469,6 +474,7 @@ class WhatsAppBot {
           setTimeout(() => this.inicializarWhatsApp(), 3000);
         } else if (connection === 'open') {
           console.log(`[WA Agent ${this.botType}] Conectado y listo.`);
+          waMonitor.trace(this.botType, 'conexion', 'ok', null, `Conectado y listo (proceso ${process.pid})`);
           this.botStatus = 'ready';
           this.latestQrDataUrl = null;
           this.emitStatus();
@@ -897,7 +903,13 @@ class WhatsAppBot {
   async procesarMensajeEntrante(message) {
     const remoteJid = message.key.remoteJid;
     const isGroup = remoteJid.endsWith('@g.us');
-    if (isGroup) return;
+    if (isGroup) {
+      waMonitor.trace(this.botType, 'filtro', 'info', remoteJid.split('@')[0], 'Mensaje de grupo ignorado (el bot solo atiende chats directos)');
+      return;
+    }
+
+    waMonitor.trace(this.botType, 'recibido', 'info', remoteJid.split('@')[0],
+      `Mensaje recibido: "${(message.message?.conversation || message.message?.extendedTextMessage?.text || '[media]').slice(0, 80)}"`);
 
     const imageMsg = message.message?.imageMessage;
     const audioMsg = message.message?.audioMessage;
@@ -928,7 +940,10 @@ class WhatsAppBot {
       }
     }
 
-    if (!body && !mediaPart) return;
+    if (!body && !mediaPart) {
+      waMonitor.trace(this.botType, 'filtro', 'info', remoteJid.split('@')[0], 'Descartado: mensaje sin texto ni media procesable (sticker, reacción, etc.)');
+      return;
+    }
 
     const senderNumber = remoteJid.split('@')[0];
 
@@ -939,6 +954,7 @@ class WhatsAppBot {
 
       if (!normalizedNumber.valid) {
         console.log(`[WA Agent admin] Formato inválido: ${senderNumber} (${normalizedNumber.error})`);
+        waMonitor.trace('admin', 'auth', 'warn', senderNumber, `RECHAZADO sin respuesta: formato de número inválido (${normalizedNumber.error})`);
         await adminAuthService.logAccessAttempt(senderNumber, 'invalid_format', normalizedNumber.error);
         return;
       }
@@ -947,11 +963,14 @@ class WhatsAppBot {
       const isAuthorized = await adminAuthService.isAdminNumberAuthorized(normalizedNumber.normalized);
       if (!isAuthorized) {
         console.log(`[WA Agent admin] Acceso denegado: ${normalizedNumber.normalized}`);
+        waMonitor.trace('admin', 'auth', 'warn', senderNumber,
+          `RECHAZADO sin respuesta: ${normalizedNumber.normalized} no está en "Números Autorizados" del panel ni en la whitelist 2FA`);
         await adminAuthService.logAccessAttempt(normalizedNumber.normalized, 'denied', 'Número no en whitelist');
         return;
       }
 
       console.log(`[WA Agent admin] ✅ Acceso autorizado: ${normalizedNumber.normalized}`);
+      waMonitor.trace('admin', 'auth', 'ok', senderNumber, `Autorizado como admin (${normalizedNumber.normalized})`);
       await adminAuthService.logAccessAttempt(normalizedNumber.normalized, 'authorized', 'Acceso permitido');
     }
 
@@ -966,6 +985,7 @@ class WhatsAppBot {
         : `Límite alcanzado (10 mensajes/min). Reinicia en ${resetSecs}s`;
 
       console.log(`[WA Agent ${userType}] Rate limit excedido para ${senderNumber}: ${limMsg}`);
+      waMonitor.trace(this.botType, 'rate-limit', 'warn', senderNumber, `Rate limit excedido — se respondió aviso de espera (${limMsg})`);
       await this.client.sendMessage(remoteJid, { text: limMsg }, { quoted: message });
       return;
     }
@@ -980,6 +1000,7 @@ class WhatsAppBot {
       const paused = await isChatPaused(senderNumber);
       if (paused) {
         console.log(`[WA Agent client] Chat en pausa para ${senderNumber}. Ignorando IA.`);
+        waMonitor.trace('client', 'filtro', 'warn', senderNumber, 'IGNORADO sin respuesta: chat en pausa (modo asistencia humana activo para este cliente)');
         return;
       }
 
@@ -988,6 +1009,7 @@ class WhatsAppBot {
       const pideHumano = /\b(asesor|humano|persona|agente|operador|hablar con (alguien|una persona|un humano)|atenci[oó]n humana)\b/.test(lower);
       if (pideHumano) {
         console.log(`[WA Agent client] Handoff por palabra clave de ${senderNumber}.`);
+        waMonitor.trace('client', 'handoff', 'info', senderNumber, 'Cliente pidió humano → chat pausado y admins alertados');
         await this.solicitarAsesorHumano(remoteJid, senderNumber, message, body, 'El cliente solicitó hablar con una persona.');
         return;
       }
@@ -1003,6 +1025,7 @@ class WhatsAppBot {
 
       if (!estaAbierto) {
         console.log(`[WA Agent client] Bot cerrado. Enviando mensaje de ausencia.`);
+        waMonitor.trace('client', 'horario', 'warn', senderNumber, 'Fuera de horario → se respondió mensaje de ausencia (no IA)');
         await this.client.sendMessage(remoteJid, { text: mensajeAusencia }, { quoted: message });
         await guardarMensajeHistorial(senderNumber, 'model', mensajeAusencia, this.botType);
         this.emitMessage({ type: 'out', sender: 'Bot IA (Ausencia)', text: mensajeAusencia, time: new Date().toLocaleTimeString() });
@@ -1020,6 +1043,7 @@ class WhatsAppBot {
 
       if (isOrderSummary) {
         console.log(`[WA Agent client] Interceptado resumen de pedido de ${senderNumber}. Iniciando handoff humano.`);
+        waMonitor.trace('client', 'pedido', 'info', senderNumber, 'Pedido desde la app interceptado → confirmación enviada, chat pausado, admins alertados');
         
         const orderConfirmMsg = '¡Hola! Hemos recibido el detalle de tu pedido correctamente. 📝\n\nUn asesor humano revisará los datos en este instante para confirmar tu pedido, dirección/mesa y método de pago para enviarlo a la cocina de inmediato. ¡Muchas gracias por tu compra! 🍖';
         
@@ -1410,6 +1434,7 @@ class WhatsAppBot {
 
     const apiKey = await getConfig('gemini_api_key') || process.env.GEMINI_API_KEY;
     if (!apiKey) {
+      waMonitor.trace(this.botType, 'gemini', 'error', senderNumber, 'SIN RESPUESTA IA: falta la API Key de Gemini (ni en config ni en GEMINI_API_KEY)');
       if (this.botType === 'admin') {
         await this.client.sendMessage(remoteJid, { text: '🚨 Error: API Key no configurada.' }, { quoted: message });
       }
@@ -1466,6 +1491,7 @@ class WhatsAppBot {
       if (body) contentParts.push(body);
 
       this.emitMessage({ type: 'system', sender: 'Sistema', text: '🤖 Procesando...', time: new Date().toLocaleTimeString() });
+      waMonitor.trace(this.botType, 'gemini', 'info', senderNumber, `Consultando IA (historial: ${historialGemini.length} msgs${mediaPart ? ', con media' : ''})`);
 
       let result = await chat.sendMessage(contentParts);
       let iteraciones = 0;
@@ -1679,6 +1705,7 @@ class WhatsAppBot {
 
           // C. Enviar respuesta de texto estándar
           await this.client.sendMessage(remoteJid, { text: cleanText }, { quoted: message });
+          waMonitor.trace(this.botType, 'respuesta', 'ok', senderNumber, `Respondido: "${cleanText.slice(0, 80)}${cleanText.length > 80 ? '…' : ''}"`);
           await guardarMensajeHistorial(senderNumber, 'model', cleanText, this.botType);
           this.emitMessage({ type: 'out', sender: 'Bot IA', text: cleanText, time: new Date().toLocaleTimeString() });
 
@@ -1691,6 +1718,7 @@ class WhatsAppBot {
           break;
         }
 
+        waMonitor.trace(this.botType, 'gemini', 'info', senderNumber, `IA ejecuta funciones: ${functionCalls.map(c => c.name).join(', ')}`);
         const toolResponseParts = [];
         for (const call of functionCalls) {
           const functionResult = await executeWithValidation(
@@ -1715,6 +1743,7 @@ class WhatsAppBot {
 
     } catch (err) {
       console.error(`[WA Agent ${this.botType}] Error Gemini:`, err.code || err.name, process.env.NODE_ENV !== 'production' ? err.message : '');
+      waMonitor.trace(this.botType, 'gemini', 'error', senderNumber, `Error de IA (${err.code || err.name || 'desconocido'}): ${err.message}`);
       if (this.botType === 'admin') {
         await this.client.sendMessage(remoteJid, { text: '⚠️ Error procesando tu solicitud. Intenta de nuevo o revisa la configuración en el panel.' }, { quoted: message });
       }
@@ -1746,6 +1775,7 @@ module.exports = {
     return bots[type];
   },
   inicializarTodos: async (io) => {
+    waMonitor.setIO(io);
     const clientBot = module.exports.getBot('client', io);
     const adminBot = module.exports.getBot('admin', io);
     await Promise.all([

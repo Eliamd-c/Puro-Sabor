@@ -27,6 +27,61 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
+// GET /api/chatbots/monitor — Diagnóstico completo del pipeline de mensajes
+// IMPORTANTE: debe ir ANTES de /:type/status para que Express no lo capture como type=monitor
+router.get('/monitor', verificarJWT, async (req, res) => {
+  try {
+    const waMonitor = require('../utils/waMonitor');
+    const io = req.app.get('io');
+
+    // Estado actual de ambos bots
+    const estado = {};
+    for (const type of ['admin', 'client']) {
+      const bot = waAgent.getBot(type, io);
+      estado[type] = {
+        status: bot.botStatus,
+        conectado: !!bot.client,
+        qrPendiente: !!bot.latestQrDataUrl,
+        pid: process.pid
+      };
+    }
+
+    // Configuración relevante para diagnóstico
+    const cfgRows = await new Promise((resolve) => {
+      db.all(
+        `SELECT key, value FROM config WHERE key IN
+         ('admin_whatsapp_numbers', 'whatsapp_bot_active', 'whatsapp_admin_bot_active', 'bot_horario_activo', 'gemini_api_key')`,
+        [],
+        (err, rows) => resolve(rows || [])
+      );
+    });
+    const cfg = {};
+    for (const r of cfgRows) cfg[r.key] = r.value;
+
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      proceso: process.pid,
+      bots: estado,
+      config: {
+        numerosAutorizados: cfg.admin_whatsapp_numbers || '(vacío — el bot admin rechazará todo)',
+        botClienteActivo: cfg.whatsapp_bot_active !== '0',
+        botAdminActivo: cfg.whatsapp_admin_bot_active !== '0',
+        horarioActivo: cfg.bot_horario_activo === '1',
+        geminiApiKey: (cfg.gemini_api_key || process.env.GEMINI_API_KEY) ? 'configurada ✅' : 'FALTA ❌ (la IA no responderá)'
+      },
+      eventos: waMonitor.getEvents({
+        bot: req.query.bot,
+        level: req.query.level,
+        sender: req.query.sender,
+        limit: parseInt(req.query.limit) || 200
+      })
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // GET /api/chatbots/:type/status
 router.get('/:type/status', verificarJWT, (req, res) => {
   const type = req.params.type; // 'client' o 'admin'
