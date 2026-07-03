@@ -277,7 +277,23 @@ class WhatsAppBot {
         );
         if (res.rowCount === 0) {
           console.warn(`[WA Lock ${this.botType}] ⚠️ Lock perdido (otro proceso lo tomó)`);
-          waMonitor.trace(this.botType, 'lock', 'error', null, `Proceso ${myPid} perdió el lock (otro proceso lo tomó) — riesgo de conflicto de sesión`);
+          waMonitor.trace(this.botType, 'lock', 'warn', null, `Proceso ${myPid} perdió el lock — soltando el bot para no pelear la sesión (el otro proceso tiene el control)`);
+          // Retirarse limpiamente: si seguimos conectados con la misma sesión
+          // que el nuevo dueño del lock, WhatsApp cierra la sesión por
+          // conflicto y se pierde el emparejamiento (bucle de QR).
+          this.stopLockHeartbeat();
+          try {
+            if (this.client) {
+              this.client.ev.removeAllListeners('connection.update');
+              this.client.end(undefined);
+            }
+          } catch (_) {}
+          this.client = null;
+          this.botStatus = 'disconnected';
+          this.latestQrDataUrl = null;
+          this.emitStatus();
+          // Volver al modo espera: reintentará y quedará aguardando el lock
+          setTimeout(() => this.inicializarWhatsApp(), 5000);
         }
       } catch (err) {
         console.error(`[WA Lock ${this.botType}] Error renovando lock:`, err.message);
@@ -336,7 +352,13 @@ class WhatsAppBot {
 
   async releaseLockDB() {
     this.stopLockHeartbeat();
-    await pgPool.query('DELETE FROM wa_auth WHERE key = $1', [this.LOCK_KEY]);
+    // Solo borrar el lock si ES NUESTRO. Sin esta condición, un proceso
+    // perdedor borraba el lock del proceso activo al "liberar", el ganador
+    // lo perdía, y ambos entraban en ping-pong infinito de QR/reconexión.
+    await pgPool.query(
+      'DELETE FROM wa_auth WHERE key = $1 AND value = $2',
+      [this.LOCK_KEY, process.pid.toString()]
+    );
   }
 
   async clearLocalAuth() {
@@ -1432,7 +1454,9 @@ class WhatsAppBot {
 
     if (body) await guardarMensajeHistorial(senderNumber, 'user', body, this.botType);
 
-    const apiKey = await getConfig('gemini_api_key') || process.env.GEMINI_API_KEY;
+    // Prioridad: variable de entorno primero. Antes era config-first y una key
+    // vieja/inválida guardada en la BD (panel) opacaba la key nueva del .env.
+    const apiKey = process.env.GEMINI_API_KEY || await getConfig('gemini_api_key');
     if (!apiKey) {
       waMonitor.trace(this.botType, 'gemini', 'error', senderNumber, 'SIN RESPUESTA IA: falta la API Key de Gemini (ni en config ni en GEMINI_API_KEY)');
       if (this.botType === 'admin') {
