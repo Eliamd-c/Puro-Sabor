@@ -262,6 +262,9 @@
   async function loadMesas() {
     try {
       const res = await fetch(API.mesas, { headers: authH() });
+      // /api/mesas requiere JWT (productos/categorías son públicos): con token
+      // expirado la app parecía funcionar pero el modal de mesas quedaba vacío
+      if (res.status === 401) { handleUnauthorized(); return; }
       const data = await res.json();
       if (data.success) {
         mesas = (data.mesas || data.data || []).sort((a,b) => a.numero - b.numero);
@@ -537,6 +540,7 @@
   async function getMesaStates() {
     try {
       const res = await fetch(`${API.pedidos}?limit=200`, { headers: authH() });
+      if (res.status === 401) { handleUnauthorized(); return; }
       const data = await res.json();
       const allOrders = data.data || [];
 
@@ -571,6 +575,20 @@
   }
 
   async function renderMesasModal() {
+    // Si las mesas no cargaron al iniciar (red caída, token expirado), reintentar
+    if (!mesas.length) {
+      mesaGrid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:20px;opacity:0.7;">Cargando mesas…</div>';
+      await loadMesas();
+    }
+    if (!mesas.length) {
+      mesaGrid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:20px;">
+        ⚠️ No se pudieron cargar las mesas.<br>
+        <button type="button" id="btn-retry-mesas" class="btn-send" style="margin-top:12px;">Reintentar</button>
+      </div>`;
+      const retry = document.getElementById('btn-retry-mesas');
+      if (retry) retry.addEventListener('click', renderMesasModal);
+      return;
+    }
     await getMesaStates();
     mesaGrid.innerHTML = '';
     mesas.forEach(m => {
