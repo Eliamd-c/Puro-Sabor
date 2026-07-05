@@ -459,12 +459,13 @@ html, body {
 }
 .mesa-btn:hover { border-color: var(--brand); transform: translateY(-2px); }
 .mesa-btn.occupied {
-  opacity: 0.5;
-  cursor: not-allowed;
+  opacity: 0.7;
+  cursor: pointer;
   border-color: #e74c3c;
   background: rgba(231, 76, 60, 0.1);
 }
-.mesa-btn.occupied:hover { transform: none; }
+.mesa-btn.occupied:hover { transform: translateY(-2px); border-color: #e74c3c; }
+.mesa-btn.occupied.selected { opacity: 1; }
 .mesa-btn.selected {
   background: var(--brand);
   border-color: var(--brand);

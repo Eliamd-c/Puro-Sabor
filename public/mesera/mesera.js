@@ -536,19 +536,27 @@
 
   async function getMesaStates() {
     try {
-      const res = await fetch(API.pedidos, { headers: authH() });
+      const res = await fetch(`${API.pedidos}?limit=200`, { headers: authH() });
       const data = await res.json();
-      const orders = data.data || [];
+      const allOrders = data.data || [];
+
+      // Solo pedidos de HOY: un pedido viejo (de otro día) que quedó sin marcar
+      // como pagado no debe bloquear la mesa indefinidamente
+      const hoy = new Date();
+      hoy.setHours(0, 0, 0, 0);
+      const orders = allOrders.filter(p => {
+        const fecha = p.creado_en ? new Date(p.creado_en) : null;
+        return fecha && fecha >= hoy;
+      });
 
       mesaStates = {};
       mesas.forEach(m => {
-        const hasPendingOrder = orders.some(p =>
-          p.mesa_numero === m.numero &&
+        const ordersMesa = orders.filter(p => Number(p.mesa_numero) === Number(m.numero));
+        const hasPendingOrder = ordersMesa.some(p =>
           p.estado !== 'pagado' &&
           p.estado !== 'cancelado'
         );
-        const lastOrder = orders
-          .filter(p => p.mesa_numero === m.numero)
+        const lastOrder = ordersMesa
           .sort((a, b) => new Date(b.creado_en) - new Date(a.creado_en))[0];
 
         mesaStates[m.numero] = {
@@ -558,6 +566,7 @@
       });
     } catch (e) {
       console.warn('Error getting mesa states:', e);
+      mesaStates = {}; // Ante error, no bloquear ninguna mesa
     }
   }
 
@@ -571,25 +580,32 @@
       const btn = document.createElement('button');
       btn.className = `mesa-btn ${isOccupied ? 'occupied' : ''} ${mesaSeleccionada === m.numero ? 'selected' : ''}`;
       btn.type = 'button';
-      btn.disabled = isOccupied;
-      const statusText = isOccupied ? `Con clientes\n${lastState}` : 'Libre';
+      const statusText = isOccupied ? `Con clientes\n${lastState || ''}` : 'Libre';
       btn.innerHTML = `<div class="mesa-number">🪑 ${m.numero}</div><div class="mesa-status">${statusText}</div>`;
       btn.addEventListener('click', () => {
-        if (!isOccupied) {
-          mesaSeleccionada = m.numero;
-          renderMesasModal();
-          btnConfirmMesa.disabled = false;
-        } else {
-          showToast('⚠️ Esta mesa tiene un pedido abierto');
+        if (isOccupied && mesaSeleccionada !== m.numero) {
+          // Mesa con pedido abierto: permitir elegirla con confirmación
+          // (ej. los mismos clientes piden otra ronda)
+          if (!confirm(`La Mesa ${m.numero} tiene un pedido abierto.\n¿Agregar este pedido a la misma mesa?`)) {
+            return;
+          }
         }
+        mesaSeleccionada = m.numero;
+        btnConfirmMesa.disabled = false;
+        // Actualizar selección visual sin refetch (evita perder la selección
+        // si la petición de estados falla o tarda)
+        mesaGrid.querySelectorAll('.mesa-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
       });
       mesaGrid.appendChild(btn);
     });
   }
 
   function openMesaModal() {
-    mesaSeleccionada = null;
-    btnConfirmMesa.disabled = true;
+    // Conservar una mesa ya elegida en el select del ticket
+    const preselected = parseInt(mesaSelect.value);
+    mesaSeleccionada = Number.isInteger(preselected) && preselected > 0 ? preselected : null;
+    btnConfirmMesa.disabled = !mesaSeleccionada;
     renderMesasModal();
     modalMesa.style.display = 'flex';
   }
@@ -605,9 +621,18 @@
     closeMesaModal();
   });
 
+  // El select del ticket también debe fijar la mesa del pedido
+  // (antes solo el modal actualizaba mesaSeleccionada y el select era ignorado)
+  mesaSelect.addEventListener('change', () => {
+    const val = parseInt(mesaSelect.value);
+    mesaSeleccionada = Number.isInteger(val) && val > 0 ? val : null;
+  });
+
   document.querySelectorAll('[data-close="modal-mesa"]').forEach(b => {
     b.addEventListener('click', () => {
-      mesaSeleccionada = null;
+      // Al cancelar, mantener la mesa que ya estaba en el select (si había)
+      const prev = parseInt(mesaSelect.value);
+      mesaSeleccionada = Number.isInteger(prev) && prev > 0 ? prev : null;
       closeMesaModal();
     });
   });
@@ -633,6 +658,7 @@
         if (addrInput) addrInput.value = '';
         if (prepaidCheck) prepaidCheck.checked = false;
         mesaSelect.value = '';
+        mesaSeleccionada = null;
         renderTicket();
         playNotificationSound();
         const typeLabels = { local: `Mesa ${orderData.mesa_numero}`, domicilio: 'Domicilio', recogen: 'Recogen' };
