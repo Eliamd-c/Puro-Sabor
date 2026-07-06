@@ -11,7 +11,15 @@ class AdminApp {
     this.allPedidos = [];
     this.allHistorial = [];
     this.charts = {};
+    this.reporteData = null; // último reporte cargado (para export y re-render)
     this.init();
+  }
+
+  // Moneda colombiana con separador de miles: 1250000 → "$1.250.000"
+  fmtCOP(n) {
+    return new Intl.NumberFormat('es-CO', {
+      style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0
+    }).format(n || 0);
   }
 
   init() {
@@ -90,6 +98,20 @@ class AdminApp {
     document.getElementById('audit-search').addEventListener('input', () => this.filterAuditoria());
     document.getElementById('audit-type').addEventListener('change', () => this.filterAuditoria());
     document.getElementById('audit-date').addEventListener('change', () => this.filterAuditoria());
+
+    // Reportes: presets, rango de fechas y export
+    document.querySelectorAll('.preset-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.aplicarPreset(btn.dataset.preset);
+      });
+    });
+    document.getElementById('btn-generar-reporte').addEventListener('click', () => {
+      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+      this.loadReportes();
+    });
+    document.getElementById('btn-excel-reporte').addEventListener('click', () => this.exportReporte());
   }
 
   switchPage(page) {
@@ -118,7 +140,12 @@ class AdminApp {
     } else if (page === 'auditoria') {
       this.renderAuditoria();
     } else if (page === 'reportes') {
-      // reportes ya se cargó en loadData()
+      // Re-render con la página visible (Chart.js no dibuja bien en canvas oculto)
+      if (this.reporteData) {
+        setTimeout(() => this.renderReportes(this.reporteData), 100);
+      } else {
+        this.loadReportes();
+      }
     }
   }
 
@@ -141,8 +168,9 @@ class AdminApp {
   // ─── DATA LOADING ────────────────────────────────────────────
   async loadData() {
     try {
+      // limit=500: /api/pedidos pagina a 20 por defecto (FASE 3.4) y truncaría KPIs y gráficas
       const [resPedidos, resHistorial] = await Promise.all([
-        fetch('/api/pedidos', { headers: this.authH() }),
+        fetch('/api/pedidos?limit=500', { headers: this.authH() }),
         fetch('/api/pedidos/historial', { headers: this.authH() })
       ]);
 
@@ -166,14 +194,50 @@ class AdminApp {
       this.showToast('❌ Error de conexión al cargar datos');
     }
 
+    this.loadReportes();
+  }
+
+  // ─── REPORTES: CARGA CON RANGO DE FECHAS ────────────────────
+  async loadReportes(desde, hasta) {
+    // Sin argumentos usa lo que haya en los inputs (o el default del backend: 7 días)
+    desde = desde || document.getElementById('reporte-desde').value;
+    hasta = hasta || document.getElementById('reporte-hasta').value;
+    const params = new URLSearchParams();
+    if (desde) params.set('desde', desde);
+    if (hasta) params.set('hasta', hasta);
+
     try {
-      const res = await fetch('/api/pedidos/reportes', { headers: this.authH() });
+      const res = await fetch(`/api/pedidos/reportes?${params}`, { headers: this.authH() });
       if (res.status === 401) { this.handleUnauthorized(); return; }
       const data = await res.json();
-      this.renderReportes(data.data || {});
+      if (!data.success) {
+        this.showToast(`❌ ${data.message || 'Error al generar el reporte'}`);
+        return;
+      }
+      this.reporteData = data.data || {};
+      // Reflejar el rango efectivo en los inputs (el backend aplica defaults)
+      document.getElementById('reporte-desde').value = this.reporteData.desde || '';
+      document.getElementById('reporte-hasta').value = this.reporteData.hasta || '';
+      this.renderReportes(this.reporteData);
     } catch (error) {
       console.error('Error loading reportes:', error);
+      this.showToast('❌ Error de conexión al cargar reportes');
     }
+  }
+
+  aplicarPreset(preset) {
+    const hoy = this.coDate(new Date());
+    let desde = hoy;
+    if (preset === '7d') {
+      const d = new Date(); d.setDate(d.getDate() - 6); desde = this.coDate(d);
+    } else if (preset === '30d') {
+      const d = new Date(); d.setDate(d.getDate() - 29); desde = this.coDate(d);
+    } else if (preset === 'mes') {
+      desde = hoy.slice(0, 8) + '01';
+    }
+    document.getElementById('reporte-desde').value = desde;
+    document.getElementById('reporte-hasta').value = hoy;
+    this.loadReportes(desde, hoy);
   }
 
   // Fecha YYYY-MM-DD en zona horaria de Colombia (no UTC)
@@ -196,7 +260,7 @@ class AdminApp {
     document.getElementById('kpi-pending').textContent = pendientes;
     document.getElementById('kpi-pending-sub').textContent = `${pendientes} en cola`;
 
-    document.getElementById('kpi-revenue').textContent = `$${totalVentas.toFixed(0)}`;
+    document.getElementById('kpi-revenue').textContent = this.fmtCOP(totalVentas);
     document.getElementById('kpi-revenue-sub').textContent = `Ingresos hoy`;
 
     document.getElementById('kpi-changes').textContent = cambiosHoy;
@@ -207,7 +271,7 @@ class AdminApp {
     const ordersHtml = recentOrders.map(p => `
       <div class="activity-item">
         <div class="activity-item-id">#${p.id} - ${p.nombre_cliente || 'Cliente'}</div>
-        <div class="activity-item-meta">$${p.total || 0} • <span class="status-badge status-${p.estado}">${p.estado}</span></div>
+        <div class="activity-item-meta">${this.fmtCOP(p.total)} • <span class="status-badge status-${p.estado}">${p.estado}</span></div>
       </div>
     `).join('');
     document.getElementById('recent-orders').innerHTML = ordersHtml || '<p style="color: var(--muted); font-size: 12px;">Sin pedidos hoy</p>';
@@ -320,7 +384,7 @@ class AdminApp {
           <div class="order-id">#${p.id}</div>
           <div class="order-client">${p.nombre_cliente || '-'}</div>
           <div class="order-info">${lugar}</div>
-          <div class="order-total">$${(p.total || 0).toFixed(2)}</div>
+          <div class="order-total">${this.fmtCOP(p.total)}</div>
           <div><span class="status-badge status-${p.estado}">${p.estado}</span></div>
           <div class="order-info">${cambios}</div>
           <div style="display:flex;gap:6px;">
@@ -536,6 +600,75 @@ class AdminApp {
 
   // ─── REPORTES ────────────────────────────────────────────────
   renderReportes(data) {
+    const resumen = data.resumen || {};
+    const ventasPorDia = data.ventasPorDia || [];
+
+    // Resumen del período
+    const fmtFecha = (f) => f ? new Date(`${f}T12:00:00-05:00`).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', timeZone: 'America/Bogota' }) : '—';
+    document.getElementById('rep-total-ventas').textContent = this.fmtCOP(resumen.total_ventas);
+    document.getElementById('rep-rango').textContent = `${fmtFecha(data.desde)} → ${fmtFecha(data.hasta)}`;
+    document.getElementById('rep-total-pedidos').textContent = resumen.total_pedidos || 0;
+    document.getElementById('rep-sin-pagar').textContent =
+      `${resumen.pedidos_sin_pagar || 0} sin pagar · ${resumen.pedidos_cancelados || 0} cancelados`;
+    document.getElementById('rep-promedio').textContent = this.fmtCOP(resumen.promedio_pedido);
+    const pt = resumen.por_tipo || {};
+    document.getElementById('rep-por-tipo').innerHTML =
+      `🏪 ${this.fmtCOP(pt.local?.ventas)}<br>🏍 ${this.fmtCOP(pt.domicilio?.ventas)}<br>🛍 ${this.fmtCOP(pt.recogen?.ventas)}`;
+
+    // Gráfica de ventas por día
+    document.getElementById('rep-dias-badge').textContent = `${ventasPorDia.length} días`;
+    const ctx = document.getElementById('chart-ventas-dia')?.getContext('2d');
+    if (ctx) {
+      if (this.charts.ventasDia) this.charts.ventasDia.destroy();
+      this.charts.ventasDia = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: ventasPorDia.map(v => new Date(`${v.fecha}T12:00:00-05:00`).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', timeZone: 'America/Bogota' })),
+          datasets: [{
+            label: 'Ventas',
+            data: ventasPorDia.map(v => v.venta_total),
+            backgroundColor: 'rgba(192, 57, 43, 0.6)',
+            borderColor: '#c0392b',
+            borderWidth: 1,
+            borderRadius: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: (c) => `${this.fmtCOP(c.raw)} — ${ventasPorDia[c.dataIndex].total_pedidos} pedidos` } }
+          },
+          scales: { y: { beginAtZero: true, ticks: { callback: (v) => this.fmtCOP(v) } } }
+        }
+      });
+    }
+
+    // Tabla de ventas por día (solo días con movimiento, más fila de total)
+    const conVentas = ventasPorDia.filter(v => v.total_pedidos > 0);
+    const filas = conVentas.map(v => `
+      <tr>
+        <td>${new Date(`${v.fecha}T12:00:00-05:00`).toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Bogota' })}</td>
+        <td class="num">${v.total_pedidos}</td>
+        <td class="num">${this.fmtCOP(v.venta_total)}</td>
+        <td class="num">${this.fmtCOP(v.total_pedidos ? v.venta_total / v.total_pedidos : 0)}</td>
+      </tr>
+    `).join('');
+    document.getElementById('ventas-dia-tabla').innerHTML = conVentas.length ? `
+      <table>
+        <thead><tr><th>Fecha</th><th class="num">Pedidos</th><th class="num">Ventas</th><th class="num">Promedio</th></tr></thead>
+        <tbody>
+          ${filas}
+          <tr class="total-row">
+            <td>TOTAL</td>
+            <td class="num">${resumen.total_pedidos || 0}</td>
+            <td class="num">${this.fmtCOP(resumen.total_ventas)}</td>
+            <td class="num">${this.fmtCOP(resumen.promedio_pedido)}</td>
+          </tr>
+        </tbody>
+      </table>` : '<p style="color: var(--muted); font-size: 12px; text-align:center; padding: 12px;">Sin ventas pagadas en este período</p>';
+
+    // Top productos del período
     const topProducts = data.topProducts || [];
     const productsHtml = topProducts.slice(0, 10).map((p, i) => `
       <div class="reporte-item">
@@ -543,7 +676,7 @@ class AdminApp {
           <div class="reporte-rank">#${i + 1}</div>
           <div class="reporte-item-name">${p.nombre}</div>
         </div>
-        <div class="reporte-item-value">${p.cantidad} unid.</div>
+        <div class="reporte-item-value">${p.cantidad} unid. · ${this.fmtCOP(p.total_vendido)}</div>
       </div>
     `).join('');
     document.getElementById('top-products').innerHTML = productsHtml || '<p style="color: var(--muted); font-size: 12px;">Sin datos</p>';
@@ -624,6 +757,48 @@ class AdminApp {
     XLSX.utils.book_append_sheet(wb, ws, 'Pedidos');
     XLSX.writeFile(wb, `pedidos_${today}.xlsx`);
     this.showToast('✓ Datos exportados');
+  }
+
+  // Exporta el reporte del período actual: resumen + ventas por día + top productos
+  exportReporte() {
+    if (!this.reporteData) {
+      this.showToast('⚠️ Genera un reporte primero');
+      return;
+    }
+    const { desde, hasta, resumen = {}, ventasPorDia = [], topProducts = [] } = this.reporteData;
+    const wb = XLSX.utils.book_new();
+
+    const pt = resumen.por_tipo || {};
+    const wsResumen = XLSX.utils.json_to_sheet([
+      { Concepto: 'Período', Valor: `${desde} a ${hasta}` },
+      { Concepto: 'Ventas totales', Valor: resumen.total_ventas || 0 },
+      { Concepto: 'Pedidos pagados', Valor: resumen.total_pedidos || 0 },
+      { Concepto: 'Promedio por pedido', Valor: resumen.promedio_pedido || 0 },
+      { Concepto: 'Pedidos sin pagar', Valor: resumen.pedidos_sin_pagar || 0 },
+      { Concepto: 'Pedidos cancelados', Valor: resumen.pedidos_cancelados || 0 },
+      { Concepto: 'Ventas local', Valor: pt.local?.ventas || 0 },
+      { Concepto: 'Ventas domicilio', Valor: pt.domicilio?.ventas || 0 },
+      { Concepto: 'Ventas recogen', Valor: pt.recogen?.ventas || 0 }
+    ]);
+    XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen');
+
+    const wsDias = XLSX.utils.json_to_sheet(ventasPorDia.map(v => ({
+      Fecha: v.fecha,
+      Pedidos: v.total_pedidos,
+      Ventas: v.venta_total
+    })));
+    XLSX.utils.book_append_sheet(wb, wsDias, 'Ventas por día');
+
+    const wsTop = XLSX.utils.json_to_sheet(topProducts.map((p, i) => ({
+      Puesto: i + 1,
+      Producto: p.nombre,
+      Unidades: p.cantidad,
+      'Total vendido': p.total_vendido
+    })));
+    XLSX.utils.book_append_sheet(wb, wsTop, 'Top productos');
+
+    XLSX.writeFile(wb, `reporte_ventas_${desde}_a_${hasta}.xlsx`);
+    this.showToast('✓ Reporte exportado');
   }
 
   // ─── CLOCK ──────────────────────────────────────────────────

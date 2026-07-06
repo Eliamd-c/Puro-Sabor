@@ -862,6 +862,84 @@ html, body {
 .audit-change-after { color: var(--success); font-weight: 600; }
 
 /* ─── REPORTES ─────────────────────────────────────────────────── */
+.reporte-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px 18px;
+}
+
+.reporte-presets { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.preset-btn {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.preset-btn:hover { border-color: var(--brand); }
+.preset-btn.active {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: white;
+}
+
+.reporte-fechas { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.reporte-fechas-sep { color: var(--muted); font-weight: 700; }
+
+.btn-primary-sm, .btn-secondary-sm {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 9px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-primary-sm {
+  background: var(--brand);
+  border: 1px solid var(--brand);
+  color: white;
+}
+.btn-primary-sm:hover { filter: brightness(1.15); }
+.btn-secondary-sm {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.btn-secondary-sm:hover { border-color: var(--success); }
+
+.ventas-dia-tabla { margin-top: 16px; overflow-x: auto; }
+.ventas-dia-tabla table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ventas-dia-tabla th {
+  text-align: left;
+  padding: 10px 12px;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border);
+}
+.ventas-dia-tabla td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.ventas-dia-tabla tr:last-child td { border-bottom: none; }
+.ventas-dia-tabla td.num, .ventas-dia-tabla th.num { text-align: right; }
+.ventas-dia-tabla tr.total-row td { font-weight: 800; color: var(--brand); border-top: 2px solid var(--border); }
+
 .reportes-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));

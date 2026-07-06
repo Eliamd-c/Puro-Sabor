@@ -217,11 +217,73 @@
 
         <!-- ════ REPORTES PAGE ════ -->
         <div class="page-content" data-page="reportes">
+
+          <!-- FILTROS DE FECHA -->
+          <div class="reporte-toolbar">
+            <div class="reporte-presets">
+              <button class="preset-btn" data-preset="hoy">Hoy</button>
+              <button class="preset-btn active" data-preset="7d">7 días</button>
+              <button class="preset-btn" data-preset="30d">30 días</button>
+              <button class="preset-btn" data-preset="mes">Este mes</button>
+            </div>
+            <div class="reporte-fechas">
+              <input type="date" id="reporte-desde" class="filter-select" title="Desde">
+              <span class="reporte-fechas-sep">→</span>
+              <input type="date" id="reporte-hasta" class="filter-select" title="Hasta">
+              <button id="btn-generar-reporte" class="btn-primary-sm">Generar</button>
+              <button id="btn-excel-reporte" class="btn-secondary-sm" title="Exportar reporte a Excel">📊 Excel</button>
+            </div>
+          </div>
+
+          <!-- RESUMEN DEL PERÍODO -->
+          <div class="kpi-grid" id="reporte-resumen" style="margin-bottom:24px;">
+            <div class="kpi-card kpi-revenue">
+              <div class="kpi-content">
+                <div class="kpi-label">Ventas del período</div>
+                <div class="kpi-value" id="rep-total-ventas">$0</div>
+                <div class="kpi-subtitle" id="rep-rango">—</div>
+              </div>
+            </div>
+            <div class="kpi-card kpi-total">
+              <div class="kpi-content">
+                <div class="kpi-label">Pedidos pagados</div>
+                <div class="kpi-value" id="rep-total-pedidos">0</div>
+                <div class="kpi-subtitle" id="rep-sin-pagar">—</div>
+              </div>
+            </div>
+            <div class="kpi-card kpi-changes">
+              <div class="kpi-content">
+                <div class="kpi-label">Promedio por pedido</div>
+                <div class="kpi-value" id="rep-promedio">$0</div>
+                <div class="kpi-subtitle">Ticket promedio</div>
+              </div>
+            </div>
+            <div class="kpi-card kpi-pending">
+              <div class="kpi-content">
+                <div class="kpi-label">Por tipo</div>
+                <div class="kpi-value" id="rep-por-tipo" style="font-size:15px;line-height:1.7;">—</div>
+                <div class="kpi-subtitle">Local / Domicilio / Recogen</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- VENTAS POR DÍA -->
+          <div class="reporte-card" style="margin-bottom:24px;">
+            <div class="reporte-header">
+              <h3>📅 Ventas por Día</h3>
+              <span class="reporte-badge" id="rep-dias-badge">—</span>
+            </div>
+            <div class="chart-container" style="padding:0;box-shadow:none;background:transparent;">
+              <canvas id="chart-ventas-dia" height="90"></canvas>
+            </div>
+            <div id="ventas-dia-tabla" class="ventas-dia-tabla"></div>
+          </div>
+
           <div class="reportes-grid">
             <div class="reporte-card">
               <div class="reporte-header">
                 <h3>🔥 Top 10 Productos</h3>
-                <span class="reporte-badge">Más vendidos</span>
+                <span class="reporte-badge">Más vendidos del período</span>
               </div>
               <div id="top-products" class="reporte-ranking"></div>
             </div>
@@ -229,7 +291,7 @@
             <div class="reporte-card">
               <div class="reporte-header">
                 <h3>👥 Actividad por Auxiliar</h3>
-                <span class="reporte-badge">Cambios realizados</span>
+                <span class="reporte-badge">Cambios en el período</span>
               </div>
               <div id="changes-by-user" class="reporte-ranking"></div>
             </div>

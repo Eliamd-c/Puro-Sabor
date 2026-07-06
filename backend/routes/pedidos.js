@@ -444,59 +444,114 @@ router.get('/historial', verificarJWT, async (req, res, next) => {
   }
 });
 
-// ─── GET /api/reportes — Obtener reportes (ADMIN) ──────────────────────────
+// ─── GET /api/pedidos/reportes — Reportes de ventas con rango de fechas (ADMIN) ──
+// Query params opcionales: ?desde=YYYY-MM-DD&hasta=YYYY-MM-DD (zona America/Bogota).
+// Por defecto: últimos 7 días. Máximo: 366 días.
+// NOTA: la versión anterior usaba datetime() y json_extract() de SQLite, que no
+// existen en PostgreSQL — el endpoint fallaba en producción. La agregación de
+// items se hace en Node porque items_json es TEXT, y el conteo por LIKE contaba
+// mal productos con nombres contenidos en otros (ej. "Limonada" vs "Limonada Cerezada").
 router.get('/reportes', verificarJWT, async (req, res, next) => {
   try {
-    // Top 10 productos más vendidos
-    const topProducts = await dbAsync.all(`
-      SELECT
-        p.id,
-        p.nombre,
-        COUNT(*) as cantidad,
-        SUM(CAST(json_extract(pe.items_json, '$[*].cantidad') AS FLOAT)) as total_qty
-      FROM productos p
-      LEFT JOIN pedidos pe ON pe.items_json LIKE '%' || p.nombre || '%'
-      WHERE pe.estado = 'pagado'
-      GROUP BY p.id, p.nombre
-      ORDER BY total_qty DESC
-      LIMIT 10
-    `);
+    const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+    // Colombia es UTC-5 fijo (sin horario de verano)
+    const coDay = (ts) => new Date(ts).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
 
-    // Cambios por usuario
-    const changesByUser = await dbAsync.all(`
-      SELECT
-        usuario_nombre,
-        COUNT(*) as cambios,
-        MAX(creado_en) as ultimo_cambio
-      FROM pedidos_historial
-      GROUP BY usuario_nombre
-      ORDER BY cambios DESC
-    `);
+    let { desde, hasta } = req.query;
+    if (!DATE_RE.test(hasta || '')) hasta = coDay(new Date());
+    if (!DATE_RE.test(desde || '')) {
+      const d = new Date(`${hasta}T12:00:00-05:00`);
+      d.setDate(d.getDate() - 6);
+      desde = coDay(d);
+    }
+    if (desde > hasta) [desde, hasta] = [hasta, desde];
 
-    // Total de ventas por día (últimos 7 días)
-    const salesByDay = await dbAsync.all(`
-      SELECT
-        DATE(creado_en) as fecha,
-        COUNT(*) as total_pedidos,
-        SUM(total) as venta_total
-      FROM pedidos
-      WHERE estado = 'pagado'
-        AND creado_en >= datetime('now', '-7 days')
-      GROUP BY DATE(creado_en)
-      ORDER BY fecha DESC
-    `);
+    const inicio = new Date(`${desde}T00:00:00-05:00`);
+    const finExcl = new Date(`${hasta}T00:00:00-05:00`);
+    finExcl.setDate(finExcl.getDate() + 1);
+
+    if ((finExcl - inicio) / 86400000 > 366) {
+      return res.status(400).json({ success: false, message: 'El rango máximo es de 366 días.' });
+    }
+
+    const pedidos = await dbAsync.all(
+      `SELECT id, estado, tipo_pedido, total, items_json, creado_en
+       FROM pedidos
+       WHERE creado_en >= ? AND creado_en < ?
+       ORDER BY creado_en ASC`,
+      [inicio.toISOString(), finExcl.toISOString()]
+    );
+
+    // Las ventas son los pedidos PAGADOS dentro del rango (día en hora de Colombia)
+    const enRango = pedidos.filter(p => {
+      const dia = coDay(p.creado_en);
+      return dia >= desde && dia <= hasta;
+    });
+    const pagados = enRango.filter(p => p.estado === 'pagado');
+
+    // Resumen general
+    const totalVentas = pagados.reduce((s, p) => s + (p.total || 0), 0);
+    const porTipo = {};
+    ['local', 'domicilio', 'recogen'].forEach(t => { porTipo[t] = { pedidos: 0, ventas: 0 }; });
+    pagados.forEach(p => {
+      const t = porTipo[p.tipo_pedido] || (porTipo[p.tipo_pedido] = { pedidos: 0, ventas: 0 });
+      t.pedidos++;
+      t.ventas += p.total || 0;
+    });
+    const resumen = {
+      total_ventas: totalVentas,
+      total_pedidos: pagados.length,
+      promedio_pedido: pagados.length ? Math.round(totalVentas / pagados.length) : 0,
+      pedidos_sin_pagar: enRango.filter(p => p.estado !== 'pagado' && p.estado !== 'cancelado').length,
+      pedidos_cancelados: enRango.filter(p => p.estado === 'cancelado').length,
+      por_tipo: porTipo
+    };
+
+    // Ventas por día (incluye días sin ventas para gráficas continuas)
+    const ventasMap = {};
+    pagados.forEach(p => {
+      const dia = coDay(p.creado_en);
+      if (!ventasMap[dia]) ventasMap[dia] = { total_pedidos: 0, venta_total: 0 };
+      ventasMap[dia].total_pedidos++;
+      ventasMap[dia].venta_total += p.total || 0;
+    });
+    const ventasPorDia = [];
+    for (let d = new Date(`${desde}T12:00:00-05:00`); coDay(d) <= hasta; d.setDate(d.getDate() + 1)) {
+      const dia = coDay(d);
+      ventasPorDia.push({ fecha: dia, ...(ventasMap[dia] || { total_pedidos: 0, venta_total: 0 }) });
+    }
+
+    // Top 10 productos más vendidos (contando items reales de cada pedido pagado)
+    const productosMap = {};
+    pagados.forEach(p => {
+      let items = [];
+      try { items = JSON.parse(p.items_json || '[]'); } catch (e) { /* ignorar pedido con JSON corrupto */ }
+      items.forEach(item => {
+        const nombre = item.nombre || 'Sin nombre';
+        const cantidad = parseInt(item.cantidad) || 0;
+        const precio = parseFloat(item.precio) || 0;
+        if (!productosMap[nombre]) productosMap[nombre] = { nombre, cantidad: 0, total_vendido: 0 };
+        productosMap[nombre].cantidad += cantidad;
+        productosMap[nombre].total_vendido += precio * cantidad;
+      });
+    });
+    const topProducts = Object.values(productosMap)
+      .sort((a, b) => b.cantidad - a.cantidad)
+      .slice(0, 10);
+
+    // Cambios por usuario dentro del rango
+    const changesByUser = await dbAsync.all(
+      `SELECT usuario_nombre, COUNT(*) as cambios, MAX(creado_en) as ultimo_cambio
+       FROM pedidos_historial
+       WHERE creado_en >= ? AND creado_en < ?
+       GROUP BY usuario_nombre
+       ORDER BY cambios DESC`,
+      [inicio.toISOString(), finExcl.toISOString()]
+    );
 
     res.json({
       success: true,
-      data: {
-        topProducts: topProducts.map(p => ({
-          id: p.id,
-          nombre: p.nombre,
-          cantidad: p.total_qty || 0
-        })),
-        changesByUser,
-        salesByDay
-      }
+      data: { desde, hasta, resumen, ventasPorDia, topProducts, changesByUser }
     });
   } catch (error) {
     next(error);
