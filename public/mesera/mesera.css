@@ -95,7 +95,10 @@ html, body {
 .banner-dismiss:hover { opacity: 1; }
 
 /* ── APP WRAPPER ───────────────────────────────────────────── */
-.pos-app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+/* 100dvh: en tablets/moviles 100vh incluye el area DETRAS de la barra del
+   navegador y corta el pie del ticket (boton Enviar a Cocina). dvh usa la
+   altura realmente visible; los navegadores viejos conservan el fallback vh. */
+.pos-app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; }
 
 /* ── TOP BAR ───────────────────────────────────────────────── */
 .pos-topbar {
@@ -518,7 +521,7 @@ html, body {
   :root { --ticket-w: 100%; }
 
   html, body { overflow: auto; height: auto; }
-  .pos-app { height: auto; min-height: 100vh; overflow: visible; }
+  .pos-app { height: auto; min-height: 100vh; min-height: 100dvh; overflow: visible; }
   .tab-content { overflow: visible; }
 
   .pos-topbar { height: 48px; padding: 0 10px; gap: 8px; position: sticky; top: 0; z-index: 20; }
