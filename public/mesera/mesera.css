@@ -632,6 +632,21 @@ html, body {
   .btn-send { padding: 9px 12px; font-size: 12px; border-radius: 8px; }
   .btn-send svg { width: 12px; height: 12px; }
 
+  /* ── BARRA "ENVIAR A COCINA" SIEMPRE VISIBLE ──────
+     En tablet/movil el ticket queda debajo de todos los productos;
+     sin esto, el boton de enviar solo aparece tras un scroll enorme. */
+  .ticket-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 25;
+    border-top: 2px solid var(--border);
+    box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.35);
+  }
+  /* Espacio al final del ticket para que la barra fija no tape el contenido */
+  .pos-ticket { padding-bottom: 96px; }
+
   /* ── COMPACT ORDERS TAB ────── */
   #tab-orders { overflow: visible; }
   .orders-list { overflow: visible; }
