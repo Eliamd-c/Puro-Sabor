@@ -431,13 +431,17 @@
   // ─── PRODUCT CLICK / MODAL ─────────────────────────────────
   function onProductClick(prod) {
     if (prod.esVariante && prod.variantes && prod.variantes.length > 0) {
-      openVariantModal(prod);
+      openVariantModal(prod, (variantId, variantName, price) => {
+        addToCart(variantId || prod.id, prod.nombre, variantId, variantName, price);
+      });
     } else {
       addToCart(prod.id, prod.nombre, null, null, parseFloat(prod.precio || 0));
     }
   }
 
-  function openVariantModal(prod) {
+  // onPick(variantId, variantName, price) — reutilizado por el POS y por el
+  // modal de edición de pedidos. onTop lo pone encima de otro modal abierto.
+  function openVariantModal(prod, onPick, onTop = false) {
     modalName.textContent = prod.nombre;
     modalImg.src = (prod.imagen_url || '/assets/images/default-food.jpg') + '?v=2';
     modalImg.onerror = () => { modalImg.src = '/assets/images/default-food.jpg'; };
@@ -448,15 +452,16 @@
       const b = document.createElement('button');
       b.className = 'modal-opt-btn';
       b.innerHTML = `<span>${name}</span><span class="opt-price">$${price.toLocaleString('es-CO')}</span>`;
-      b.addEventListener('click', () => { addToCart(v.id || prod.id, prod.nombre, v.id, name, price); closeModal(); });
+      b.addEventListener('click', () => { onPick(v.id, name, price); closeModal(); });
       modalOpts.appendChild(b);
     });
+    modal.classList.toggle('on-top', !!onTop);
     modal.style.display = 'flex';
   }
 
   btnCloseModal.addEventListener('click', closeModal);
   modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
-  function closeModal() { modal.style.display = 'none'; }
+  function closeModal() { modal.style.display = 'none'; modal.classList.remove('on-top'); }
 
   // ─── CART ──────────────────────────────────────────────────
   function cartKey(prodId, variantId) { return `${prodId}__${variantId ?? 'base'}`; }
@@ -765,6 +770,11 @@
 
       let actionsHtml = '';
 
+      // Agregar productos al pedido (mientras no esté cobrado ni cancelado)
+      if (p.estado !== 'pagado' && p.estado !== 'cancelado') {
+        actionsHtml += `<button class="btn-action btn-add-items" data-id="${p.id}">➕ Agregar</button>`;
+      }
+
       // Checkbox de parrilla para pendiente/preparando
       if (p.estado === 'pendiente' || p.estado === 'preparando') {
         actionsHtml += `
@@ -824,6 +834,12 @@
     });
 
     // Bind action buttons
+    ordersList.querySelectorAll('.btn-add-items').forEach(btn => {
+      btn.addEventListener('click', () => {
+        openEditModal(parseInt(btn.dataset.id), 'products');
+      });
+    });
+
     ordersList.querySelectorAll('.grill-check').forEach(cb => {
       cb.addEventListener('change', async (e) => {
         const id = e.target.dataset.id;
@@ -1010,7 +1026,8 @@
 
   document.getElementById('edit-search-product').addEventListener('input', () => renderEditProductBrowser());
 
-  function openEditModal(orderId) {
+  // initialTab: 'items' (revisar/corregir) o 'products' (agregar directo)
+  function openEditModal(orderId, initialTab = 'items') {
     editingOrderId = orderId;
     // Copia profunda para no mutar el array original hasta guardar
     editingOrder = JSON.parse(JSON.stringify(pedidos.find(p => p.id === orderId) || {}));
@@ -1023,15 +1040,16 @@
     document.getElementById('edit-notas').value           = editingOrder.notas || '';
     document.getElementById('edit-search-product').value  = '';
 
-    // Volver siempre a pestaña "Pedido" al abrir
+    const tab = initialTab === 'products' ? 'products' : 'items';
     document.querySelectorAll('.edit-tab').forEach(t => t.classList.remove('active'));
-    document.querySelector('.edit-tab[data-etab="items"]').classList.add('active');
-    document.getElementById('etab-items').style.display    = 'flex';
-    document.getElementById('etab-products').style.display = 'none';
+    document.querySelector(`.edit-tab[data-etab="${tab}"]`).classList.add('active');
+    document.getElementById('etab-items').style.display    = tab === 'items' ? 'flex' : 'none';
+    document.getElementById('etab-products').style.display = tab === 'products' ? 'flex' : 'none';
 
     editCatActiva = 'todos';
     renderEditCats();
     renderEditItems();
+    if (tab === 'products') renderEditProductBrowser();
     modalEditOrder.style.display = 'flex';
   }
 
@@ -1134,10 +1152,23 @@
 
     grid.innerHTML = '';
     list.forEach(prod => {
-      const inOrder = (editingOrder.items || []).find(i => i.id === prod.id);
-      const qty     = inOrder ? inOrder.cantidad : 0;
-      const price   = parseFloat(prod.precio || 0);
-      const icon    = getProductIcon(prod.nombre) || '🍽';
+      const tieneVariantes = prod.esVariante && prod.variantes && prod.variantes.length > 0;
+
+      // Cantidad ya en el pedido: incluye items agregados como variante
+      // (esos tienen el id de la variante, no el del producto base)
+      const idsDelProducto = new Set([prod.id, ...(tieneVariantes ? prod.variantes.map(v => v.id) : [])]);
+      const qty = (editingOrder.items || [])
+        .filter(i => idsDelProducto.has(i.id))
+        .reduce((s, i) => s + i.cantidad, 0);
+
+      let priceStr;
+      if (tieneVariantes) {
+        const minP = Math.min(...prod.variantes.map(v => parseFloat(v.precio !== undefined ? v.precio : prod.precio) || 0));
+        priceStr = `Desde $${minP.toLocaleString('es-CO')}`;
+      } else {
+        priceStr = `$${parseFloat(prod.precio || 0).toLocaleString('es-CO')}`;
+      }
+      const icon = getProductIcon(prod.nombre) || '🍽';
 
       const card = document.createElement('div');
       card.className = 'edit-prod-card';
@@ -1147,31 +1178,44 @@
           ${qty > 0 ? `<span class="edit-prod-badge">${qty}</span>` : ''}
         </div>
         <div class="edit-prod-name">${prod.nombre}</div>
-        <div class="edit-prod-price">$${price.toLocaleString('es-CO')}</div>
-        <button class="edit-prod-add-btn">+ Agregar</button>`;
+        <div class="edit-prod-price">${priceStr}</div>
+        <button class="edit-prod-add-btn">${tieneVariantes ? '☰ Elegir opción' : '+ Agregar'}</button>`;
 
       card.querySelector('.edit-prod-add-btn').addEventListener('click', () => {
-        addProductToEditingOrder(prod, 1);
+        if (tieneVariantes) {
+          // Preguntar tamaño/opción igual que en el POS, encima del modal de edición
+          openVariantModal(prod, (variantId, variantName, price) => {
+            addProductToEditingOrder(prod, 1, { id: variantId, nombre: variantName, precio: price });
+          }, true);
+        } else {
+          addProductToEditingOrder(prod, 1);
+        }
       });
       grid.appendChild(card);
     });
   }
 
-  function addProductToEditingOrder(product, quantity) {
+  function addProductToEditingOrder(product, quantity, variante = null) {
     if (!editingOrder.items) editingOrder.items = [];
-    const existing = editingOrder.items.find(i => i.id === product.id);
+    const itemId  = variante ? (variante.id || product.id) : product.id;
+    const nombre  = variante ? `${product.nombre} — ${variante.nombre}` : product.nombre;
+    const precio  = variante ? parseFloat(variante.precio) : parseFloat(product.precio);
+
+    const existing = editingOrder.items.find(i => i.id === itemId && i.nombre === nombre);
     if (existing) { existing.cantidad += quantity; }
     else {
       editingOrder.items.push({
-        id: product.id,
-        nombre: product.nombre,
-        precio: parseFloat(product.precio),
-        cantidad: quantity
+        id: itemId,
+        nombre,
+        precio,
+        cantidad: quantity,
+        // Marca para que cocina resalte lo que llegó después del envío original
+        agregado_en: new Date().toISOString()
       });
     }
     renderEditItems();
     renderEditProductBrowser();
-    showToast(`+1 ${product.nombre}`);
+    showToast(`+1 ${nombre}`);
   }
 
   document.getElementById('btn-save-order').addEventListener('click', async () => {

@@ -290,7 +290,11 @@ const editarPedidoSchema = Joi.object({
       id: Joi.number().required(),
       nombre: Joi.string().required(),
       precio: Joi.number().min(0).required(),
-      cantidad: Joi.number().integer().min(1).required()
+      cantidad: Joi.number().integer().min(1).required(),
+      // Timestamp ISO puesto por el POS al agregar un item a un pedido ya
+      // enviado; cocina lo usa para resaltar "AGREGADO". validate() usa
+      // stripUnknown, así que debe estar declarado o se pierde.
+      agregado_en: Joi.string().allow('', null).optional()
     })
   ).min(1).optional()
 });
@@ -380,7 +384,15 @@ router.put('/:id', verificarJWT, validate(editarPedidoSchema), async (req, res, 
 
     const io = req.app.get('io');
     if (io) {
-      io.to('admin').emit('pedido_actualizado', { id, ...req.validatedBody });
+      // items_agregados: true si la edición SUMÓ unidades (items nuevos o
+      // cantidades aumentadas) — cocina suena solo en ese caso
+      let itemsAgregados = false;
+      if (items && items.length > 0) {
+        const oldItems = JSON.parse(pedido.items_json || '[]');
+        const totalQty = (arr) => arr.reduce((s, i) => s + (parseInt(i.cantidad) || 0), 0);
+        itemsAgregados = totalQty(items) > totalQty(oldItems);
+      }
+      io.to('admin').emit('pedido_actualizado', { id, items_agregados: itemsAgregados, ...req.validatedBody });
     }
 
     res.json({ success: true, message: 'Pedido actualizado correctamente', id });

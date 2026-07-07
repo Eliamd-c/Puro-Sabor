@@ -136,6 +136,26 @@ html, body {
 .kds-items li:last-child { border-bottom: none; }
 .kds-item-qty { color: var(--brand); font-weight: 900; min-width: 36px; }
 
+/* Item agregado a un pedido ya enviado: resaltar para que cocina no lo pase por alto */
+.kds-items li.kds-item-nuevo {
+  background: rgba(243, 156, 18, 0.18);
+  border-left: 4px solid #f39c12;
+  padding-left: 8px;
+  border-radius: 6px;
+  align-items: center;
+}
+.kds-badge-agregado {
+  margin-left: auto;
+  background: #f39c12;
+  color: #1a1a1a;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
 .kds-notas {
   background: rgba(243,156,18,.15); color: #ffc04d; border-radius: 8px;
   padding: 8px 10px; font-size: 15px; margin-bottom: 10px; font-weight: 600;

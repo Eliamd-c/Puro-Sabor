@@ -158,7 +158,11 @@
     socket.on('disconnect', () => { connDot.className = 'conn-dot offline'; });
     socket.on('nuevo_pedido', () => { beep(); loadPedidos(); });
     socket.on('pedido_estado_actualizado', loadPedidos);
-    socket.on('pedido_actualizado', loadPedidos);
+    // Si la edición agregó productos, sonar igual que un pedido nuevo
+    socket.on('pedido_actualizado', (data) => {
+      if (data && data.items_agregados) beep();
+      loadPedidos();
+    });
     socket.on('pedido_eliminado', loadPedidos);
     socket.on('reconnect', () => { socket.emit('unirse_admin'); loadPedidos(); });
   }
@@ -192,7 +196,7 @@
   function cardHTML(p) {
     const tipo = p.tipo_pedido || 'local';
     const items = (p.items || []).map(i =>
-      `<li><span class="kds-item-qty">${i.cantidad}×</span><span>${esc(i.nombre)}</span></li>`
+      `<li${i.agregado_en ? ' class="kds-item-nuevo"' : ''}><span class="kds-item-qty">${i.cantidad}×</span><span>${esc(i.nombre)}</span>${i.agregado_en ? '<span class="kds-badge-agregado">AGREGADO</span>' : ''}</li>`
     ).join('');
     const lugar = p.mesa_numero > 0 ? `Mesa ${p.mesa_numero}` : (TIPO_LABEL[tipo] || 'Para llevar');
     const cliente = p.nombre_cliente ? `<strong>${esc(p.nombre_cliente)}</strong> · ` : '';
@@ -249,7 +253,7 @@
     const tipo = p.tipo_pedido || 'local';
     const lugar = p.mesa_numero > 0 ? `Mesa ${p.mesa_numero}` : (TIPO_LABEL[tipo] || 'Para llevar');
     const fecha = new Date(p.creado_en || Date.now()).toLocaleString('es-CO');
-    const items = (p.items || []).map(i => `<div class="ticket-item">${i.cantidad} x ${esc(i.nombre)}</div>`).join('');
+    const items = (p.items || []).map(i => `<div class="ticket-item">${i.cantidad} x ${esc(i.nombre)}${i.agregado_en ? ' ★AGREGADO' : ''}</div>`).join('');
     document.getElementById('print-area').innerHTML = `
       <div class="ticket-h1">PURO SABOR — COCINA</div>
       <div class="ticket-meta">Pedido #${p.id}</div>

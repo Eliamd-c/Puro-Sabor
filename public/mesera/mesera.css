@@ -389,6 +389,8 @@ html, body {
 .btn-deliver:hover { background: #2471a3; }
 .btn-pay { background: var(--success); color: white; }
 .btn-pay:hover { background: #219a52; }
+.btn-add-items { background: transparent; border: 1.5px solid var(--brand); color: var(--brand); }
+.btn-add-items:hover { background: var(--brand); color: white; }
 
 /* ── PAYMENT MODAL ────────────────────────────────────────── */
 .payment-body { padding: 18px; }
@@ -414,6 +416,8 @@ html, body {
   position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
   z-index: 200; display: flex; align-items: center; justify-content: center; padding: 20px;
 }
+/* Para abrir un modal (ej. variantes) ENCIMA de otro ya abierto (ej. edición) */
+.modal-overlay.on-top { z-index: 210; }
 .modal-card {
   background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
   width: 100%; max-width: 420px; overflow: hidden;
